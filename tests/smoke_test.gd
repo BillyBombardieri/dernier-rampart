@@ -18,6 +18,9 @@ func _ready() -> void:
 		if c is WaveManager:
 			c.implant_choice.connect(_on_implant.bind(c))
 	Game.scrap = 2000
+	# Cœur quasi indestructible pour parcourir les 10 vagues et tester les implants.
+	Game.core.max_hp = 1000000.0
+	Game.core.hp = 1000000.0
 	var i := 0
 	for c in _main.get_children():
 		if c is Socket:
@@ -52,6 +55,16 @@ func _physics_process(_delta: float) -> void:
 	if Game.wave != _last_wave:
 		_last_wave = Game.wave
 		print("Vague ", Game.wave, " | frame ", _frames, " | ferraille ", Game.scrap, " | cœur ", Game.core.hp, " | tours ", get_tree().get_nodes_in_group("towers").size())
+	# Joue le rôle du joueur : achève les zombies qui traînent (ex. le boss au pied du Cœur).
+	if _frames % 1500 == 0 and Game.phase == "assault":
+		var left := get_tree().get_nodes_in_group("zombies")
+		if not left.is_empty():
+			var desc := []
+			for z in left:
+				desc.append("%s(%d PV)" % [z.type, int(z.hp)])
+			print("  Zombies restants achevés : ", desc)
+			for z in left:
+				z.take_damage(100000.0, true, false)
 	if _frames >= MAX_FRAMES:
 		print("Limite de frames atteinte, vague ", Game.wave, " phase ", Game.phase)
 		get_tree().quit(1)

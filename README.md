@@ -4,11 +4,23 @@ FPS + tower defense solo. Tu défends une base contre des vagues de zombies : tu
 
 Ce dépôt contient le **premier prototype jouable**. Il sert à vérifier que le mélange FPS + tours est amusant avant d'ajouter du contenu. Les graphismes sont volontairement simples (formes de base).
 
+## Récupérer le jeu sur Windows (et le mettre à jour facilement)
+
+La méthode la plus simple est **GitHub Desktop**. Il suffit d'un clic pour récupérer chaque mise à jour.
+
+1. Installe **GitHub Desktop** : https://desktop.github.com puis connecte-toi avec ton compte GitHub.
+2. Va dans **File → Clone repository**, onglet **GitHub.com**, choisis `snkrsbilly-wq/dernier-rampart`, puis clique sur **Clone**. Le dossier est créé par défaut dans `Documents\GitHub\dernier-rampart`.
+3. Pour récupérer une mise à jour : ouvre GitHub Desktop, clique sur **Fetch origin**, puis sur **Pull origin** s'il apparaît. C'est tout.
+
+Si tu as modifié des fichiers de ton côté, GitHub Desktop te le signale avant de mettre à jour.
+
 ## Lancer le jeu
 
-1. Installe **Godot 4.3** (version standard, pas .NET) : https://godotengine.org/download
-2. Ouvre Godot, clique sur **Importer** et choisis le fichier `project.godot` de ce dossier.
+1. Installe **Godot 4.7** (version standard, pas .NET) : https://godotengine.org/download
+2. Dans Godot, clique sur **Importer**, choisis le fichier `project.godot` du dossier `dernier-rampart`, puis sur **Importer et modifier**.
 3. Appuie sur **F5** (ou le bouton ▶ en haut à droite).
+
+Après une mise à jour avec GitHub Desktop, Godot recharge les fichiers tout seul. Si une fenêtre te demande de recharger, clique sur **Recharger**.
 
 ## Commandes
 
