@@ -33,7 +33,7 @@ func _ready() -> void:
 		{"text": "Gadgets : %s pose une [b]barricade[/b] en travers du chemin, %s lance un [b]leurre sonore[/b] qui attire les zombies. Leur recharge s'affiche en bas à gauche." % [k.call("gadget_1"), k.call("gadget_2")], "check": _gadget},
 		{"text": "Combos : un tir de [b]pistolet lourd[/b] (%s) sur un zombie gelé le [color=#7fd8ff][b]BRISE[/b][/color] (x3). Un zombie chargé par l'Arc électrique touché par une balle déclenche une [color=#b8a8ff][b]SURCHARGE[/b][/color]. Un obus de Mortier sur un zombie en feu provoque un [color=#ffa060][b]EMBRASEMENT[/b][/color]." % k.call("weapon_1"), "check": _wait.bind(12.0)},
 		{"text": "Les zombies laissent de la [color=#ffb840][b]ferraille[/b][/color]. Va la ramasser : elle sert à construire, réparer et améliorer.", "check": _collected},
-		{"text": "Tutoriel terminé ! Si un [b]relais[/b] est détruit, les tours de son anneau s'éteignent : maintiens %s dessus pour le réparer. %s affiche l'aide, Échap met en pause. Bonne chance !" % [k.call("interact"), k.call("help")], "check": _wait.bind(9.0)},
+		{"text": "Tutoriel terminé ! Ta santé revient à fond après chaque vague repoussée. Si une barrière tombe, maintiens %s près d'elle pour la relever. %s affiche l'aide, Échap met en pause. Bonne chance !" % [k.call("interact"), k.call("help")], "check": _wait.bind(9.0)},
 	]
 	Game.tutorial_hold = true
 	Game.hit_marker.connect(func(_kill: bool): _player_hits += 1)

@@ -1,6 +1,6 @@
 extends Node3D
-## Construit la carte : portail, couloir boueux, deux anneaux (Avant-poste, Muraille) avec chacun
-## une barrière en travers du chemin, le Cœur, l'établi et le décor.
+## Construit la carte : portail, couloir boueux, deux avant-postes (Avant-poste, Muraille) qui sont
+## chacun une barrière en travers du chemin entourée d'ancrages pour les tours, le Cœur, l'établi et le décor.
 
 # Couloir suivi par les zombies, du portail jusqu'au Cœur.
 const PATH := [
@@ -8,16 +8,14 @@ const PATH := [
 	Vector3(12, 0, 6), Vector3(12, 0, 22), Vector3(0, 0, 30),
 ]
 const CORE_POS := Vector3(0, 0, 35)
-# Chaque anneau a un relais d'énergie, des ancrages pour les tours et une barrière qui coupe
-# le chemin (segment = tronçon du chemin barré). Les tours encadrent la barrière.
+# Chaque avant-poste est une barrière qui coupe le chemin (segment = tronçon du chemin barré),
+# avec des ancrages pour les tours autour. Rien n'est construit hors du chemin.
 const RINGS := {
 	"avant": {
-		"name": "Relais Avant-poste", "relay": Vector3(7, 0, -27),
 		"gate": {"name": "Barrière de l'Avant-poste", "pos": Vector3(0, 0, -43), "segment": 0, "hp": 600.0},
 		"sockets": [Vector3(-5.5, 0, -39.5), Vector3(5.5, 0, -39.5), Vector3(6.5, 0, -33), Vector3(-12, 0, -36)],
 	},
 	"muraille": {
-		"name": "Relais Muraille", "relay": Vector3(18, 0, 18),
 		"gate": {"name": "Barrière de la Muraille", "pos": Vector3(12, 0, 10.5), "segment": 4, "hp": 900.0},
 		"sockets": [Vector3(-12, 0, -8), Vector3(-4, 0, 6), Vector3(6, 0, 13), Vector3(18, 0, 13), Vector3(-6, 0, 24)],
 	},
@@ -28,7 +26,6 @@ const WORKBENCH_POS := Vector3(-5.5, 0, 33)
 var path_points: Array[Vector3] = []
 var bench_panel: WorkbenchPanel
 var pause_menu: PauseMenu
-var _relays := {}
 var _blocked: Array[Vector3] = []  # Endroits où ne pas poser de décor.
 var _rng := RandomNumberGenerator.new()
 var _beacon: MeshInstance3D
@@ -71,10 +68,6 @@ func _ready() -> void:
 		var tuto := Tutorial.new()
 		tuto.hud = hud
 		add_child(tuto)
-
-
-func relay_for_ring(ring: String) -> Structure:
-	return _relays.get(ring)
 
 
 ## Ouvre l'établi, seulement entre les vagues.
@@ -305,12 +298,6 @@ func _build_core() -> void:
 func _build_rings() -> void:
 	for ring in RINGS:
 		var data: Dictionary = RINGS[ring]
-		var relay := Structure.new()
-		add_child(relay)
-		relay.position = data["relay"]
-		relay.setup("relay", data["name"], ring, 400.0, Vector3(1.6, 3, 1.6), Color(0.9, 0.8, 0.3))
-		_relays[ring] = relay
-		_blocked.append(data["relay"])
 		for pos in data["sockets"]:
 			var s := Socket.new()
 			add_child(s)

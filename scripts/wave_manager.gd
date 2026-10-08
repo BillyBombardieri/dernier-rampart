@@ -7,14 +7,14 @@ const FIRST_PREP_TIME := 40.0
 const HARVEST_TIME := 12.0
 # Montée en difficulté par vague (vague 1 = valeurs de base).
 const HP_PER_WAVE := 0.2
-const SPEED_PER_WAVE := 0.03
+const SPEED_PER_WAVE := 0.02
 const DAMAGE_PER_WAVE := 0.08
 const SIEGE_EVERY := 5
 # Message affiché la première fois qu'un nouveau type de zombie apparaît.
 const INTRO := {
-	"cracheur": "Nouveau zombie : le CRACHEUR (vert). Il crache de l'acide sur tes tours depuis 14 m, par-dessus les barrières.",
+	"cracheur": "Nouveau zombie : le CRACHEUR (vert). Il reste en retrait et crache de l'acide sur la barrière et sur toi, par-dessus la horde.",
 	"hurleur": "Nouveau zombie : le HURLEUR (orange). Son cri rend les zombies autour de lui plus rapides et plus forts. Abats-le en priorité.",
-	"fouisseur": "Nouveau zombie : le FOUISSEUR (brun). Il creuse sous les barrières et ressort au pied d'une tour. Un Phare le fait sortir de terre.",
+	"fouisseur": "Nouveau zombie : le FOUISSEUR (brun). Il creuse sous les barrières et ressort juste derrière. Un Phare le fait sortir de terre.",
 }
 
 signal implant_choice(options: Array)
@@ -64,7 +64,7 @@ func _enter(phase: String, duration: float) -> void:
 			_spawn_cd = 0.0
 			Game.say("NUIT DE SIÈGE : un boss arrive !" if is_siege(Game.wave) else "Vague %d : ils arrivent !" % Game.wave)
 		"harvest":
-			Game.say("Vague repoussée : +%d ferraille de prime. Ramasse le reste avant qu'il disparaisse." % _bonus)
+			Game.say("Vague repoussée : santé restaurée et +%d ferraille de prime. Ramasse le reste avant qu'il disparaisse." % _bonus)
 	Game.changed.emit()
 
 
@@ -104,6 +104,10 @@ func _wave_cleared() -> void:
 		return
 	_bonus = Game.wave_scrap(Game.wave)
 	Game.add_scrap(_bonus)
+	# Entre deux vagues, le joueur récupère toute sa santé.
+	var player := Game.player as Player
+	if player:
+		player.heal_full()
 	if is_siege(Game.wave):
 		var options := Game.implant_choices(3)
 		if not options.is_empty():

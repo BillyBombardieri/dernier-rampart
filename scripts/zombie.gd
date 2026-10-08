@@ -1,19 +1,19 @@
 class_name Zombie
 extends CharacterBody3D
 ## Zombie à forme humaine qui suit le couloir jusqu'au Cœur. Le corps est animé par le code.
-## Il s'arrête devant les barrières pour les casser. Certains types chassent le joueur, cassent
-## les bâtiments, crachent de l'acide (Cracheur), renforcent les autres (Hurleur) ou creusent
-## sous les défenses (Fouisseur).
+## Il s'arrête devant les barrières pour les casser. Il ne s'en prend jamais aux tours : seulement
+## aux barrières, au joueur et au Cœur. Certains types chassent le joueur, crachent de l'acide
+## (Cracheur), renforcent les autres (Hurleur) ou creusent sous les barrières (Fouisseur).
 ## États : gelé (Cryo), en feu, chargé (Arc), étourdi (Mortier), enragé (cri du Hurleur), marqué.
 
 const TYPES := {
-	"rodeur": {"hp": 60.0, "speed": 2.4, "damage": 8.0, "size": 1.0, "bulk": 1.0, "lean": 0.1, "scrap": 3, "points": 10},
-	"coureur": {"hp": 35.0, "speed": 5.2, "damage": 6.0, "size": 0.95, "bulk": 0.85, "lean": 0.35, "scrap": 3, "points": 12},
-	"brute": {"hp": 280.0, "speed": 1.5, "damage": 25.0, "size": 1.35, "bulk": 1.5, "lean": 0.15, "scrap": 8, "points": 40},
-	"cracheur": {"hp": 55.0, "speed": 2.2, "damage": 14.0, "size": 1.0, "bulk": 0.95, "lean": 0.05, "scrap": 5, "points": 25},
-	"hurleur": {"hp": 110.0, "speed": 2.0, "damage": 8.0, "size": 1.15, "bulk": 0.8, "lean": 0.0, "scrap": 8, "points": 35},
-	"fouisseur": {"hp": 80.0, "speed": 2.8, "damage": 16.0, "size": 0.95, "bulk": 1.15, "lean": 0.5, "scrap": 6, "points": 30},
-	"boss": {"hp": 2400.0, "speed": 1.3, "damage": 45.0, "size": 2.3, "bulk": 1.4, "lean": 0.2, "scrap": 50, "points": 300},
+	"rodeur": {"hp": 60.0, "speed": 1.8, "damage": 8.0, "size": 1.0, "bulk": 1.0, "lean": 0.1, "scrap": 3, "points": 10},
+	"coureur": {"hp": 35.0, "speed": 3.9, "damage": 6.0, "size": 0.95, "bulk": 0.85, "lean": 0.35, "scrap": 3, "points": 12},
+	"brute": {"hp": 280.0, "speed": 1.15, "damage": 25.0, "size": 1.35, "bulk": 1.5, "lean": 0.15, "scrap": 8, "points": 40},
+	"cracheur": {"hp": 55.0, "speed": 1.65, "damage": 14.0, "size": 1.0, "bulk": 0.95, "lean": 0.05, "scrap": 5, "points": 25},
+	"hurleur": {"hp": 110.0, "speed": 1.5, "damage": 8.0, "size": 1.15, "bulk": 0.8, "lean": 0.0, "scrap": 8, "points": 35},
+	"fouisseur": {"hp": 80.0, "speed": 2.1, "damage": 16.0, "size": 0.95, "bulk": 1.15, "lean": 0.5, "scrap": 6, "points": 30},
+	"boss": {"hp": 2400.0, "speed": 1.0, "damage": 45.0, "size": 2.3, "bulk": 1.4, "lean": 0.2, "scrap": 50, "points": 300},
 }
 const SHIRT_COLORS := [
 	Color(0.45, 0.42, 0.38), Color(0.3, 0.35, 0.45), Color(0.5, 0.3, 0.28),
@@ -24,7 +24,9 @@ const HEADSHOT_MULT := 2.0
 const SPIT_RANGE := 14.0
 const SCREAM_RADIUS := 10.0
 const DECOY_RADIUS := 16.0
-const DIG_SPEED := 4.5
+const DIG_SPEED := 3.4
+const DIG_DISTANCE := 6.0  # Le Fouisseur creuse quand il arrive à cette distance d'une barrière.
+const DIG_COOLDOWN := 4.0
 const BUFF_SPEED := 1.3
 const BUFF_DAMAGE := 1.25
 
@@ -33,7 +35,7 @@ signal died(zombie: Zombie)
 var type := "rodeur"
 var max_hp := 60.0
 var hp := 60.0
-var speed := 2.4
+var speed := 1.8
 var damage := 8.0
 var size := 1.0
 var dead := false
@@ -58,12 +60,11 @@ var _lane := randf_range(-1.4, 1.4)  # Décalage sur la largeur du chemin : la h
 var _think_cd := 0.0
 var _blocker: Barrier = null
 var _decoy: Node3D = null
-var _structure: Node3D = null
 var _spit_target: Node3D = null
 var _spit_cd := randf_range(0.5, 1.5)
 var _scream_cd := randf_range(2.0, 4.0)
 var _scream_anim := 0.0
-var _dig_state := ""  # Fouisseur : "walk", "dig", "under", "rise" puis "" une fois sorti.
+var _dig_state := ""  # Fouisseur : "walk" (en surface), "dig", "under" puis "rise".
 var _dig_timer := 0.0
 var _dig_dest := Vector3.ZERO
 var _under_time := 0.0
@@ -117,7 +118,6 @@ func setup(p_type: String, hp_scale: float, speed_scale := 1.0, damage_scale := 
 	add_child(_mark_label)
 	if type == "fouisseur":
 		_dig_state = "walk"
-		_dig_timer = randf_range(2.5, 4.0)
 		_build_mound()
 	add_to_group("zombies")
 
@@ -532,10 +532,6 @@ func _physics_process(delta: float) -> void:
 		target_pos = _aim_point(_spit_target)
 		if _spit_cd <= 0.0:
 			_spit(_spit_target)
-	elif is_instance_valid(_structure):
-		target = _structure
-		target_pos = _structure.global_position
-		reach = 2.2 + 0.4 * size
 	elif _blocker and _blocker.alive and _blocker.front_distance(global_position) <= barrier_reach + 0.05:
 		target = _blocker
 		target_pos = _blocker.contact_point(global_position)
@@ -578,13 +574,7 @@ func _physics_process(delta: float) -> void:
 func _think() -> void:
 	_blocker = _find_blocker()
 	_decoy = _find_decoy()
-	_structure = _find_structure() if type in ["brute", "boss", "fouisseur"] else null
 	_spit_target = _find_spit_target() if type == "cracheur" else null
-
-
-## Vrai si le zombie s'en prend à ce bâtiment (coups ou crachats) : les tours ripostent.
-func is_attacking(n: Node3D) -> bool:
-	return (is_instance_valid(_structure) and _structure == n) or (is_instance_valid(_spit_target) and _spit_target == n)
 
 
 ## Vrai si rien ne sépare le zombie de ce point (pas de barrière debout entre les deux).
@@ -610,38 +600,11 @@ func _find_decoy() -> Node3D:
 	return null
 
 
-func _find_structure() -> Node3D:
-	var best: Node3D = null
-	var best_d := 7.0
-	for node in get_tree().get_nodes_in_group("attackable"):
-		var n := node as Node3D
-		if n is Structure and not (n as Structure).alive:
-			continue
-		var d := _flat_dist(n.global_position)
-		if d < best_d and _reachable(n.global_position):
-			best_d = d
-			best = n
-	return best
-
-
-## Le Cracheur vise d'abord les tours, puis les relais, la barrière qui le bloque, et le joueur.
-## L'acide passe par-dessus les barrières.
+## Le Cracheur crache de loin sur la barrière qui le bloque, ou sur le joueur s'il est assez près.
+## L'acide passe par-dessus la horde. Il ne vise jamais les tours.
 func _find_spit_target() -> Node3D:
 	var best: Node3D = null
 	var best_score := INF
-	for node in get_tree().get_nodes_in_group("towers"):
-		var d := _flat_dist(node.global_position)
-		if d <= SPIT_RANGE and d - 6.0 < best_score:
-			best_score = d - 6.0
-			best = node
-	for node in get_tree().get_nodes_in_group("structures"):
-		var st := node as Structure
-		if st.kind != "relay" or not st.alive:
-			continue
-		var d := _flat_dist(st.global_position)
-		if d <= SPIT_RANGE and d - 3.0 < best_score:
-			best_score = d - 3.0
-			best = st
 	if _blocker and _blocker.alive:
 		var d := _blocker.front_distance(global_position)
 		if d >= 0.0 and d <= SPIT_RANGE * 0.6 and d < best_score:
@@ -698,8 +661,9 @@ func _lane_point(i: int) -> Vector3:
 func _process_dig(delta: float) -> bool:
 	match _dig_state:
 		"walk":
+			# En surface : creuse dès qu'il arrive devant une barrière debout.
 			_dig_timer -= delta
-			if _dig_timer <= 0.0 and is_on_floor() and stun_time <= 0.0:
+			if _dig_timer <= 0.0 and is_on_floor() and stun_time <= 0.0 and _wants_to_dig():
 				_start_dig()
 				return true
 			return false
@@ -735,30 +699,28 @@ func _process_dig(delta: float) -> bool:
 			_dig_timer -= delta
 			_rig.position.y = lerpf(0.0, -2.2 * size, clampf(_dig_timer / 0.9, 0.0, 1.0))
 			if _dig_timer <= 0.0:
-				_dig_state = ""
+				_dig_state = "walk"
+				_dig_timer = DIG_COOLDOWN
 				_rig.position.y = 0.0
 				_snap_to_path()
 			return true
 	return false
 
 
+func _wants_to_dig() -> bool:
+	if _blocker == null or not _blocker.alive:
+		return false
+	var d := _blocker.front_distance(global_position)
+	return d >= -0.5 and d <= DIG_DISTANCE
+
+
 func _start_dig() -> void:
-	# Creuse en ligne droite vers une tour ou un relais (ou le Cœur), sous les barrières.
-	var candidates: Array[Node3D] = []
-	for t in get_tree().get_nodes_in_group("towers"):
-		candidates.append(t)
-	for s in get_tree().get_nodes_in_group("structures"):
-		if s.kind == "relay" and s.alive:
-			candidates.append(s)
-	var target: Node3D = Game.core
-	if not candidates.is_empty() and randf() < 0.85:
-		target = candidates.pick_random()
-	var to := target.global_position - global_position
-	to.y = 0.0
-	_dig_dest = target.global_position - to.normalized() * 2.6 if to.length() > 3.0 else global_position
+	# Passe sous la barrière en ligne droite et ressort juste derrière, côté Cœur.
+	_dig_dest = _blocker.contact_point(global_position) + _blocker.dir * 3.5
 	_dig_dest.y = global_position.y
 	_dig_state = "dig"
 	_dig_timer = 1.0
+	_under_time = 0.0
 	velocity = Vector3.ZERO
 	Fx.burst(Game.main, global_position + Vector3(0, 0.3, 0), Vector3.UP, Color(0.3, 0.24, 0.17), 24, 4.0, 0.1)
 	Fx.puff(Game.main, global_position + Vector3(0, 0.4, 0), Color(0.4, 0.33, 0.25, 0.6), 10, 1.0)

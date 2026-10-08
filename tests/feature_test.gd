@@ -1,6 +1,7 @@
 extends Node
-## Test des fonctionnalités, une par une : barrières, combos (SURCHARGE, EMBRASEMENT),
-## nouveaux zombies, Phare, établi, gadgets, réglages, score et menus.
+## Test des fonctionnalités, une par une : barrières (et leur réparation en maintenant E), combos
+## (SURCHARGE, EMBRASEMENT), zombies, tours, Phare, santé entre les vagues, établi, gadgets,
+## réglages, score et menus.
 ## Lancer : godot --headless --fixed-fps 60 --path . res://tests/feature_test.tscn
 
 var _main: Node3D
@@ -20,12 +21,14 @@ func _ready() -> void:
 	Game.scrap = 2000
 	await _frames(2)
 	await _test_barrier()
+	await _test_repair_hold()
 	await _test_surcharge()
 	await _test_embrasement()
 	await _test_hurleur()
 	await _test_cracheur()
-	await _test_riposte()
+	await _test_towers_ignored()
 	await _test_fouisseur()
+	await _test_heal_between_waves()
 	await _test_workbench()
 	await _test_gadgets()
 	await _test_settings()
@@ -77,6 +80,20 @@ func _gate(ring: String) -> Barrier:
 	return null
 
 
+## Place le joueur, oriente la vue, puis maintient la touche d'interaction (E) un moment.
+func _hold_interact(pos: Vector3, yaw: float, pitch: float, seconds: float) -> void:
+	var p := Game.player as Player
+	p.global_position = pos
+	p.velocity = Vector3.ZERO
+	p.rotation.y = yaw
+	p._aim_pitch = pitch
+	await _frames(3)
+	Input.action_press("interact")
+	await _seconds(seconds)
+	Input.action_release("interact")
+	await _frames(2)
+
+
 func _socket_near(pos: Vector3) -> Socket:
 	var best: Socket = null
 	for c in _main.get_children():
@@ -101,6 +118,40 @@ func _test_barrier() -> void:
 	var restored := gate.repair(gate.max_hp)
 	_check(gate.alive and restored > 0.0, "réparer relève la barrière")
 	await _clear_zombies()
+
+
+func _test_repair_hold() -> void:
+	print("Réparer une barrière en maintenant E")
+	var gate := _gate("avant")
+	Game.scrap = 100
+	gate.repair(gate.max_hp)
+	gate.hp = 300.0
+	# Derrière la barrière (côté Cœur), regard vers elle (nord).
+	await _hold_interact(Vector3(0, 0, -40), 0.0, 0.0, 1.0)
+	_check(gate.hp >= 370.0 and Game.scrap <= 93, "barrière abîmée : +%d PV en 1 s, ferraille %d" % [int(gate.hp - 300.0), Game.scrap])
+	gate.take_damage(1e6)
+	await _frames(45)  # Le temps qu'elle s'effondre.
+	_check(not gate.alive, "la barrière est détruite")
+	var scrap := Game.scrap
+	# Les débris sont au ras du sol : en les regardant de près, le viseur passe dessous.
+	await _hold_interact(Vector3(0, 0, -41), 0.0, -0.9, 0.5)
+	_check(gate.hp > 0.0 and not gate.alive, "en regardant les débris, elle se relève petit à petit (%d / %d)" % [int(gate.hp), int(gate.rebuild_hp())])
+	await _hold_interact(Vector3(1.0, 0, -43.1), 0.0, -0.8, 2.0)
+	_check(gate.alive, "debout sur les débris, elle se relève (%d PV)" % int(gate.hp))
+	_check(Game.scrap < scrap, "la réparation coûte de la ferraille (%d -> %d)" % [scrap, Game.scrap])
+	# Sans ferraille, le joueur est prévenu au lieu de ne rien voir se passer.
+	gate.hp = gate.max_hp - 100.0
+	Game.scrap = 0
+	var p := Game.player as Player
+	p.global_position = Vector3(0, 0, -40)
+	p.rotation.y = 0.0
+	p._aim_pitch = 0.0
+	await _frames(3)
+	_check(Game.hint.contains("Plus de ferraille"), "sans ferraille, un message le dit")
+	Game.scrap = 2000
+	gate.repair(gate.max_hp)
+	p.global_position = Vector3(40, 0, -40)  # Loin du chemin pour la suite.
+	await _frames(2)
 
 
 func _test_surcharge() -> void:
@@ -159,70 +210,95 @@ func _test_hurleur() -> void:
 
 func _test_cracheur() -> void:
 	print("Cracheur")
-	var socket := _socket_near(Vector3(-12, 0, -8))
+	var gate := _gate("avant")
+	gate.repair(gate.max_hp)
+	var socket := _socket_near(Vector3(5.5, 0, -39.5))
 	socket.build("gun")
 	var tower := socket.tower
 	tower.toggle_power()  # Éteinte : elle ne tue pas le Cracheur pendant le test.
-	var z := _spawn("cracheur", socket.global_position + Vector3(-9, 0.2, 0))
-	await _seconds(5.0)
-	_check(tower.hp < tower.max_hp, "l'acide abîme la tour (%d / %d PV)" % [int(tower.hp), int(tower.max_hp)])
-	_check(z.global_position.distance_to(socket.global_position) > 5.0, "il reste à distance pour cracher")
+	var z := _spawn("cracheur", Vector3(0, 0.2, -55))
+	var hp := gate.hp
+	var aimed_tower := false
+	for i in 8 * 60:
+		await _frames(1)
+		if z._spit_target is Tower:
+			aimed_tower = true
+	_check(gate.hp < hp, "l'acide abîme la barrière (%d / %d PV)" % [int(gate.hp), int(gate.max_hp)])
+	_check(gate.front_distance(z.global_position) > 3.0, "il reste à distance pour cracher (%.1f m)" % gate.front_distance(z.global_position))
+	_check(not aimed_tower, "il ne vise jamais la tour juste à côté")
 	await _clear_zombies()
-	var restored := tower.repair(1000.0)
-	_check(restored > 0.0 and is_equal_approx(tower.hp, tower.max_hp), "réparer la tour lui rend ses PV (+%d)" % int(restored))
+	gate.repair(gate.max_hp)
 
 
-func _test_riposte() -> void:
-	print("Riposte des tours")
+func _test_towers_ignored() -> void:
+	print("Tours : plus petites, jamais attaquées")
 	var socket := _socket_near(Vector3(18, 0, 13))
 	socket.build("gun")
 	var tower := socket.tower
-	var ahead := _spawn("rodeur", Vector3(12, 0.2, 20))
-	var brute := _spawn("brute", socket.global_position + Vector3(2.5, 0.2, 0))
-	_check(tower._find_target() == ahead, "sans menace, la tour vise le zombie le plus avancé")
-	brute._structure = tower
-	_check(tower._find_target() == brute, "elle riposte d'abord contre la Brute qui la frappe")
+	tower.toggle_power()
+	_check(tower._model.scale.x < 1.0, "modèle réduit (x%.2f)" % tower._model.scale.x)
+	_check(not tower.has_method("take_damage"), "une tour ne peut pas être abîmée")
+	var brute := _spawn("brute", Vector3(12, 0.2, 14))
+	var before := brute.progress()
+	await _seconds(4.0)
+	_check(brute.progress() > before + 3.0, "la Brute passe à côté de la tour sans s'arrêter (+%.1f m)" % (brute.progress() - before))
 	await _clear_zombies()
 
 
 func _test_fouisseur() -> void:
 	print("Fouisseur et Phare")
-	var z := _spawn("fouisseur", Vector3(0, 0.2, -52))
-	await _frames(1)
-	z._dig_timer = 0.05
-	await _seconds(1.5)
-	_check(z.burrowed and z.collision_layer == 0, "il s'enterre et devient intouchable")
+	var gate := _gate("avant")
+	gate.repair(gate.max_hp)
+	var z := _spawn("fouisseur", Vector3(0, 0.2, -54))
+	var t := 0.0
+	while not z.burrowed and t < 12.0:
+		await _frames(6)
+		t += 0.1
+	_check(z.burrowed and z.collision_layer == 0, "il s'enterre devant la barrière (après %.1f s)" % t)
 	var hp := z.hp
 	z.take_damage(50.0)
 	_check(is_equal_approx(z.hp, hp), "les dégâts ne l'atteignent pas sous terre")
-	var t := 0.0
-	while z._dig_state != "" and t < 30.0:
-		await _seconds(0.5)
-		t += 0.5
-	_check(not z.burrowed and z._dig_state == "", "il ressort de terre (après %.1f s)" % t)
-	_check(z.global_position.distance_to(z._dig_dest) < 1.5, "il ressort à côté de sa cible")
-	_check(z.path_index > 1, "il reprend le chemin plus loin (tronçon %d)" % z.path_index)
+	t = 0.0
+	while z._dig_state != "walk" and t < 30.0:
+		await _seconds(0.25)
+		t += 0.25
+	_check(not z.burrowed, "il ressort de terre (après %.1f s)" % t)
+	_check(gate.is_behind(z.global_position) and not gate.blocks(z), "il ressort derrière la barrière, qui ne le bloque plus")
+	_check(is_equal_approx(gate.hp, gate.max_hp), "la barrière n'a pas été touchée")
 	await _clear_zombies()
 	# Un Phare allumé fait sortir de terre les Fouisseurs proches.
 	for tw in get_tree().get_nodes_in_group("towers"):
 		if tw.powered:
 			tw.toggle_power()
-	var socket := _socket_near(Vector3(5.5, 0, -39.5))
+	var socket := _socket_near(Vector3(-5.5, 0, -39.5))
 	socket.build("beacon")
 	_check(socket.tower != null and socket.tower.powered, "Phare posé et allumé")
-	var f := _spawn("fouisseur", Vector3(0, 0.2, -52))
-	await _frames(1)
-	f._dig_timer = 0.05
+	var f := _spawn("fouisseur", Vector3(0, 0.2, -54))
+	var went_under := false
 	var surfaced := false
-	for i in 120:
+	for i in 8 * 60:
 		await _frames(1)
-		if f._dig_state == "rise":
+		if f._dig_state == "under":
+			went_under = true
+		if went_under and f._dig_state == "rise":
 			surfaced = true
 			break
-	_check(surfaced, "le Phare le débusque")
-	await _seconds(1.5)
-	_check(f.marked or f.dead or true, "le Phare peut le marquer ensuite")
+	_check(surfaced, "le Phare le débusque dès qu'il passe sous terre")
+	_check(not gate.is_behind(f.global_position), "il reste bloqué devant la barrière")
 	await _clear_zombies()
+
+
+func _test_heal_between_waves() -> void:
+	print("Santé restaurée entre les vagues")
+	var p := Game.player as Player
+	var wm := _main.get_node("WaveManager") as WaveManager
+	p.hp = 35.0
+	var wave := Game.wave
+	wm._wave_cleared()
+	_check(is_equal_approx(p.hp, p.max_hp), "vague repoussée : santé %d / %d" % [int(p.hp), int(p.max_hp)])
+	# Retour à la préparation pour la suite du test.
+	Game.wave = wave
+	wm._enter("prep", 999.0)
 
 
 func _test_workbench() -> void:
@@ -242,6 +318,10 @@ func _test_workbench() -> void:
 	(_main as Node).open_bench()
 	await _frames(2)
 	_check(_main.bench_panel.visible and get_tree().paused, "l'établi s'ouvre et met le jeu en pause")
+	var alpha: float = _main.bench_panel._root.modulate.a
+	_check(alpha > 0.0 and alpha < 1.0, "il apparaît en fondu (%.2f)" % alpha)
+	await _seconds(0.4)
+	_check(is_equal_approx(_main.bench_panel._root.modulate.a, 1.0) and _main.bench_panel._center.scale.is_equal_approx(Vector2.ONE), "transition terminée")
 	_main.bench_panel.close()
 	_check(not get_tree().paused, "fermer l'établi relance le jeu")
 	Game.choose_ammo("rifle", "standard")

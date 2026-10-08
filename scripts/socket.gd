@@ -16,14 +16,14 @@ func setup(p_ring: String) -> void:
 	collision_mask = 0
 	var shape := CollisionShape3D.new()
 	var cs := CylinderShape3D.new()
-	cs.radius = 1.2
+	cs.radius = 1.0
 	cs.height = 0.4
 	shape.shape = cs
 	shape.position.y = 0.2
 	add_child(shape)
 	var pad_mesh := CylinderMesh.new()
-	pad_mesh.top_radius = 1.2
-	pad_mesh.bottom_radius = 1.3
+	pad_mesh.top_radius = 1.0
+	pad_mesh.bottom_radius = 1.1
 	pad_mesh.height = 0.3
 	pad_mesh.radial_segments = 16
 	var pad := Fx.mesh_with(pad_mesh, Fx.textured("concrete", 0.5))
@@ -33,7 +33,7 @@ func setup(p_ring: String) -> void:
 	for i in 4:
 		var mark := Fx.box(Vector3(0.12, 0.04, 0.4), Color(1.0, 0.75, 0.2), 2.0)
 		var a := i * PI * 0.5
-		mark.position = Vector3(cos(a) * 0.9, 0.31, sin(a) * 0.9)
+		mark.position = Vector3(cos(a) * 0.78, 0.31, sin(a) * 0.78)
 		mark.rotation.y = -a + PI * 0.5
 		add_child(mark)
 
@@ -50,10 +50,6 @@ func build(type: String) -> void:
 	tower.setup(type, self)
 	if not tower.powered:
 		Game.say("Plus assez d'énergie : la tour est posée mais éteinte (%s pour couper une autre tour)." % Settings.key_label("toggle_power"))
-
-
-func clear_tower() -> void:
-	tower = null
 
 
 ## Montre au sol la portée de la tour choisie, tant que le joueur vise l'ancrage.

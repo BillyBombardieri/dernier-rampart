@@ -6,6 +6,7 @@ const MENU_SCENE := "res://scenes/menu.tscn"
 
 var bench: WorkbenchPanel
 var _root: Control
+var _center: CenterContainer
 var _panel: PanelContainer
 var _settings: SettingsPanel
 
@@ -17,8 +18,8 @@ func _ready() -> void:
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_root)
 	Ui.dimmer(_root, 0.6)
-	var center := Ui.center(_root)
-	_panel = Ui.panel(center)
+	_center = Ui.center(_root)
+	_panel = Ui.panel(_center)
 	_panel.custom_minimum_size = Vector2(380, 0)
 	var v := VBoxContainer.new()
 	v.add_theme_constant_override("separation", 10)
@@ -36,9 +37,12 @@ func _ready() -> void:
 	, 18, Vector2(0, 46))
 	Ui.button(v, "QUITTER LE JEU", func(): get_tree().quit(), 18, Vector2(0, 46))
 	_settings = SettingsPanel.new()
-	center.add_child(_settings)
+	_center.add_child(_settings)
 	_settings.visible = false
-	_settings.closed.connect(func(): _panel.visible = true)
+	_settings.closed.connect(func():
+		_panel.visible = true
+		Ui.pop_in(_panel, _center)
+	)
 	visible = false
 
 
@@ -49,7 +53,9 @@ func is_open() -> bool:
 func open() -> void:
 	visible = true
 	_panel.visible = true
+	_panel.modulate.a = 1.0
 	_settings.visible = false
+	Ui.pop_in(_root, _center)
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 

@@ -7,6 +7,7 @@ const WEAPON_IDS := ["pistol", "rifle"]
 
 var opened := 0  # Nombre d'ouvertures (le tutoriel s'en sert).
 var _root: Control
+var _center: CenterContainer
 var _content: VBoxContainer
 var _scrap_label: Label
 
@@ -18,8 +19,8 @@ func _ready() -> void:
 	_root.set_anchors_preset(Control.PRESET_FULL_RECT)
 	add_child(_root)
 	Ui.dimmer(_root, 0.55)
-	var center := Ui.center(_root)
-	var p := Ui.panel(center)
+	_center = Ui.center(_root)
+	var p := Ui.panel(_center)
 	p.custom_minimum_size = Vector2(980, 0)
 	_content = VBoxContainer.new()
 	_content.add_theme_constant_override("separation", 12)
@@ -35,6 +36,7 @@ func open() -> void:
 	visible = true
 	opened += 1
 	_rebuild()
+	Ui.pop_in(_root, _center)
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	Sfx.play(self, "ui_click", -6.0)

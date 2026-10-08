@@ -1,11 +1,10 @@
 class_name Structure
 extends StaticBody3D
-## Bâtiment de la base qui a des points de vie : le Cœur ou le relais d'énergie d'un anneau.
+## Bâtiment de la base qui a des points de vie : le Cœur. S'il tombe, la partie est perdue.
 
 signal destroyed
-signal restored
 
-var kind := "relay"  # "core" ou "relay"
+var kind := "core"
 var ring := ""
 var display_name := ""
 var max_hp := 400.0
@@ -35,7 +34,7 @@ func setup(p_kind: String, p_name: String, p_ring: String, p_hp: float, size: Ve
 	shape.shape = bs
 	shape.position.y = size.y * 0.5
 	add_child(shape)
-	_material = Fx.textured("concrete" if kind == "core" else "metal", 0.5)
+	_material = Fx.textured("concrete", 0.5)
 	_mesh = Fx.box_mat(size, _material)
 	_mesh.position.y = size.y * 0.5
 	add_child(_mesh)
@@ -46,7 +45,7 @@ func setup(p_kind: String, p_name: String, p_ring: String, p_hp: float, size: Ve
 	_light = OmniLight3D.new()
 	_light.light_color = color
 	_light.light_energy = 1.5
-	_light.omni_range = 8.0 if kind == "core" else 5.0
+	_light.omni_range = 8.0
 	_light.position.y = size.y + 0.5
 	add_child(_light)
 	_label = Label3D.new()
@@ -56,8 +55,6 @@ func setup(p_kind: String, p_name: String, p_ring: String, p_hp: float, size: Ve
 	_label.position.y = size.y + 1.0
 	add_child(_label)
 	add_to_group("structures")
-	if kind == "relay":
-		add_to_group("attackable")
 	_refresh()
 
 
@@ -73,22 +70,16 @@ func take_damage(amount: float) -> void:
 		Fx.burst(Game.main, global_position + Vector3(0, 2, 0), Vector3.UP, Color(1.0, 0.6, 0.2), 40, 8.0, 0.12)
 		Sfx.play_at(Game.main, "structure_hit", global_position, 6.0)
 		destroyed.emit()
-		if kind == "core":
-			Game.end_game(false)
-		else:
-			Game.say("%s détruit ! Les tours de l'anneau sont coupées." % display_name)
+		Game.end_game(false)
 	_refresh()
 
 
 ## Répare et renvoie les PV réellement rendus.
 func repair(amount: float) -> float:
+	if not alive:
+		return 0.0
 	var before := hp
 	hp = min(max_hp, hp + amount)
-	if not alive and hp >= max_hp:
-		alive = true
-		_set_powered(true)
-		restored.emit()
-		Game.say("%s réparé, l'anneau est de nouveau alimenté." % display_name)
 	_refresh()
 	return hp - before
 
@@ -100,7 +91,6 @@ func _set_powered(on: bool) -> void:
 
 
 func _refresh() -> void:
-	var state := "" if alive else " (HORS SERVICE)"
-	_label.text = "%s%s\n%d / %d" % [display_name, state, int(hp), int(max_hp)]
+	_label.text = "%s\n%d / %d" % [display_name, int(hp), int(max_hp)]
 	_label.modulate = Color(1, 1, 1) if alive else Color(1, 0.3, 0.3)
 	Game.changed.emit()

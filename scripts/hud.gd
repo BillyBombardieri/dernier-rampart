@@ -378,6 +378,7 @@ func _process(delta: float) -> void:
 		_help_panel.visible = not _help_panel.visible
 		if _help_panel.visible:
 			_help_text.text = _help()
+			Ui.pop_in(_help_panel, _help_panel, 0.15)
 
 	var siege := Game.wave % WaveManager.SIEGE_EVERY == 0
 	_wave_label.text = "VAGUE %d / %d%s" % [Game.wave, Game.LAST_WAVE, "  ☠ SIÈGE" if siege else ""]
@@ -406,10 +407,14 @@ func _process(delta: float) -> void:
 		var value: Label = row[2]
 		if not is_instance_valid(b):
 			continue
-		bar.max_value = b.max_hp
+		# Détruite : la barre montre où en est la remise en place (elle se relève une fois pleine).
+		bar.max_value = b.max_hp if b.alive else b.rebuild_hp()
 		bar.value = b.hp
-		value.text = "%d" % int(b.hp) if b.alive else "DÉTRUITE"
-		var col := Color(0.85, 0.85, 0.8) if b.hp > b.max_hp * 0.35 else DANGER
+		if b.alive:
+			value.text = "%d" % int(b.hp)
+		else:
+			value.text = "DÉTRUITE" if b.hp < 1.0 else "%d / %d" % [int(b.hp), int(b.rebuild_hp())]
+		var col := Color(0.85, 0.85, 0.8) if b.alive and b.hp > b.max_hp * 0.35 else DANGER
 		(bar.get_theme_stylebox("fill") as StyleBoxFlat).bg_color = col
 		value.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85) if b.alive else DANGER)
 
@@ -509,8 +514,8 @@ func _help() -> String:
 		"",
 		"[b]CONSTRUCTION[/b]",
 		"Sur un ancrage : molette ou %s  choisir la tour,  %s  construire" % [k.call("cycle_tower"), k.call("interact")],
-		"Sur une tour intacte : %s  améliorer,  %s  allumer / éteindre" % [k.call("interact"), k.call("toggle_power")],
-		"Maintenir %s sur une tour, une barrière, un relais ou le Cœur : réparer" % k.call("interact"),
+		"Sur une tour : %s  améliorer,  %s  allumer / éteindre" % [k.call("interact"), k.call("toggle_power")],
+		"Maintenir %s près d'une barrière ou sur le Cœur : réparer (une barrière détruite se relève)" % k.call("interact"),
 		"%s sur l'établi (près du Cœur, entre les vagues) : armes, munitions, gadgets, générateur" % k.call("interact"),
 		"",
 		"[b]PARTIE[/b]",
@@ -560,6 +565,7 @@ func show_implants(options: Array) -> void:
 		b.pressed.connect(_pick_implant.bind(id))
 		_implant_box.add_child(b)
 	_implant_panel.visible = true
+	Ui.pop_in(_implant_panel, _implant_panel)
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
@@ -578,6 +584,7 @@ func _on_ended(victory: bool) -> void:
 	_end_score.text = "Score : %d points  ·  %d zombies abattus\n%s\n\n[%s] recommencer" % [Game.score, Game.kills, record, Settings.key_label("skip_phase")]
 	_end_score.add_theme_color_override("font_color", ACCENT if Game.new_record else Color(0.9, 0.9, 0.9))
 	_end_panel.visible = true
+	Ui.pop_in(_end_panel, _end_panel, 0.35)
 	_build_bar.visible = false
 	_prompt_panel.visible = false
 	get_tree().paused = true

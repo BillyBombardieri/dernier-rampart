@@ -38,7 +38,11 @@ func _ready() -> void:
 	_settings = SettingsPanel.new()
 	center.add_child(_settings)
 	_settings.visible = false
-	_settings.closed.connect(func(): _main_box.visible = true)
+	_settings.closed.connect(func():
+		_main_box.visible = true
+		Ui.pop_in(_main_box, center)
+	)
+	Ui.pop_in(_main_box, center, 0.45)
 
 
 func _play() -> void:

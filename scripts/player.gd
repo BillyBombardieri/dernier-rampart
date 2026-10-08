@@ -26,7 +26,7 @@ const GRAVITY := 20.0
 const MOUSE_SENS := 0.0025
 const FOV := 78.0
 const AIM_FOV := 55.0
-const REPAIR_RATE := 40.0  # PV par seconde
+const REPAIR_RATE := 80.0  # PV par seconde
 const REPAIR_COST := 10.0  # PV réparés par ferraille
 const VIEWMODEL_LAYER := 2  # Couche visuelle de l'arme : la lampe torche ne l'éclaire pas.
 
@@ -249,6 +249,14 @@ func take_damage(amount: float) -> void:
 	Game.changed.emit()
 	if hp <= 0.0:
 		_die()
+
+
+## Santé au maximum (quand une vague est repoussée).
+func heal_full() -> void:
+	if not alive:
+		return
+	hp = max_hp
+	Game.changed.emit()
 
 
 func _die() -> void:
@@ -543,6 +551,10 @@ func _handle_interaction(delta: float) -> void:
 	var target: Object = null if hit.is_empty() else hit["collider"]
 	if target is Tower:
 		target = (target as Tower).socket
+	if target == null:
+		target = _nearby_barrier()
+	if target is Barrier and (target as Barrier).temporary and not (target as Barrier).alive:
+		target = null  # Barricade qui a cédé : elle disparaît, on ne la relève pas.
 	Game.hint = ""
 	socket_in_sight = null
 	var e := Settings.key("interact")
@@ -562,16 +574,10 @@ func _handle_interaction(delta: float) -> void:
 			var t := socket.tower
 			t.hover()
 			var power := "%s %s" % [Settings.key("toggle_power"), "éteindre" if t.powered else "allumer"]
-			if t.hp < t.max_hp:
-				# Tour abîmée (acide, coups) : on la répare d'abord, on l'améliore ensuite.
-				Game.hint = "%s niv.%d · %d / %d PV   [color=#ffb840][b][Maintenir %s][/b][/color] réparer (1 ferraille pour %d PV)   %s" % [t.display_name(), t.level, int(t.hp), int(t.max_hp), Settings.key_label("interact"), int(REPAIR_COST), power]
-				if Input.is_action_pressed("interact"):
-					_repair(t, delta)
-			else:
-				var up := "niveau max" if t.level >= Tower.MAX_LEVEL else "%s améliorer (%d)" % [e, t.upgrade_cost()]
-				Game.hint = "%s niv.%d   %s   %s   (énergie %d)" % [t.display_name(), t.level, up, power, t.energy_cost()]
-				if Input.is_action_just_pressed("interact"):
-					t.upgrade()
+			var up := "niveau max" if t.level >= Tower.MAX_LEVEL else "%s améliorer (%d)" % [e, t.upgrade_cost()]
+			Game.hint = "%s niv.%d   %s   %s   (énergie %d)" % [t.display_name(), t.level, up, power, t.energy_cost()]
+			if Input.is_action_just_pressed("interact"):
+				t.upgrade()
 			if Input.is_action_just_pressed("toggle_power"):
 				t.toggle_power()
 	elif target is Workbench:
@@ -583,13 +589,37 @@ func _handle_interaction(delta: float) -> void:
 	elif target is Structure or target is Barrier:
 		var s := target as Node3D
 		var s_name: String = s.display_name
-		if s.hp < s.max_hp:
-			var verb := "relever" if target is Barrier and not s.alive else "réparer"
-			Game.hint = "[color=#ffb840][b][Maintenir %s][/b][/color] %s %s (1 ferraille pour %d PV)" % [Settings.key_label("interact"), verb, s_name, int(REPAIR_COST)]
+		if s.hp >= s.max_hp:
+			Game.hint = "%s en bon état" % s_name
+		elif Game.scrap <= 0:
+			Game.hint = "[color=#ff5a46]Plus de ferraille pour réparer[/color] : ramasse celle des zombies abattus"
+		else:
+			# Une barrière détruite se relève dès qu'elle a retrouvé assez de PV.
+			var rebuilding: bool = target is Barrier and not s.alive
+			var goal: float = (target as Barrier).rebuild_hp() if rebuilding else s.max_hp
+			Game.hint = "[color=#ffb840][b][Maintenir %s][/b][/color] %s : %s   %d / %d PV\n[color=#9a9a9a]1 ferraille pour %d PV[/color]" % [Settings.key_label("interact"), "relever" if rebuilding else "réparer", s_name, int(s.hp), int(goal), int(REPAIR_COST)]
 			if Input.is_action_pressed("interact"):
 				_repair(s, delta)
-		else:
-			Game.hint = "%s en bon état" % s_name
+
+
+## Barrière à portée de main, vers laquelle on se tourne. Une barrière détruite est au ras du sol :
+## avec le seul viseur, on la ratait en regardant les débris (ou en marchant dessus).
+func _nearby_barrier() -> Barrier:
+	var look := look_direction()
+	look.y = 0.0
+	look = look.normalized()
+	var best: Barrier = null
+	var best_d := 3.2
+	for node in get_tree().get_nodes_in_group("barriers"):
+		var b := node as Barrier
+		var to := b.contact_point(global_position) - global_position
+		to.y = 0.0
+		var d := to.length()
+		if d >= best_d or (d > 1.2 and look.dot(to / d) < 0.35):
+			continue
+		best_d = d
+		best = b
+	return best
 
 
 func _repair(s: Node3D, delta: float) -> void:

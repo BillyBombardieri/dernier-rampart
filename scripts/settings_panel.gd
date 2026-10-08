@@ -103,6 +103,8 @@ func open() -> void:
 	_waiting_action = ""
 	_refresh_values()
 	_refresh_keys()
+	# Le parent est le conteneur qui centre la fenêtre : c'est lui qui grossit.
+	Ui.pop_in(self, get_parent() as Control)
 
 
 func close() -> void:

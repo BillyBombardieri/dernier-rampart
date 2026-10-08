@@ -2,11 +2,12 @@ class_name Barrier
 extends StaticBody3D
 ## Barrière qui coupe le chemin des zombies : porte fortifiée d'un avant-poste ou barricade
 ## dépliable (gadget). Les zombies doivent la casser pour passer, pendant que les tours tirent.
-## Détruite, elle laisse passer les zombies. Le joueur la relève en maintenant E dessus.
+## Détruite, elle laisse passer les zombies. Le joueur la relève en maintenant E près d'elle :
+## ses éléments se redressent petit à petit, et elle bloque de nouveau à 30 % de ses PV.
 
 signal destroyed
 
-const REBUILD_RATIO := 0.5  # Une barrière détruite se relève quand elle retrouve 50 % de ses PV.
+const REBUILD_RATIO := 0.3  # Une barrière détruite se relève quand elle retrouve 30 % de ses PV.
 
 var display_name := "Barrière"
 var ring := ""
@@ -100,6 +101,11 @@ func contact_point(p: Vector3) -> Vector3:
 	return global_position + side * lateral
 
 
+## PV à retrouver pour relever la barrière une fois détruite.
+func rebuild_hp() -> float:
+	return max_hp * REBUILD_RATIO
+
+
 ## Vrai si la barrière arrête ce zombie (il ne l'a pas encore passée).
 func blocks(z: Zombie) -> bool:
 	return alive and z.progress() < progress_value
@@ -124,13 +130,18 @@ func take_damage(amount: float) -> void:
 func repair(amount: float) -> float:
 	var before := hp
 	hp = minf(max_hp, hp + amount)
-	if not alive and hp >= max_hp * REBUILD_RATIO:
+	if not alive and hp >= rebuild_hp():
 		alive = true
 		collision_layer = Fx.LAYER_STRUCTURES
 		for i in _parts.size():
 			var tween := _parts[i].create_tween()
 			tween.tween_property(_parts[i], "transform", _rest[i], 0.6).set_trans(Tween.TRANS_BACK).set_ease(Tween.EASE_OUT)
 		Game.say("%s relevée : les zombies sont de nouveau bloqués." % display_name)
+	elif not alive:
+		# Pendant qu'on la relève, les éléments se redressent petit à petit.
+		var t := clampf(hp / rebuild_hp(), 0.0, 1.0) * 0.6
+		for i in _parts.size():
+			_parts[i].transform = _fallen[i].interpolate_with(_rest[i], t)
 	_refresh()
 	return hp - before
 
@@ -182,8 +193,10 @@ func _refresh() -> void:
 	if temporary:
 		_label.text = "Barricade  %d PV  %d s" % [int(hp), int(ceil(life))]
 	else:
-		var state := "" if alive else "  (DÉTRUITE)"
-		_label.text = "%s%s\n%d / %d" % [display_name, state, int(hp), int(max_hp)]
+		if alive:
+			_label.text = "%s\n%d / %d" % [display_name, int(hp), int(max_hp)]
+		else:
+			_label.text = "%s  (DÉTRUITE)\n%d / %d pour la relever" % [display_name, int(hp), int(rebuild_hp())]
 	_label.modulate = Color(1, 1, 1) if alive else Color(1, 0.35, 0.3)
 	Game.changed.emit()
 

@@ -41,8 +41,8 @@ Tout est sauvegardé dans `reglages.cfg`, dans le dossier de sauvegarde de Godot
 
 ## Interface
 
-- **En haut à gauche** : la minimap ronde, qui tourne avec toi. Elle montre le chemin, les barrières (en rouge pointillé si elles sont détruites), les ancrages, les tours, les relais, l'établi, le Cœur, les zombies (couleur selon le type), la ferraille et le portail (**!** rouge, collé au bord s'il est loin). En dessous : ferraille, énergie et **score**.
-- **En haut au centre** : la vague, la phase, le temps restant ou le nombre de zombies restants, la vie du Cœur et celle des **deux barrières**.
+- **En haut à gauche** : la minimap ronde, qui tourne avec toi. Elle montre le chemin, les barrières (en rouge pointillé si elles sont détruites), les ancrages, les tours, l'établi, le Cœur, les zombies (couleur selon le type), la ferraille et le portail (**!** rouge, collé au bord s'il est loin). En dessous : ferraille, énergie et **score**.
+- **En haut au centre** : la vague, la phase, le temps restant ou le nombre de zombies restants, la vie du Cœur et celle des **deux barrières** (une barrière détruite affiche où en est sa remise en place).
 - **En haut à droite** : l'objectif du tutoriel.
 - **En bas à gauche** : ta vie, tes implants et tes **deux gadgets** (prêts ou en recharge).
 - **En bas à droite** : l'arme, les munitions, le type de munitions spéciales et le rechargement.
@@ -69,9 +69,9 @@ Toutes les touches se changent dans **Réglages → Touches**.
 | F | Marquer un zombie : les tours le ciblent en priorité (+25 % de dégâts) |
 | Molette ou C sur un ancrage vide | Choisir la tour à construire |
 | E sur un ancrage vide | Construire la tour choisie |
-| E sur une tour intacte | Améliorer (3 niveaux) |
+| E sur une tour | Améliorer (3 niveaux) |
 | X sur une tour | Allumer / éteindre (libère de l'énergie) |
-| Maintenir E sur une tour, une barrière, un relais ou le Cœur | Réparer (1 ferraille pour 10 PV) |
+| Maintenir E près d'une barrière ou sur le Cœur | Réparer, ou relever une barrière détruite (1 ferraille pour 10 PV) |
 | E sur l'établi (entre les vagues) | Ouvrir l'établi |
 | A / G | Gadget 1 / Gadget 2 |
 | Entrée | Lancer la vague, passer la récolte |
@@ -82,7 +82,7 @@ Toutes les touches se changent dans **Réglages → Touches**.
 
 ## Ce que contient le prototype
 
-- **1 carte** : un portail, un chemin, deux anneaux (Avant-poste et Muraille) et le Cœur.
+- **1 carte** : un portail, un chemin, deux avant-postes sur le chemin (Avant-poste et Muraille) et le Cœur.
 - **Phases** : Préparation → Assaut → Récolte, sur **10 vagues**. Les vagues 5 et 10 sont des **Nuits de siège** avec un boss.
 - **Deux ressources** :
   - la **ferraille**, laissée au sol par les zombies : il faut aller la ramasser, et elle disparaît à la fin de la récolte. Chaque vague repoussée rapporte aussi une prime (10 + 5 x le numéro de la vague) ;
@@ -90,7 +90,9 @@ Toutes les touches se changent dans **Réglages → Touches**.
 
 ### Barrières sur le chemin
 
-Chaque anneau barre le chemin avec une **barrière** (blocs de béton, grillage, barbelés et barrière levante) : **600 PV** pour l'Avant-poste, **900 PV** pour la Muraille. Les zombies doivent la casser pour passer, pendant que les tours qui l'encadrent les mitraillent. Une fois détruite, ils passent : **maintiens E** dessus pour la relever (elle se redresse à 50 % de ses PV). Le Cracheur crache par-dessus, et le Fouisseur creuse dessous.
+Chaque avant-poste est une **barrière** en travers du chemin (blocs de béton, grillage, barbelés et barrière levante), entourée d'ancrages pour les tours : **600 PV** pour l'Avant-poste, **900 PV** pour la Muraille. Rien n'est construit en dehors du chemin. Les zombies doivent casser la barrière pour passer, pendant que les tours qui l'encadrent les mitraillent. Ils n'attaquent **jamais les tours** : seulement les barrières, toi et le Cœur.
+
+Pour réparer, **maintiens E** en regardant la barrière ou simplement à côté d'elle (80 PV par seconde, 1 ferraille pour 10 PV). Une fois détruite, elle laisse passer les zombies : maintiens E près des débris pour la relever. Ses éléments se redressent petit à petit et elle bloque de nouveau à **30 % de ses PV** (180 PV pour l'Avant-poste). Sans ferraille, un message te le dit. Le Cracheur crache par-dessus, et le Fouisseur creuse dessous.
 
 ### 7 zombies
 
@@ -98,11 +100,13 @@ Chaque anneau barre le chemin avec une **barrière** (blocs de béton, grillage,
 |---|---|---|
 | Rôdeur | vague 1 | Le zombie de base |
 | Coureur | vague 1 | Rapide, il te prend en chasse |
-| Brute | vague 2 | Très solide, casse les tours et les relais |
-| Cracheur (vert) | vague 3 | Crache de l'acide sur les tours depuis 14 m, par-dessus les barrières |
+| Brute | vague 2 | Très solide, frappe fort sur les barrières |
+| Cracheur (vert) | vague 3 | Reste en retrait et crache de l'acide sur la barrière et sur toi, par-dessus la horde |
 | Hurleur (orange) | vague 4 | Son cri rend les zombies proches plus rapides et plus forts (yeux rouges) : les tours le visent en priorité |
-| Fouisseur (brun) | vague 5 | S'enterre, passe sous les barrières et ressort au pied d'une tour ou d'un relais. Intouchable sous terre |
+| Fouisseur (brun) | vague 5 | S'enterre devant une barrière et ressort juste derrière. Intouchable sous terre. Un Phare le fait sortir de terre |
 | Boss de siège | vagues 5 et 10 | Énorme, insensible à l'étourdissement |
+
+Les zombies marchent plutôt lentement (un Rôdeur avance à 1,8 m/s, un Coureur à 3,9 m/s), et un peu plus vite à chaque vague.
 
 ### 6 tours
 
@@ -115,7 +119,7 @@ Chaque anneau barre le chemin avec une **barrière** (blocs de béton, grillage,
 | Mortier | 45 | 3 | Obus de zone à très longue portée, étourdit (pas de tir à moins de 6 m) |
 | Phare | 30 | 1 | Renforce la portée et les dégâts des tours proches, marque un zombie de temps en temps et fait sortir les Fouisseurs de terre |
 
-Chaque tour s'améliore 2 fois (plus de dégâts, de portée et de PV). Une tour abîmée doit être réparée avant d'être améliorée.
+Chaque tour s'améliore 2 fois (plus de dégâts et de portée). Les zombies ne s'en prennent pas aux tours : elles ne s'abîment jamais.
 
 ### 3 combos
 
@@ -145,7 +149,7 @@ L'**établi** est près du Cœur. Il s'utilise entre les vagues, et le jeu est e
 
 ### Le reste
 
-- **Relais** : si le relais d'un anneau est détruit, les tours de cet anneau s'éteignent jusqu'à ce que tu le répares.
+- **Santé** : elle remonte au maximum dès qu'une vague est repoussée.
 - **Implants** : après un siège, tu choisis 1 implant parmi 3. Chacun a un bonus et un malus.
 - **Tir à la tête** : x2 dégâts.
 - **Score** : chaque zombie abattu rapporte des points (10 pour un Rôdeur, 300 pour un Boss), chaque combo +10, chaque vague repoussée 50 x son numéro, et la victoire 1000 plus les PV restants du Cœur. Le record est gardé.
@@ -160,7 +164,7 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 | `game.gd` | État global (autoload `Game`) : ressources, score, implants, améliorations de l'établi, gadgets |
 | `settings.gd` | Réglages (autoload `Settings`) : sensibilité, volume, touches, tutoriel, record |
 | `menu.gd` | Menu principal |
-| `main.gd` | Construction de la carte, du chemin, des anneaux, des barrières, de l'établi et du Cœur |
+| `main.gd` | Construction de la carte, du chemin, des avant-postes (barrières et ancrages), de l'établi et du Cœur |
 | `wave_manager.gd` | Phases et composition des vagues |
 | `player.gd` | Joueur FPS : tir, munitions spéciales, marquage, construction, réparation |
 | `tower.gd`, `socket.gd` | Les 6 tours et leurs ancrages |
@@ -169,13 +173,13 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 | `projectile.gd` | Crachat d'acide et obus de mortier |
 | `gadgets.gd`, `decoy.gd`, `drone.gd` | Gadgets : barricade, leurre sonore, drone de récolte |
 | `workbench.gd`, `workbench_panel.gd` | L'établi et sa fenêtre |
-| `structure.gd` | Cœur et relais (bâtiments avec des PV) |
+| `structure.gd` | Le Cœur (bâtiment avec des PV) |
 | `scrap.gd` | Ferraille à ramasser |
 | `hud.gd` | Interface (panneaux, viseur, barre de construction, notifications, fin de partie) |
 | `minimap.gd` | Minimap ronde |
 | `pause_menu.gd`, `settings_panel.gd` | Menu pause et fenêtre des réglages |
 | `tutorial.gd` | Tutoriel guidé |
-| `ui.gd` | Boutons, panneaux et curseurs communs aux menus |
+| `ui.gd` | Boutons, panneaux, curseurs et transition d'ouverture communs aux menus |
 | `fx.gd` | Matériaux réalistes, particules, flashs, éclairs, traînées de tir, textes flottants |
 | `sfx.gd` | Sons (dans l'espace 3D ou à plat) |
 | `flicker.gd` | Lumières qui vacillent (feu, lampe de secours) |
@@ -192,7 +196,7 @@ Une partie simulée de 10 vagues (tours posées partout, joueur immobile, Cœur 
 godot --headless --fixed-fps 60 --path . res://tests/smoke_test.tscn
 ```
 
-Les fonctionnalités une par une (barrières, combos, nouveaux zombies, Phare, établi, gadgets, touches, score, menus) :
+Les fonctionnalités une par une (barrières et réparation en maintenant E, combos, zombies, tours, Phare, santé entre les vagues, établi, gadgets, touches, score, menus) :
 
 ```
 godot --headless --fixed-fps 60 --path . res://tests/feature_test.tscn

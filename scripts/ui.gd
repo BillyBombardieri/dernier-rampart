@@ -112,6 +112,24 @@ static func slider(parent: Node, min_value: float, max_value: float, step: float
 	return s
 
 
+## Petite transition quand un menu s'affiche : fondu, et la fenêtre grossit légèrement jusqu'à
+## sa taille. fade = ce qui apparaît en fondu (fond sombre compris), zoom = ce qui grossit.
+## Elle tourne aussi quand le jeu est en pause.
+static func pop_in(fade: CanvasItem, zoom: Control = null, duration := 0.2) -> void:
+	var old: Tween = fade.get_meta("pop_tween") if fade.has_meta("pop_tween") else null
+	if old and old.is_valid():
+		old.kill()
+	var step := func(t: float) -> void:
+		fade.modulate.a = t
+		if zoom:
+			zoom.pivot_offset = zoom.size * 0.5
+			zoom.scale = Vector2.ONE * lerpf(0.94, 1.0, t)
+	step.call(0.0)
+	var tween := fade.create_tween().set_pause_mode(Tween.TWEEN_PAUSE_PROCESS)
+	tween.tween_method(step, 0.0, 1.0, duration).set_trans(Tween.TRANS_CUBIC).set_ease(Tween.EASE_OUT)
+	fade.set_meta("pop_tween", tween)
+
+
 ## Fond sombre plein écran qui bloque les clics derrière un menu.
 static func dimmer(parent: Node, alpha := 0.6) -> ColorRect:
 	var r := ColorRect.new()

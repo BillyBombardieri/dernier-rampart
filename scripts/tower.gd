@@ -1,51 +1,51 @@
 class_name Tower
 extends StaticBody3D
 ## Tour posée sur un ancrage. Elle consomme de l'énergie et tire en priorité sur les zombies marqués,
-## puis sur les Hurleurs, puis sur le zombie le plus avancé vers le Cœur.
+## puis sur les Hurleurs, puis sur le zombie le plus avancé vers le Cœur. Les zombies ne l'attaquent pas.
 
 const STATS := {
 	"gun": {
 		"name": "Mitrailleuse", "short": "Tir rapide sur une cible", "cost": 25, "energy": 2,
-		"range": 16.0, "rate": 0.18, "damage": 9.0, "hp": 220.0, "color": Color(0.85, 0.6, 0.2),
+		"range": 16.0, "rate": 0.18, "damage": 9.0, "color": Color(0.85, 0.6, 0.2),
 	},
 	"cryo": {
 		"name": "Cryo", "short": "Gèle et ralentit (combo BRISÉ)", "cost": 30, "energy": 2,
-		"range": 12.0, "rate": 0.9, "damage": 6.0, "hp": 200.0, "color": Color(0.4, 0.8, 1.0),
+		"range": 12.0, "rate": 0.9, "damage": 6.0, "color": Color(0.4, 0.8, 1.0),
 		"freeze": 2.5,
 	},
 	"flame": {
 		"name": "Lance-flammes", "short": "Cône de feu à courte portée, enflamme", "cost": 35, "energy": 2,
-		"range": 8.0, "range_up": 1.0, "rate": 0.12, "damage": 2.2, "hp": 260.0, "color": Color(1.0, 0.45, 0.15),
+		"range": 8.0, "range_up": 1.0, "rate": 0.12, "damage": 2.2, "color": Color(1.0, 0.45, 0.15),
 		"burn": 6.0,
 	},
 	"arc": {
 		"name": "Arc électrique", "short": "Saute sur 4 zombies et les charge", "cost": 40, "energy": 3,
-		"range": 13.0, "rate": 1.1, "damage": 22.0, "hp": 200.0, "color": Color(0.6, 0.55, 1.0),
+		"range": 13.0, "rate": 1.1, "damage": 22.0, "color": Color(0.6, 0.55, 1.0),
 		"chain": 3,
 	},
 	"mortar": {
 		"name": "Mortier", "short": "Obus de zone qui étourdit, très longue portée", "cost": 45, "energy": 3,
-		"range": 28.0, "range_up": 3.0, "min_range": 6.0, "rate": 3.2, "damage": 55.0, "hp": 240.0,
+		"range": 28.0, "range_up": 3.0, "min_range": 6.0, "rate": 3.2, "damage": 55.0,
 		"color": Color(0.62, 0.66, 0.42), "radius": 3.5,
 	},
 	"beacon": {
 		"name": "Phare", "short": "Renforce les tours proches, marque, débusque", "cost": 30, "energy": 1,
-		"range": 10.0, "range_up": 1.5, "rate": 6.0, "damage": 0.0, "hp": 180.0, "color": Color(1.0, 0.9, 0.55),
+		"range": 10.0, "range_up": 1.5, "rate": 6.0, "damage": 0.0, "color": Color(1.0, 0.9, 0.55),
 	},
 }
 const BUILD_ORDER := ["gun", "cryo", "flame", "arc", "mortar", "beacon"]
 const MAX_LEVEL := 3
 const MARK_BONUS := 1.25
 const BEACON_REVEAL := 24.0  # Le Phare marque et débusque les zombies jusqu'à cette distance.
+const MODEL_SCALE := 0.75  # Taille du modèle (les tours étaient un peu trop massives).
 
 var type := "gun"
 var level := 1
 var socket: Socket
 var powered := false
-var hp := 200.0
-var max_hp := 200.0
 
 var _cooldown := 0.0
+var _model: Node3D
 var _head: Node3D
 var _muzzle: Node3D
 var _shots := 0
@@ -69,31 +69,31 @@ var _target_cd := 0.0
 func setup(p_type: String, p_socket: Socket) -> void:
 	type = p_type
 	socket = p_socket
-	max_hp = STATS[type]["hp"]
-	hp = max_hp
 	collision_layer = Fx.LAYER_STRUCTURES
 	collision_mask = 0
 	var shape := CollisionShape3D.new()
 	var bs := BoxShape3D.new()
-	bs.size = Vector3(1.4, 2.2 if type != "beacon" else 3.8, 1.4)
+	bs.size = Vector3(1.4, 2.2 if type != "beacon" else 3.8, 1.4) * MODEL_SCALE
 	shape.shape = bs
 	shape.position.y = bs.size.y * 0.5
 	add_child(shape)
+	_model = Node3D.new()
+	_model.scale = Vector3.ONE * MODEL_SCALE
+	add_child(_model)
 	_build_visual(STATS[type]["color"])
 	_light = Fx.box(Vector3(0.12, 0.12, 0.12), Color.GREEN, 4.0)
 	_light.position = Vector3(0.5, 0.55, 0.5)
-	add_child(_light)
+	_model.add_child(_light)
 	_label = Label3D.new()
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.font_size = 32
 	_label.outline_size = 6
-	_label.position.y = 2.8 if type != "beacon" else 4.6
+	_label.position.y = (2.8 if type != "beacon" else 4.6) * MODEL_SCALE + 0.2
 	add_child(_label)
 	_range_ring = range_ring(tower_range(), STATS[type]["color"])
 	_range_ring.visible = false
 	add_child(_range_ring)
 	add_to_group("towers")
-	add_to_group("attackable")
 	if type == "beacon":
 		add_to_group("beacons")
 	powered = Game.request_energy(energy_cost())
@@ -135,10 +135,7 @@ func upgrade_cost() -> int:
 
 
 func is_active() -> bool:
-	if not powered:
-		return false
-	var relay: Structure = Game.main.relay_for_ring(socket.ring)
-	return relay == null or relay.alive
+	return powered
 
 
 func tower_range() -> float:
@@ -166,20 +163,10 @@ func upgrade() -> void:
 	if not Game.try_spend(upgrade_cost()):
 		return
 	level += 1
-	max_hp *= 1.3
-	hp = max_hp
 	_head.scale = Vector3.ONE * (1.0 + 0.15 * (level - 1))
 	Game.say("%s niveau %d" % [display_name(), level])
 	Sfx.play_at(Game.main, "upgrade", global_position + Vector3(0, 1, 0), -2.0, 0.05)
 	_refresh()
-
-
-## Réparation par le joueur (maintenir la touche d'interaction) : rend des PV, sans dépasser le max.
-func repair(amount: float) -> float:
-	var before := hp
-	hp = minf(max_hp, hp + amount)
-	_refresh()
-	return hp - before
 
 
 func toggle_power() -> void:
@@ -190,23 +177,6 @@ func toggle_power() -> void:
 		powered = Game.request_energy(energy_cost())
 		if not powered:
 			Game.say("Pas assez d'énergie. Coupe une autre tour avec %s." % Settings.key_label("toggle_power"))
-	_refresh()
-
-
-func take_damage(amount: float) -> void:
-	if is_queued_for_deletion():
-		return
-	hp -= amount
-	if hp <= 0.0:
-		Game.say("%s détruite !" % display_name())
-		Fx.burst(Game.main, global_position + Vector3(0, 1.5, 0), Vector3.UP, Color(1.0, 0.6, 0.2), 30, 7.0, 0.1)
-		Fx.puff(Game.main, global_position + Vector3(0, 1.2, 0), Color(0.25, 0.24, 0.22, 0.7), 12, 1.2)
-		Sfx.play_at(Game.main, "structure_hit", global_position, 4.0)
-		if powered:
-			Game.release_energy(energy_cost())
-		socket.clear_tower()
-		queue_free()
-		return
 	_refresh()
 
 
@@ -415,13 +385,10 @@ func _find_target() -> Zombie:
 		var d := global_position.distance_to(z.global_position)
 		if d > r or d < min_r:
 			continue
-		# Priorité : marqué > zombie qui attaque cette tour (riposte) > Hurleur > (Cryo) pas encore gelé
-		# > (Mortier) groupe dense > le plus avancé.
+		# Priorité : marqué > Hurleur > (Cryo) pas encore gelé > (Mortier) groupe dense > le plus avancé.
 		var score := z.progress()
 		if z.marked:
 			score += 100000.0
-		if z.is_attacking(self):
-			score += 70000.0
 		if z.type == "hurleur":
 			score += 60000.0
 		if type == "cryo" and z.frozen_time <= 0.0:
@@ -456,7 +423,7 @@ func _flat_dist(p: Vector3) -> float:
 func _refresh() -> void:
 	var state := "" if powered else "  [ÉTEINTE]"
 	var boost := "  ★" if _range_mult > 1.0 else ""
-	_label.text = "%s niv.%d%s%s\n%d PV" % [display_name(), level, state, boost, int(hp)]
+	_label.text = "%s niv.%d%s%s" % [display_name(), level, state, boost]
 	if _range_ring:
 		var torus := _range_ring.mesh as TorusMesh
 		torus.outer_radius = tower_range()
@@ -471,14 +438,14 @@ func _build_visual(color: Color) -> void:
 	# Socle trapu commun à toutes les tours.
 	var base := Fx.box_mat(Vector3(1.4, 0.5, 1.4), dark_metal)
 	base.position.y = 0.25
-	add_child(base)
+	_model.add_child(base)
 	_head = Node3D.new()
 	_muzzle = Node3D.new()
 	match type:
 		"gun", "cryo":
 			_column(metal, 1.0)
 			_head.position.y = 1.7
-			add_child(_head)
+			_model.add_child(_head)
 			_head.add_child(Fx.box_mat(Vector3(0.9, 0.55, 1.0), metal))
 			if type == "gun":
 				for x in [-0.15, 0.15]:
@@ -502,7 +469,7 @@ func _build_visual(color: Color) -> void:
 		"flame":
 			_column(metal, 0.9)
 			_head.position.y = 1.55
-			add_child(_head)
+			_model.add_child(_head)
 			_head.add_child(Fx.box_mat(Vector3(0.8, 0.5, 0.9), metal))
 			# Réservoirs de carburant rouges sur les côtés, buse évasée devant.
 			var red := Fx.material(Color(0.55, 0.1, 0.07))
@@ -538,6 +505,7 @@ func _build_visual(color: Color) -> void:
 			spread.add_point(Vector2(1.0, 1.5))
 			_flame.scale_amount_curve = spread
 			_flame.emitting = false
+			_flame.scale = Vector3.ONE / MODEL_SCALE  # Le jet garde sa longueur réelle (portée de 8 m).
 			_muzzle.add_child(_flame)
 			_flame_light = OmniLight3D.new()
 			_flame_light.light_color = Color(1.0, 0.55, 0.2)
@@ -549,7 +517,7 @@ func _build_visual(color: Color) -> void:
 		"arc":
 			# Bobine Tesla : noyau, anneaux de cuivre et sphère qui luit.
 			_head.position.y = 0.5
-			add_child(_head)
+			_model.add_child(_head)
 			var copper := Fx.material(Color(0.72, 0.42, 0.25))
 			copper.metallic = 0.9
 			copper.roughness = 0.3
@@ -580,9 +548,9 @@ func _build_visual(color: Color) -> void:
 			# Tube trapu incliné vers le ciel, sur une plaque de base.
 			var plate := Fx.box_mat(Vector3(1.2, 0.15, 1.2), metal)
 			plate.position.y = 0.58
-			add_child(plate)
+			_model.add_child(plate)
 			_head.position.y = 0.75
-			add_child(_head)
+			_model.add_child(_head)
 			var pivot := Node3D.new()
 			pivot.rotation.x = deg_to_rad(-55.0)
 			_head.add_child(pivot)
@@ -605,14 +573,14 @@ func _build_visual(color: Color) -> void:
 			# Caisses d'obus au pied.
 			var crate := Fx.box_mat(Vector3(0.5, 0.3, 0.35), Fx.textured("cloth", 1.0, Color(0.4, 0.42, 0.28), false))
 			crate.position = Vector3(0.5, 0.65, 0.45)
-			add_child(crate)
+			_model.add_child(crate)
 		"beacon":
 			# Mât avec un projecteur qui tourne en permanence.
 			var mast := Fx.mesh_with(_cyl(0.1, 3.2), metal)
 			mast.position.y = 2.1
-			add_child(mast)
+			_model.add_child(mast)
 			_head.position.y = 3.75
-			add_child(_head)
+			_model.add_child(_head)
 			var housing := Fx.mesh_with(_cyl(0.28, 0.5), dark_metal)
 			housing.rotation_degrees.x = 90
 			_head.add_child(housing)
@@ -637,7 +605,7 @@ func _build_visual(color: Color) -> void:
 func _column(mat: Material, height: float) -> void:
 	var column := Fx.mesh_with(_cyl(0.35, height), mat)
 	column.position.y = 0.5 + height * 0.5
-	add_child(column)
+	_model.add_child(column)
 
 
 func _cyl(radius: float, height: float, top := -1.0) -> CylinderMesh:

@@ -1,6 +1,6 @@
 class_name Minimap
 extends Control
-## Minimap ronde qui tourne avec le joueur : couloir, barrières, ancrages, tours, relais, Cœur, établi,
+## Minimap ronde qui tourne avec le joueur : couloir, barrières, ancrages, tours, Cœur, établi,
 ## portail, zombies (couleur selon le type), ferraille, leurres et drones.
 
 const RADIUS := 95.0
@@ -75,11 +75,7 @@ func _draw() -> void:
 		elif node is Workbench:
 			_square(to_map.call(node.global_position), 3.0, Color(0.55, 1.0, 0.65), center)
 		elif node is Structure:
-			var st := node as Structure
-			var col := Color(0.35, 0.65, 1.0) if st.kind == "core" else Color(1.0, 0.85, 0.3)
-			if not st.alive:
-				col = Color(0.4, 0.4, 0.4)
-			_square(to_map.call(st.global_position), 6.0 if st.kind == "core" else 4.0, col, center, true)
+			_square(to_map.call(node.global_position), 6.0, Color(0.35, 0.65, 1.0), center, true)
 	for node in get_tree().get_nodes_in_group("decoys"):
 		var pulse := 2.5 + 1.5 * absf(sin(_pulse * 8.0))
 		_dot(to_map.call(node.global_position), pulse, Color(1.0, 0.9, 0.9), center)
