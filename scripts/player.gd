@@ -350,6 +350,13 @@ func _shoot() -> void:
 	Game.changed.emit()
 
 
+## Écart du viseur (pour l'interface) : grandit avec le recul et le mouvement.
+func spread_amount() -> float:
+	var moving := Vector2(velocity.x, velocity.z).length() / WALK_SPEED
+	var base: float = WEAPONS[weapon]["spread"] * (0.25 if aiming else 1.0 + moving)
+	return base + _recoil * 0.3
+
+
 func _animate_view(delta: float) -> void:
 	_recoil = move_toward(_recoil, 0.0, delta * 5.0)
 	_shake = move_toward(_shake, 0.0, delta * 2.5)

@@ -6,6 +6,7 @@ signal message(text: String)
 signal ended(victory: bool)
 signal hit_marker(kill: bool)
 signal player_hurt(amount: float)
+signal scrap_picked(amount: int)
 
 const ENERGY_BASE := 6
 const START_SCRAP := 60
@@ -43,6 +44,7 @@ var phase_time := 0.0
 var is_over := false
 var deaths := 0
 var hint := ""
+var tutorial_hold := false  # Le tutoriel bloque le compte à rebours de la première préparation.
 
 var main: Node3D
 var player: Node3D
@@ -63,6 +65,7 @@ func reset() -> void:
 	is_over = false
 	deaths = 0
 	hint = ""
+	tutorial_hold = false
 
 
 func energy_cap() -> int:
@@ -147,6 +150,8 @@ func _setup_inputs() -> void:
 		"toggle_power": [KEY_X],
 		"skip_phase": [KEY_ENTER, KEY_KP_ENTER],
 		"flashlight": [KEY_L],
+		"help": [KEY_H],
+		"skip_tutorial": [KEY_P],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):

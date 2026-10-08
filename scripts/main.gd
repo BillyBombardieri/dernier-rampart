@@ -22,6 +22,9 @@ var path_points: Array[Vector3] = []
 var _relays := {}
 var _blocked: Array[Vector3] = []  # Endroits où ne pas poser de décor.
 var _rng := RandomNumberGenerator.new()
+var _beacon: MeshInstance3D
+var _beacon_mat: StandardMaterial3D
+var _beacon_time := 0.0
 
 
 func _ready() -> void:
@@ -48,6 +51,10 @@ func _ready() -> void:
 	hud.wave_manager = wm
 	add_child(hud)
 	wm.implant_choice.connect(hud.show_implants)
+	if not Tutorial.already_done():
+		var tuto := Tutorial.new()
+		tuto.hud = hud
+		add_child(tuto)
 
 
 func relay_for_ring(ring: String) -> Structure:
@@ -159,6 +166,100 @@ func _build_portal() -> void:
 	light.light_volumetric_fog_energy = 3.0
 	add_child(light)
 	light.position = p + Vector3(0, 5.5, -2)
+	_build_portal_beacon(p)
+
+
+## Colonne de lumière rouge et fumée au-dessus du portail : on voit d'où viennent les zombies, de partout.
+func _build_portal_beacon(p: Vector3) -> void:
+	var beam_mesh := CylinderMesh.new()
+	beam_mesh.top_radius = 1.6
+	beam_mesh.bottom_radius = 2.4
+	beam_mesh.height = 80.0
+	beam_mesh.cap_top = false
+	beam_mesh.cap_bottom = false
+	var beam_mat := StandardMaterial3D.new()
+	beam_mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	beam_mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	beam_mat.blend_mode = BaseMaterial3D.BLEND_MODE_ADD
+	beam_mat.cull_mode = BaseMaterial3D.CULL_DISABLED
+	beam_mat.albedo_color = Color(1.0, 0.12, 0.05, 0.35)
+	beam_mat.disable_fog = true
+	beam_mesh.material = beam_mat
+	_beacon = MeshInstance3D.new()
+	_beacon.mesh = beam_mesh
+	_beacon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+	_beacon_mat = beam_mat
+	add_child(_beacon)
+	_beacon.position = p + Vector3(0, 40, 0)
+	# Lueur au sol et fumée rouge qui monte.
+	var glow := Flicker.new()
+	glow.light_color = Color(1.0, 0.1, 0.05)
+	glow.base_energy = 6.0
+	glow.speed = 3.0
+	glow.amount = 0.3
+	glow.omni_range = 18.0
+	glow.light_volumetric_fog_energy = 4.0
+	add_child(glow)
+	glow.position = p + Vector3(0, 1.5, 0)
+	var smoke := CPUParticles3D.new()
+	smoke.amount = 40
+	smoke.lifetime = 5.0
+	smoke.direction = Vector3.UP
+	smoke.spread = 12.0
+	smoke.initial_velocity_min = 2.0
+	smoke.initial_velocity_max = 4.0
+	smoke.gravity = Vector3(0, 0.3, 0)
+	smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
+	smoke.emission_sphere_radius = 1.5
+	smoke.scale_amount_min = 2.0
+	smoke.scale_amount_max = 5.0
+	var q := QuadMesh.new()
+	q.size = Vector2(1, 1)
+	var m := StandardMaterial3D.new()
+	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
+	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+	m.vertex_color_use_as_albedo = true
+	m.albedo_texture = _soft_texture()
+	q.material = m
+	smoke.mesh = q
+	var grad := Gradient.new()
+	grad.set_color(0, Color(0.9, 0.15, 0.08, 0.45))
+	grad.set_color(1, Color(0.3, 0.05, 0.05, 0.0))
+	smoke.color_ramp = grad
+	add_child(smoke)
+	smoke.position = p + Vector3(0, 1, 0)
+	# Panneau au-dessus de la brèche.
+	var board := Label3D.new()
+	board.text = "☠ PORTAIL ☠"
+	board.font_size = 160
+	board.outline_size = 24
+	board.modulate = Color(1.0, 0.3, 0.2)
+	board.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
+	board.fixed_size = false
+	add_child(board)
+	board.position = p + Vector3(0, 9, -2)
+
+
+func _process(delta: float) -> void:
+	if _beacon_mat == null:
+		return
+	# La colonne pulse plus fort pendant un assaut.
+	_beacon_time += delta * (6.0 if Game.phase == "assault" else 2.0)
+	var strength := (0.45 if Game.phase == "assault" else 0.25) + 0.12 * sin(_beacon_time)
+	_beacon_mat.albedo_color.a = strength
+
+
+func _soft_texture() -> GradientTexture2D:
+	var soft := GradientTexture2D.new()
+	soft.fill = GradientTexture2D.FILL_RADIAL
+	soft.fill_from = Vector2(0.5, 0.5)
+	soft.fill_to = Vector2(1.0, 0.5)
+	var g := Gradient.new()
+	g.set_color(0, Color(1, 1, 1, 1))
+	g.set_color(1, Color(1, 1, 1, 0))
+	soft.gradient = g
+	return soft
 
 
 func _build_core() -> void:

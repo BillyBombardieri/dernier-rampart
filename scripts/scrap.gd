@@ -62,6 +62,7 @@ func _physics_process(delta: float) -> void:
 func _on_body_entered(body: Node) -> void:
 	if body is Player:
 		Game.add_scrap(value)
+		Game.scrap_picked.emit(value)
 		Sfx.play(Game.main, "pickup", -8.0, 0.1)
 		Fx.popup(Game.main, global_position + Vector3(0, 1.2, 0), "+%d" % value, Color(1.0, 0.8, 0.3), 32)
 		queue_free()

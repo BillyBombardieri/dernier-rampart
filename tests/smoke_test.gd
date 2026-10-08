@@ -17,6 +17,11 @@ func _ready() -> void:
 	for c in _main.get_children():
 		if c is WaveManager:
 			c.implant_choice.connect(_on_implant.bind(c))
+	# Pas de tutoriel pendant le test automatique.
+	for c in _main.get_children():
+		if c is Tutorial:
+			c.free()
+	Game.tutorial_hold = false
 	Game.scrap = 2000
 	# Cœur quasi indestructible pour parcourir les 10 vagues et tester les implants.
 	Game.core.max_hp = 1000000.0

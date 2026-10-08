@@ -46,6 +46,9 @@ func _process(_delta: float) -> void:
 	# Laisse les zombies arriver avant les captures.
 	if _frame < 400:
 		return
+	if _frame == 400:
+		# Lance l'assaut même si le tutoriel est affiché, pour avoir des zombies à l'écran.
+		_main.get_node("WaveManager")._enter("assault", 0.0)
 	if (_frame - 400) % 40 == 0:
 		if _shot > 0:
 			var img := get_viewport().get_texture().get_image()

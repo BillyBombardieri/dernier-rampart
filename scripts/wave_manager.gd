@@ -12,11 +12,26 @@ signal implant_choice(options: Array)
 var _queue: Array[String] = []
 var _spawn_cd := 0.0
 var _alive := 0
+var wave_total := 1
 
 
 func _ready() -> void:
 	Game.wave = 1
 	_enter("prep", FIRST_PREP_TIME)
+
+
+## Zombies de la vague encore à venir ou en vie.
+func remaining() -> int:
+	return _queue.size() + _alive
+
+
+func phase_duration() -> float:
+	match Game.phase:
+		"prep":
+			return FIRST_PREP_TIME if Game.wave == 1 else PREP_TIME
+		"harvest":
+			return HARVEST_TIME
+	return 1.0
 
 
 func is_siege(w: int) -> bool:
@@ -33,6 +48,7 @@ func _enter(phase: String, duration: float) -> void:
 		"assault":
 			Sfx.play(self, "siren", -8.0, 0.0)
 			_queue = _build_queue(Game.wave)
+			wave_total = _queue.size()
 			_spawn_cd = 0.0
 			Game.say("NUIT DE SIÈGE : un boss arrive !" if is_siege(Game.wave) else "Vague %d : ils arrivent !" % Game.wave)
 		"harvest":
@@ -45,7 +61,8 @@ func _process(delta: float) -> void:
 		return
 	match Game.phase:
 		"prep":
-			Game.phase_time -= delta
+			if not Game.tutorial_hold:
+				Game.phase_time -= delta
 			if Game.phase_time <= 0.0 or Input.is_action_just_pressed("skip_phase"):
 				_enter("assault", 0.0)
 		"assault":

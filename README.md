@@ -24,6 +24,23 @@ Si tu as modifié des fichiers de ton côté, GitHub Desktop te le signale avant
 
 Après une mise à jour avec GitHub Desktop, Godot recharge les fichiers tout seul. Si une fenêtre te demande de recharger, clique sur **Recharger**.
 
+## Premier lancement : le tutoriel
+
+À la première partie, un **tutoriel guidé** (12 étapes, en haut à droite) t'apprend à te déplacer, repérer le portail, poser des tours, gérer l'énergie, tirer, marquer, faire le combo BRISÉ et ramasser la ferraille. Le compte à rebours de la première vague est en pause tant que tu ne la lances pas avec **Entrée**. Appuie sur **P** pour passer le tutoriel. Il ne se relance plus ensuite. Pour le revoir, supprime le fichier `reglages.cfg` du dossier de sauvegarde de Godot (`%APPDATA%\Godot\app_userdata\Dernier Rempart` sous Windows).
+
+## Interface
+
+- **En haut à gauche** : la minimap ronde, qui tourne avec toi. Elle montre le couloir, les ancrages, les tours, les relais, le Cœur, les zombies (points rouges), la ferraille et le portail (**!** rouge, collé au bord s'il est loin). En dessous : ferraille et énergie.
+- **En haut au centre** : la vague, la phase, le temps restant ou le nombre de zombies restants, et la vie du Cœur.
+- **En haut à droite** : l'objectif du tutoriel.
+- **En bas à gauche** : ta vie et tes implants.
+- **En bas à droite** : l'arme, les munitions et le rechargement.
+- **Au centre** : un viseur qui s'écarte quand tu bouges ou tires, et une croix quand tu touches (rouge si le zombie meurt).
+- **Flèches au bord de l'écran** : la direction et la distance du **portail** (rouge) et du **Cœur** (bleu).
+- **H** affiche toute l'aide des commandes.
+
+Le **portail** des zombies se repère de partout : une colonne de lumière rouge monte dans le ciel, avec de la fumée rouge et un panneau. La colonne pulse plus fort pendant un assaut.
+
 ## Commandes
 
 | Touche | Action |
@@ -43,6 +60,8 @@ Après une mise à jour avec GitHub Desktop, Godot recharge les fichiers tout se
 | X sur une tour | Allumer / éteindre (libère de l'énergie) |
 | Maintenir E sur un relais ou le Cœur | Réparer (coûte de la ferraille) |
 | Entrée | Passer le temps de préparation ou de récolte |
+| H | Afficher / masquer l'aide |
+| P | Passer le tutoriel |
 | Échap | Libérer la souris |
 
 ## Ce que contient le prototype
@@ -78,7 +97,9 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 | `zombie.gd` | Types de zombies, déplacement, états (gelé, marqué) |
 | `structure.gd` | Cœur et relais (bâtiments avec des PV) |
 | `scrap.gd` | Ferraille à ramasser |
-| `hud.gd` | Interface |
+| `hud.gd` | Interface (panneaux, viseur, flèches du portail et du Cœur, notifications) |
+| `minimap.gd` | Minimap ronde |
+| `tutorial.gd` | Tutoriel guidé du premier lancement |
 | `fx.gd` | Matériaux réalistes, particules, flashs, traînées de tir, textes flottants |
 | `sfx.gd` | Sons (dans l'espace 3D ou à plat) |
 | `flicker.gd` | Lumières qui vacillent (feu, lampe de secours) |
