@@ -525,7 +525,9 @@ class Indicators extends Control:
 			return
 		var portal: Vector3 = Game.main.path_points[0] + Vector3(0, 4, 0)
 		var pulse := 0.65 + 0.35 * sin(_t * (7.0 if Game.phase == "assault" else 3.0))
-		_marker(cam, portal, "PORTAIL", Color(1.0, 0.3, 0.2, pulse), true)
+		# La flèche du portail n'apparaît qu'au début, avec la colonne de lumière.
+		if Game.portal_reveal > 0.01:
+			_marker(cam, portal, "PORTAIL", Color(1.0, 0.3, 0.2, pulse * Game.portal_reveal), true)
 		if Game.core:
 			_marker(cam, Game.core.global_position + Vector3(0, 5, 0), "CŒUR", Color(0.4, 0.7, 1.0, 0.85), false)
 

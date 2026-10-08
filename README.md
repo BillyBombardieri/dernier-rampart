@@ -36,10 +36,10 @@ Après une mise à jour avec GitHub Desktop, Godot recharge les fichiers tout se
 - **En bas à gauche** : ta vie et tes implants.
 - **En bas à droite** : l'arme, les munitions et le rechargement.
 - **Au centre** : un viseur qui s'écarte quand tu bouges ou tires, et une croix quand tu touches (rouge si le zombie meurt).
-- **Flèches au bord de l'écran** : la direction et la distance du **portail** (rouge) et du **Cœur** (bleu).
+- **Flèches au bord de l'écran** : la direction et la distance du **Cœur** (bleu), et du **portail** (rouge) au début de la partie.
 - **H** affiche toute l'aide des commandes.
 
-Le **portail** des zombies se repère de partout : une colonne de lumière rouge monte dans le ciel, avec de la fumée rouge et un panneau. La colonne pulse plus fort pendant un assaut.
+Le **portail** des zombies est signalé par une fine colonne de lumière rouge, un panneau et une flèche au bord de l'écran, **seulement au début de la partie** (avant la première vague). Ensuite, il reste discret : une lueur rouge au sol, un peu de fumée, et le **!** sur la minimap.
 
 ## Commandes
 

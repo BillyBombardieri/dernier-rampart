@@ -25,6 +25,7 @@ var _rng := RandomNumberGenerator.new()
 var _beacon: MeshInstance3D
 var _beacon_mat: StandardMaterial3D
 var _beacon_time := 0.0
+var _board: Label3D
 
 
 func _ready() -> void:
@@ -172,9 +173,9 @@ func _build_portal() -> void:
 ## Colonne de lumière rouge et fumée au-dessus du portail : on voit d'où viennent les zombies, de partout.
 func _build_portal_beacon(p: Vector3) -> void:
 	var beam_mesh := CylinderMesh.new()
-	beam_mesh.top_radius = 1.6
-	beam_mesh.bottom_radius = 2.4
-	beam_mesh.height = 80.0
+	beam_mesh.top_radius = 0.5
+	beam_mesh.bottom_radius = 0.8
+	beam_mesh.height = 60.0
 	beam_mesh.cap_top = false
 	beam_mesh.cap_bottom = false
 	var beam_mat := StandardMaterial3D.new()
@@ -190,19 +191,19 @@ func _build_portal_beacon(p: Vector3) -> void:
 	_beacon.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	_beacon_mat = beam_mat
 	add_child(_beacon)
-	_beacon.position = p + Vector3(0, 40, 0)
+	_beacon.position = p + Vector3(0, 30, 0)
 	# Lueur au sol et fumée rouge qui monte.
 	var glow := Flicker.new()
 	glow.light_color = Color(1.0, 0.1, 0.05)
-	glow.base_energy = 6.0
+	glow.base_energy = 2.5
 	glow.speed = 3.0
 	glow.amount = 0.3
-	glow.omni_range = 18.0
+	glow.omni_range = 10.0
 	glow.light_volumetric_fog_energy = 4.0
 	add_child(glow)
 	glow.position = p + Vector3(0, 1.5, 0)
 	var smoke := CPUParticles3D.new()
-	smoke.amount = 40
+	smoke.amount = 14
 	smoke.lifetime = 5.0
 	smoke.direction = Vector3.UP
 	smoke.spread = 12.0
@@ -211,8 +212,8 @@ func _build_portal_beacon(p: Vector3) -> void:
 	smoke.gravity = Vector3(0, 0.3, 0)
 	smoke.emission_shape = CPUParticles3D.EMISSION_SHAPE_SPHERE
 	smoke.emission_sphere_radius = 1.5
-	smoke.scale_amount_min = 2.0
-	smoke.scale_amount_max = 5.0
+	smoke.scale_amount_min = 0.8
+	smoke.scale_amount_max = 2.0
 	var q := QuadMesh.new()
 	q.size = Vector2(1, 1)
 	var m := StandardMaterial3D.new()
@@ -232,22 +233,29 @@ func _build_portal_beacon(p: Vector3) -> void:
 	# Panneau au-dessus de la brèche.
 	var board := Label3D.new()
 	board.text = "☠ PORTAIL ☠"
-	board.font_size = 160
-	board.outline_size = 24
+	board.font_size = 64
+	board.outline_size = 12
 	board.modulate = Color(1.0, 0.3, 0.2)
 	board.billboard = BaseMaterial3D.BILLBOARD_FIXED_Y
 	board.fixed_size = false
 	add_child(board)
-	board.position = p + Vector3(0, 9, -2)
+	board.position = p + Vector3(0, 7, -2)
+	_board = board
 
 
 func _process(delta: float) -> void:
 	if _beacon_mat == null:
 		return
-	# La colonne pulse plus fort pendant un assaut.
-	_beacon_time += delta * (6.0 if Game.phase == "assault" else 2.0)
-	var strength := (0.45 if Game.phase == "assault" else 0.25) + 0.12 * sin(_beacon_time)
-	_beacon_mat.albedo_color.a = strength
+	# La colonne et le panneau ne s'affichent qu'au début de la partie (préparation de la
+	# vague 1), puis s'effacent en douceur. Ensuite, seuls la minimap et la lueur au sol restent.
+	var target := 1.0 if Game.wave == 1 and Game.phase == "prep" else 0.0
+	Game.portal_reveal = move_toward(Game.portal_reveal, target, delta / 3.0)
+	_beacon_time += delta * 2.0
+	_beacon_mat.albedo_color.a = (0.22 + 0.06 * sin(_beacon_time)) * Game.portal_reveal
+	_beacon.visible = Game.portal_reveal > 0.0
+	_board.modulate.a = Game.portal_reveal
+	_board.outline_modulate.a = Game.portal_reveal
+	_board.visible = Game.portal_reveal > 0.0
 
 
 func _soft_texture() -> GradientTexture2D:

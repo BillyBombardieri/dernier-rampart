@@ -28,7 +28,7 @@ func _ready() -> void:
 	_steps = [
 		{"text": "Déplace-toi avec [b]Z Q S D[/b] et cours avec [b]Maj[/b].", "check": _moved},
 		{"text": "Regarde autour de toi avec la [b]souris[/b].", "check": _looked},
-		{"text": "Les zombies arrivent du [color=#ff5a3c][b]PORTAIL ROUGE[/b][/color] : suis la colonne de lumière, la flèche au bord de l'écran ou le [b]![/b] sur la minimap. Ils suivent le chemin de boue jusqu'au [color=#5aa5ff][b]Cœur[/b][/color], qu'il faut protéger.", "check": _wait.bind(7.0)},
+		{"text": "Les zombies arrivent du [color=#ff5a3c][b]PORTAIL ROUGE[/b][/color] : repère la colonne de lumière rouge (visible seulement avant la première vague) ou le [b]![/b] sur la minimap, toujours affiché. Ils suivent le chemin de boue jusqu'au [color=#5aa5ff][b]Cœur[/b][/color], qu'il faut protéger.", "check": _wait.bind(7.0)},
 		{"text": "Approche d'un [b]ancrage[/b] (dalle de béton avec des repères orange) et appuie sur [b]E[/b] pour poser une [b]Mitrailleuse[/b].", "check": _built.bind("gun")},
 		{"text": "Sur un autre ancrage, appuie sur [b]C[/b] pour poser une tour [color=#7fd8ff][b]Cryo[/b][/color]. Elle gèle les zombies.", "check": _built.bind("cryo")},
 		{"text": "Chaque tour allumée consomme de l'[b]énergie[/b] (en haut à gauche). Vise une tour et appuie sur [b]X[/b] pour l'éteindre et récupérer son énergie, puis rallume-la.", "check": _toggled},

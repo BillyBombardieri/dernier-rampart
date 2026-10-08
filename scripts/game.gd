@@ -44,6 +44,7 @@ var phase_time := 0.0
 var is_over := false
 var deaths := 0
 var hint := ""
+var portal_reveal := 1.0  # 1 = colonne et flèche du portail visibles (début de partie), 0 = discret.
 var tutorial_hold := false  # Le tutoriel bloque le compte à rebours de la première préparation.
 
 var main: Node3D
@@ -66,6 +67,7 @@ func reset() -> void:
 	deaths = 0
 	hint = ""
 	tutorial_hold = false
+	portal_reveal = 1.0
 
 
 func energy_cap() -> int:
