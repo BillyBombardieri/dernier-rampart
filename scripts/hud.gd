@@ -40,7 +40,7 @@ func _ready() -> void:
 	_help.anchor_right = 1.0
 	_help.offset_left = -330
 	_help.modulate = Color(1, 1, 1, 0.75)
-	_help.text = "ZQSD : bouger   Espace : sauter   Maj : courir\nClic gauche : tirer   1 / 2 : changer d'arme   R : recharger\nF : marquer un zombie (les tours le ciblent, +25 %)\nE / C sur un ancrage : poser une tour\nE : améliorer   X : allumer/éteindre une tour\nMaintenir E sur un relais ou le Cœur : réparer\nEntrée : passer la préparation   Échap : libérer la souris\n\nCOMBO : Cryo gèle, pistolet lourd = BRISÉ (x3)"
+	_help.text = "ZQSD : bouger   Espace : sauter   Maj : courir\nClic gauche : tirer   & / é : changer d'arme   R : recharger\nF : marquer un zombie (les tours le ciblent, +25 %)\nE / C sur un ancrage : poser une tour\nE : améliorer   X : allumer/éteindre une tour\nMaintenir E sur un relais ou le Cœur : réparer\nEntrée : passer la préparation   Échap : libérer la souris\n\nCOMBO : Cryo gèle, pistolet lourd = BRISÉ (x3)"
 	var cross := _centered_label(0, 28, Color.WHITE)
 	cross.anchor_top = 0.5
 	cross.anchor_bottom = 0.5

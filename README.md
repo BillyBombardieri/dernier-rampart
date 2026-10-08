@@ -14,10 +14,10 @@ Ce dépôt contient le **premier prototype jouable**. Il sert à vérifier que l
 
 | Touche | Action |
 |---|---|
-| ZQSD | Se déplacer (WASD sur un clavier QWERTY) |
+| ZQSD | Se déplacer (clavier AZERTY) |
 | Souris | Viser |
 | Clic gauche | Tirer |
-| 1 / 2 | Pistolet lourd / Fusil d'assaut |
+| & / é (ou 1 / 2) | Pistolet lourd / Fusil d'assaut |
 | R | Recharger |
 | Espace / Maj | Sauter / Courir |
 | F | Marquer un zombie : les tours le ciblent en priorité (+25 % de dégâts) |

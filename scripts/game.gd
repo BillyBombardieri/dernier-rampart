@@ -128,17 +128,17 @@ func end_game(victory: bool) -> void:
 
 
 func _setup_inputs() -> void:
-	# Touches physiques : ZQSD sur AZERTY = WASD sur QWERTY.
+	# Clavier AZERTY : les lettres sont lues d'après ce qui est écrit sur la touche.
 	var keys := {
-		"move_forward": [KEY_W],
+		"move_forward": [KEY_Z],
 		"move_back": [KEY_S],
-		"move_left": [KEY_A],
+		"move_left": [KEY_Q],
 		"move_right": [KEY_D],
 		"jump": [KEY_SPACE],
 		"sprint": [KEY_SHIFT],
 		"reload": [KEY_R],
-		"weapon_1": [KEY_1],
-		"weapon_2": [KEY_2],
+		"weapon_1": [KEY_KP_1],
+		"weapon_2": [KEY_KP_2],
 		"mark": [KEY_F],
 		"build_gun": [KEY_E],
 		"build_cryo": [KEY_C],
@@ -150,8 +150,13 @@ func _setup_inputs() -> void:
 			InputMap.add_action(action)
 		for k in keys[action]:
 			var ev := InputEventKey.new()
-			ev.physical_keycode = k
+			ev.keycode = k
 			InputMap.action_add_event(action, ev)
+	# Rangée du haut (& et é en AZERTY) : lue par position pour marcher sans Maj.
+	for pair in [["weapon_1", KEY_1], ["weapon_2", KEY_2]]:
+		var ev := InputEventKey.new()
+		ev.physical_keycode = pair[1]
+		InputMap.action_add_event(pair[0], ev)
 	if not InputMap.has_action("fire"):
 		InputMap.add_action("fire")
 		var mb := InputEventMouseButton.new()
