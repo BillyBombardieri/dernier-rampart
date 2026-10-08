@@ -7,7 +7,7 @@ const TYPES := {
 	"rodeur": {"hp": 60.0, "speed": 2.4, "damage": 8.0, "size": 1.0, "bulk": 1.0, "lean": 0.1, "scrap": 3},
 	"coureur": {"hp": 35.0, "speed": 5.2, "damage": 6.0, "size": 0.95, "bulk": 0.85, "lean": 0.35, "scrap": 3},
 	"brute": {"hp": 280.0, "speed": 1.5, "damage": 25.0, "size": 1.35, "bulk": 1.5, "lean": 0.15, "scrap": 8},
-	"boss": {"hp": 1600.0, "speed": 1.3, "damage": 45.0, "size": 2.3, "bulk": 1.4, "lean": 0.2, "scrap": 50},
+	"boss": {"hp": 2400.0, "speed": 1.3, "damage": 45.0, "size": 2.3, "bulk": 1.4, "lean": 0.2, "scrap": 50},
 }
 const SHIRT_COLORS := [
 	Color(0.45, 0.42, 0.38), Color(0.3, 0.35, 0.45), Color(0.5, 0.3, 0.28),
@@ -46,13 +46,13 @@ var _base_tints: Array[Color] = []
 var _mark_label: Label3D
 
 
-func setup(p_type: String, hp_scale: float) -> void:
+func setup(p_type: String, hp_scale: float, speed_scale := 1.0, damage_scale := 1.0) -> void:
 	type = p_type
 	var s: Dictionary = TYPES[type]
 	max_hp = s["hp"] * hp_scale
 	hp = max_hp
-	speed = s["speed"] * randf_range(0.9, 1.1)
-	damage = s["damage"]
+	speed = s["speed"] * speed_scale * randf_range(0.9, 1.1)
+	damage = s["damage"] * damage_scale
 	size = s["size"]
 	_lean = s["lean"]
 	collision_layer = Fx.LAYER_ZOMBIES
@@ -247,7 +247,7 @@ func _physics_process(delta: float) -> void:
 	var to_player := INF
 	if player and player.alive:
 		to_player = _flat_dist(player.global_position)
-	var chase_radius := 14.0 if type == "coureur" else 4.0
+	var chase_radius := 18.0 if type == "coureur" else 7.0
 
 	var structure: Node3D = null
 	if type == "brute" or type == "boss":

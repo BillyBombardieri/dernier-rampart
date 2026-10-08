@@ -77,7 +77,7 @@ func _place(p: Player) -> void:
 			z._animate(0.1)
 	p.global_position = s[0]
 	p.rotation.y = deg_to_rad(s[1])
-	p.get_child(1).rotation.x = deg_to_rad(s[2])
+	p._aim_pitch = deg_to_rad(s[2])
 	if p.weapon != s[3]:
 		p._switch(s[3])
 	p.aiming = s[4]

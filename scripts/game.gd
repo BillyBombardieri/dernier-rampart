@@ -9,7 +9,7 @@ signal player_hurt(amount: float)
 signal scrap_picked(amount: int)
 
 const ENERGY_BASE := 6
-const START_SCRAP := 60
+const START_SCRAP := 55
 const LAST_WAVE := 10
 
 const IMPLANTS := {

@@ -6,12 +6,15 @@ const WEAPONS := {
 	"pistol": {
 		"name": "Pistolet lourd", "damage": 34.0, "rate": 0.28, "auto": false,
 		"mag": 10, "reload": 1.2, "heavy": true, "sound": "pistol",
-		"recoil": 0.045, "spread": 0.004,
+		"spread": 0.004,
+		# Recul : montée de la vue (rad), dérive latérale, vitesse de retour, coup de l'arme.
+		"kick_up": 0.035, "kick_side": 0.008, "recovery": 9.0, "punch": 1.0,
 	},
 	"rifle": {
 		"name": "Fusil d'assaut", "damage": 13.0, "rate": 0.09, "auto": true,
 		"mag": 30, "reload": 2.0, "heavy": false, "sound": "rifle",
-		"recoil": 0.018, "spread": 0.02,
+		"spread": 0.02,
+		"kick_up": 0.011, "kick_side": 0.006, "recovery": 5.0, "punch": 0.45,
 	},
 }
 const WALK_SPEED := 5.5
@@ -46,7 +49,19 @@ var _repair_bank := 0.0
 var _spawn_point := Vector3.ZERO
 var _recoil := 0.0
 var _bob := 0.0
-var _last_step := 0
+var _step_time := 0.0
+var _step_left := false
+var _was_on_floor := true
+var _aim_pitch := 0.0
+var _kick := Vector2.ZERO  # Recul actuel de la vue (montée, côté).
+var _kick_target := Vector2.ZERO
+var _since_shot := 1.0
+var _burst := 0
+var _vm_kick := 0.0  # Ressort de l'arme : position et vitesse.
+var _vm_kick_vel := 0.0
+var _fov_punch := 0.0
+var _gun_base_pos := Vector3.ZERO
+var _gun_base_rot := Vector3.ZERO
 var _shake := 0.0
 var _aim_blend := 0.0
 var _switch_anim := 0.0
@@ -224,8 +239,14 @@ func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 		var sens := MOUSE_SENS * (0.6 if aiming else 1.0)
 		rotate_y(-event.relative.x * sens)
-		_camera.rotate_x(-event.relative.y * sens)
-		_camera.rotation.x = clamp(_camera.rotation.x, -1.45, 1.45)
+		var pitch_delta: float = -event.relative.y * sens
+		# Tirer la souris vers le bas compense d'abord le recul, puis bouge la visée.
+		if pitch_delta < 0.0 and _kick_target.x > 0.0:
+			var used: float = min(_kick_target.x, -pitch_delta)
+			_kick_target.x -= used
+			_kick.x -= used
+			pitch_delta += used
+		_aim_pitch = clamp(_aim_pitch + pitch_delta, -1.45, 1.45)
 	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
 		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
@@ -320,7 +341,7 @@ func _shoot() -> void:
 	ammo[weapon] -= 1
 	# Dispersion : précis en visée, moins en mouvement ou au jugé.
 	var moving := Vector2(velocity.x, velocity.z).length() / WALK_SPEED
-	var spread: float = w["spread"] * (0.25 if aiming else 1.0 + moving) + _recoil * 0.3
+	var spread: float = w["spread"] * (0.25 if aiming else 1.0 + moving) + _recoil * 0.02
 	var offset := Vector2(randf_range(-spread, spread), randf_range(-spread, spread))
 	var hit := _ray(Fx.LAYER_WORLD | Fx.LAYER_ZOMBIES, 150.0, offset)
 	var muzzle := _muzzle_flash.global_position
@@ -340,39 +361,83 @@ func _shoot() -> void:
 	_muzzle_flash.visible = true
 	_muzzle_flash.rotation.z = randf() * TAU
 	get_tree().create_timer(0.04).timeout.connect(func(): _muzzle_flash.visible = false)
-	# Recul : l'arme part en arrière et la vue monte un peu.
-	var kick: float = w["recoil"] * (0.6 if aiming else 1.0)
-	_recoil = min(_recoil + kick * 6.0, 1.0)
-	_camera.rotation.x = clamp(_camera.rotation.x + kick, -1.45, 1.45)
-	rotate_y(randf_range(-kick, kick) * 0.4)
+	_apply_recoil(w)
 	if ammo[weapon] <= 0:
 		_start_reload()
 	Game.changed.emit()
+
+
+## Recul : la vue monte vite puis revient doucement à sa place.
+## Au fusil, la montée grandit pendant une rafale et dérive d'un côté puis de l'autre :
+## il faut tirer par courtes rafales ou compenser à la souris.
+func _apply_recoil(w: Dictionary) -> void:
+	_burst = _burst + 1 if _since_shot < 0.3 else 1
+	_since_shot = 0.0
+	var control := 0.65 if aiming else 1.0
+	var up: float = w["kick_up"] * control
+	var side: float = w["kick_side"] * control
+	if weapon == "rifle":
+		up *= 1.0 + min(_burst, 12) * 0.06
+		side *= sin(_burst * 0.7) * 1.5 + randf_range(-0.5, 0.5)
+	else:
+		side *= randf_range(-1.0, 1.0)
+	_kick_target += Vector2(up, side)
+	_kick_target.x = min(_kick_target.x, 0.35)
+	_recoil = min(_recoil + w["punch"] * 0.5, 1.0)
+	_vm_kick_vel += w["punch"] * 2.2
+	_fov_punch = w["punch"] * 1.6
+	_shake = min(1.0, _shake + w["punch"] * 0.08)
 
 
 ## Écart du viseur (pour l'interface) : grandit avec le recul et le mouvement.
 func spread_amount() -> float:
 	var moving := Vector2(velocity.x, velocity.z).length() / WALK_SPEED
 	var base: float = WEAPONS[weapon]["spread"] * (0.25 if aiming else 1.0 + moving)
-	return base + _recoil * 0.3
+	return base + _recoil * 0.02 + _kick_target.x * 0.05
 
 
 func _animate_view(delta: float) -> void:
-	_recoil = move_toward(_recoil, 0.0, delta * 5.0)
+	_recoil = move_toward(_recoil, 0.0, delta * 4.0)
+	_since_shot += delta
+	var w: Dictionary = WEAPONS[weapon]
+	# La vue retourne vers la visée de départ une fois la rafale terminée.
+	if _since_shot > 0.08:
+		_kick_target = _kick_target.lerp(Vector2.ZERO, min(1.0, delta * w["recovery"]))
+	_kick = _kick.lerp(_kick_target, min(1.0, delta * 30.0))
+	_camera.rotation.x = clamp(_aim_pitch + _kick.x, -1.5, 1.5)
+	_camera.rotation.y = _kick.y
+	# Ressort de l'arme : recule d'un coup, rebondit légèrement puis se stabilise.
+	_vm_kick_vel += (-_vm_kick * 260.0 - _vm_kick_vel * 22.0) * delta
+	_vm_kick += _vm_kick_vel * delta
+	_fov_punch = move_toward(_fov_punch, 0.0, delta * 12.0)
 	_shake = move_toward(_shake, 0.0, delta * 2.5)
 	_switch_anim = move_toward(_switch_anim, 0.0, delta)
 	_aim_blend = move_toward(_aim_blend, 1.0 if aiming else 0.0, delta * 7.0)
-	_camera.fov = lerpf(FOV, AIM_FOV, _aim_blend)
+	_camera.fov = lerpf(FOV, AIM_FOV, _aim_blend) + _fov_punch
 
-	# Balancement de la tête et pas.
+	# Balancement de la tête et pas : un pas par demi-oscillation, cadence réaliste.
 	var speed := Vector2(velocity.x, velocity.z).length()
-	if is_on_floor() and speed > 0.5:
-		_bob += delta * speed * 1.7
-		var step := int(_bob / PI)
-		if step != _last_step:
-			_last_step = step
-			Sfx.play(self, "footstep", -14.0 + speed, 0.15)
-	var bob_amount := (0.035 if not aiming else 0.008) * clampf(speed / WALK_SPEED, 0.0, 1.5)
+	var on_floor := is_on_floor()
+	if on_floor and not _was_on_floor:
+		Sfx.play(self, "land", -6.0, 0.08)
+		_shake = min(1.0, _shake + 0.15)
+	_was_on_floor = on_floor
+	if on_floor and speed > 0.8:
+		var running := speed > WALK_SPEED + 0.5
+		# Marche : ~2 pas par seconde. Course : ~2,9 pas par seconde.
+		var interval := 0.34 if running else (0.62 if aiming else 0.5)
+		_bob += delta * PI / interval
+		_step_time += delta
+		if _step_time >= interval:
+			_step_time = 0.0
+			_step_left = not _step_left
+			var variant := randi() % 4
+			var sound := ("step_run_%d" if running else "step_walk_%d") % variant
+			var volume := -9.0 if running else (-17.0 if aiming else -14.0)
+			Sfx.play(self, sound, volume, 0.06)
+	else:
+		_step_time = 0.3
+	var bob_amount := (0.03 if not aiming else 0.006) * clampf(speed / WALK_SPEED, 0.0, 1.4)
 	var shake := Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * _shake * 0.05
 	_camera.position = Vector3(cos(_bob * 0.5) * bob_amount * 0.6, 1.6 + absf(sin(_bob)) * bob_amount, 0) + shake
 
@@ -380,8 +445,8 @@ func _animate_view(delta: float) -> void:
 	var hip := Vector3(0.15, -0.13, -0.28)
 	var ads := Vector3(0.0, -0.064 if weapon == "rifle" else -0.055, -0.22)
 	var pos := hip.lerp(ads, _aim_blend)
-	pos += Vector3(cos(_bob * 0.5) * bob_amount * 0.5, -absf(sin(_bob)) * bob_amount * 0.5, _recoil * 0.07)
-	var rot := Vector3(_recoil * 0.25, 0, 0)
+	pos += Vector3(cos(_bob * 0.5) * bob_amount * 0.5, -absf(sin(_bob)) * bob_amount * 0.5, 0)
+	var rot := Vector3(0, _kick.y * 2.0, sin(_bob) * bob_amount * 0.6)
 	if reloading > 0.0:
 		var total := reload_time(weapon)
 		var k := sin(clampf(1.0 - reloading / total, 0.0, 1.0) * PI)
@@ -389,8 +454,11 @@ func _animate_view(delta: float) -> void:
 		rot += Vector3(-0.5 * k, 0.4 * k, 0.3 * k)
 	if _switch_anim > 0.0:
 		pos.y -= _switch_anim * 0.6
-	_gun_root.position = _gun_root.position.lerp(pos, min(1.0, delta * 18.0))
-	_gun_root.rotation = _gun_root.rotation.lerp(rot, min(1.0, delta * 18.0))
+	_gun_base_pos = _gun_base_pos.lerp(pos, min(1.0, delta * 18.0))
+	_gun_base_rot = _gun_base_rot.lerp(rot, min(1.0, delta * 18.0))
+	# Le coup de recul s'ajoute sans lissage pour rester sec.
+	_gun_root.position = _gun_base_pos + Vector3(0, _vm_kick * 0.012, _vm_kick * 0.06)
+	_gun_root.rotation = _gun_base_rot + Vector3(_vm_kick * 0.35, 0, 0)
 
 
 func _handle_interaction(delta: float) -> void:

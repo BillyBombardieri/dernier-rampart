@@ -266,7 +266,7 @@ func _build_core() -> void:
 	var core := Structure.new()
 	add_child(core)
 	core.position = CORE_POS
-	core.setup("core", "Cœur", "", 1500.0, Vector3(4, 4, 4), Color(0.3, 0.6, 1.0))
+	core.setup("core", "Cœur", "", 1200.0, Vector3(4, 4, 4), Color(0.3, 0.6, 1.0))
 	Game.core = core
 	_blocked.append(CORE_POS)
 
@@ -277,7 +277,7 @@ func _build_rings() -> void:
 		var relay := Structure.new()
 		add_child(relay)
 		relay.position = data["relay"]
-		relay.setup("relay", data["name"], ring, 500.0, Vector3(1.6, 3, 1.6), Color(0.9, 0.8, 0.3))
+		relay.setup("relay", data["name"], ring, 400.0, Vector3(1.6, 3, 1.6), Color(0.9, 0.8, 0.3))
 		_relays[ring] = relay
 		_blocked.append(data["relay"])
 		for pos in data["sockets"]:

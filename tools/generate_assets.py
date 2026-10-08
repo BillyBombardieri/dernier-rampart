@@ -193,6 +193,39 @@ def gunshot(duration: float, body_hz: float, decay: float, tail: float, seed: in
     return crack * 0.9 + boom * 0.8 + rumble
 
 
+def bandpass(x: np.ndarray, lo: float, hi: float) -> np.ndarray:
+    spec = np.fft.rfft(x)
+    freqs = np.fft.rfftfreq(x.size, 1 / RATE)
+    spec[(freqs < lo) | (freqs > hi)] = 0
+    return np.fft.irfft(spec, n=x.size)
+
+
+def footstep(rng, running: bool, heavy: bool = False) -> np.ndarray:
+    """Pas réaliste : talon puis pointe en marchant, appui unique et plus lourd en courant."""
+    dur = 0.32 if running else 0.28
+    t = t_axis(dur)
+    out = np.zeros(t.size)
+    # Impacts sourds (talon, pointe).
+    hits = [(0.0, 1.0)] if running else [(0.0, 0.8), (rng.uniform(0.035, 0.055), 0.55)]
+    for start, amp in hits:
+        tt = np.clip(t - start, 0, None)
+        thud = bandpass(rng.standard_normal(t.size), 40, 220) * np.exp(-tt / (0.03 if not heavy else 0.06)) * (t >= start)
+        out += thud * amp * (2.2 if heavy else (1.5 if running else 1.0))
+    # Crissement : des centaines de micro-impacts de gravier filtrés dans les aigus.
+    grains = np.zeros(t.size)
+    count = 260 if running else 160
+    times = rng.gamma(2.0, 0.025 if running else 0.03, count)
+    for g in times:
+        idx = int(g * RATE)
+        if idx < t.size - 40:
+            grains[idx:idx + 40] += rng.standard_normal(40) * np.exp(-np.arange(40) / 8) * rng.uniform(0.2, 1.0)
+    crunch = bandpass(grains, 900, 6500)
+    out += crunch * (0.35 if running else 0.25) / max(1e-6, np.max(np.abs(crunch))) * np.max(np.abs(out))
+    # Fondu de sortie pour éviter les clics.
+    out *= np.minimum(1.0, (t[-1] - t) / 0.03)
+    return out
+
+
 def make_sounds() -> None:
     rng = np.random.default_rng(7)
     save_wav("pistol", gunshot(0.9, 90, 0.08, 0.35, 1))
@@ -212,8 +245,11 @@ def make_sounds() -> None:
     t = t_axis(0.25)
     save_wav("hit_flesh", lowpass(rng.standard_normal(t.size), 0.15) * envelope(t, 0.001, 0.05) + np.sin(2 * np.pi * 70 * t) * envelope(t, 0.001, 0.06))
 
-    t = t_axis(0.2)
-    save_wav("footstep", lowpass(rng.standard_normal(t.size), 0.08) * envelope(t, 0.002, 0.03))
+    # Pas sur terre et gravier : un impact sourd + un crissement de petits grains.
+    for i in range(4):
+        save_wav(f"step_walk_{i}", footstep(np.random.default_rng(200 + i), running=False))
+        save_wav(f"step_run_{i}", footstep(np.random.default_rng(300 + i), running=True))
+    save_wav("land", footstep(np.random.default_rng(400), running=True, heavy=True))
 
     t = t_axis(0.35)
     save_wav("pickup", (np.sin(2 * np.pi * 1320 * t) + 0.6 * np.sin(2 * np.pi * 1980 * t)) * envelope(t, 0.002, 0.08))

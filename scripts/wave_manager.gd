@@ -2,9 +2,13 @@ class_name WaveManager
 extends Node
 ## Enchaîne les phases : Préparation → Assaut → (choix d'implant après un siège) → Récolte → vague suivante.
 
-const PREP_TIME := 30.0
-const FIRST_PREP_TIME := 45.0
-const HARVEST_TIME := 15.0
+const PREP_TIME := 25.0
+const FIRST_PREP_TIME := 40.0
+const HARVEST_TIME := 12.0
+# Montée en difficulté par vague (vague 1 = valeurs de base).
+const HP_PER_WAVE := 0.2
+const SPEED_PER_WAVE := 0.03
+const DAMAGE_PER_WAVE := 0.08
 const SIEGE_EVERY := 5
 
 signal implant_choice(options: Array)
@@ -69,7 +73,10 @@ func _process(delta: float) -> void:
 			_spawn_cd -= delta
 			if not _queue.is_empty() and _spawn_cd <= 0.0:
 				_spawn(_queue.pop_front())
-				_spawn_cd = max(0.35, 1.6 - 0.12 * Game.wave)
+				_spawn_cd = max(0.3, 1.3 - 0.11 * Game.wave)
+				# À partir de la vague 3, les zombies arrivent parfois en meute serrée.
+				if Game.wave >= 3 and randf() < 0.15 + 0.03 * Game.wave:
+					_spawn_cd = 0.15
 			if _queue.is_empty() and _alive <= 0:
 				_wave_cleared()
 		"harvest":
@@ -103,15 +110,21 @@ func implant_chosen(id: String) -> void:
 
 func _build_queue(w: int) -> Array[String]:
 	var q: Array[String] = []
-	var count := 6 + w * 3
+	var count := 8 + w * 4
+	var runner_chance := minf(0.15 + 0.03 * w, 0.4)
+	var brute_chance := 0.0 if w < 2 else minf(0.06 + 0.02 * w, 0.22)
 	for i in count:
 		var r := randf()
 		var t := "rodeur"
-		if w >= 2 and r < 0.3:
+		if r < runner_chance:
 			t = "coureur"
-		elif w >= 3 and r > 0.88:
+		elif r > 1.0 - brute_chance:
 			t = "brute"
 		q.append(t)
+	# Fin de vague : une ruée de coureurs pour mettre la pression.
+	if w >= 4:
+		for i in w - 2:
+			q.append("coureur")
 	if is_siege(w):
 		q.insert(count / 2, "boss")
 	return q
@@ -122,7 +135,8 @@ func _spawn(type: String) -> void:
 	var portal: Vector3 = Game.main.path_points[0]
 	Game.main.add_child(z)
 	z.global_position = portal + Vector3(randf_range(-2.5, 2.5), 0.2, randf_range(-1.5, 1.5))
-	z.setup(type, 1.0 + 0.15 * (Game.wave - 1))
+	var w := Game.wave - 1
+	z.setup(type, 1.0 + HP_PER_WAVE * w, 1.0 + SPEED_PER_WAVE * w, 1.0 + DAMAGE_PER_WAVE * w)
 	z.died.connect(_on_zombie_died)
 	_alive += 1
 
