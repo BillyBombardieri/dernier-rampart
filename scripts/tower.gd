@@ -401,7 +401,7 @@ func _find_target() -> Zombie:
 	return best
 
 
-func _valid_target(z: Zombie) -> bool:
+func _valid_target(z: Variant) -> bool:  # Pas typé : la cible peut avoir été libérée entre-temps.
 	if not is_instance_valid(z) or z.dead or z.burrowed:
 		return false
 	var d := global_position.distance_to(z.global_position)

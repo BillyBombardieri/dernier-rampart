@@ -4,14 +4,14 @@ FPS + tower defense solo. Tu défends une base contre des vagues de zombies : tu
 
 Ce dépôt contient le **prototype jouable**. Il sert à vérifier que le mélange FPS + tours est amusant avant d'ajouter du contenu.
 
-Côté ambiance, la partie se joue au crépuscule, dans le brouillard, avec des projecteurs et des barils en feu. Les textures sont réalistes (terre, boue, béton, métal rouillé). Les zombies ont une forme humaine animée : ils marchent, frappent, encaissent les tirs et tombent au sol. Les armes ont du recul, un flash, une visée et des sons, et tu as une lampe torche.
+Côté ambiance, la partie se joue au crépuscule, dans le brouillard, avec des projecteurs et des barils en feu. Les textures sont réalistes (terre, boue, béton, métal rouillé). Les zombies sont de **vrais modèles 3D** sculptés, texturés et animés : vêtements déchirés, plaies, démarche boiteuse, course, coups de griffes, crachat, cri, chute en arrière ou face contre terre. Le pistolet et le fusil sont modélisés pièce par pièce : la glissière et la culasse reculent à chaque tir, l'arme pivote au rechargement et on voit le chargeur sortir puis rentrer. En visée, tu vises avec les vrais organes de visée : les trois points lumineux du pistolet, le réticule rouge du viseur holographique du fusil. Les armes ont du recul, un flash et des sons, et tu as une lampe torche.
 
 ## Récupérer le jeu sur Windows (et le mettre à jour facilement)
 
 La méthode la plus simple est **GitHub Desktop**. Il suffit d'un clic pour récupérer chaque mise à jour.
 
 1. Installe **GitHub Desktop** : https://desktop.github.com puis connecte-toi avec ton compte GitHub.
-2. Va dans **File → Clone repository**, onglet **GitHub.com**, choisis `snkrsbilly-wq/dernier-rampart`, puis clique sur **Clone**. Le dossier est créé par défaut dans `Documents\GitHub\dernier-rampart`.
+2. Va dans **File → Clone repository**, onglet **GitHub.com**, choisis `BillyBombardieri/dernier-rampart`, puis clique sur **Clone**. Le dossier est créé par défaut dans `Documents\GitHub\dernier-rampart`.
 3. Pour récupérer une mise à jour : ouvre GitHub Desktop, clique sur **Fetch origin**, puis sur **Pull origin** s'il apparaît. C'est tout.
 
 Si tu as modifié des fichiers de ton côté, GitHub Desktop te le signale avant de mettre à jour.
@@ -46,7 +46,7 @@ Tout est sauvegardé dans `reglages.cfg`, dans le dossier de sauvegarde de Godot
 - **En haut à droite** : l'objectif du tutoriel.
 - **En bas à gauche** : ta vie, tes implants et tes **deux gadgets** (prêts ou en recharge).
 - **En bas à droite** : l'arme, les munitions, le type de munitions spéciales et le rechargement.
-- **Au centre** : un viseur qui s'écarte quand tu bouges ou tires, et une croix quand tu touches (rouge si le zombie meurt).
+- **Au centre** : un viseur qui s'écarte quand tu bouges ou tires, et une croix quand tu touches (rouge si le zombie meurt). Il disparaît quand tu vises : ce sont alors les organes de visée de l'arme qui comptent.
 - **Barre de construction** : quand tu regardes un ancrage vide, les 6 tours s'affichent avec leur prix, leur énergie et leur rôle. Celle qui est en surbrillance sera construite.
 - **Flèches au bord de l'écran** : la direction et la distance du **Cœur** (bleu), et du **portail** (rouge) au début de la partie.
 - **H** affiche toute l'aide des commandes, avec les touches que tu as choisies.
@@ -101,12 +101,12 @@ Pour réparer, **maintiens E** en regardant la barrière ou simplement à côté
 | Rôdeur | vague 1 | Le zombie de base |
 | Coureur | vague 1 | Rapide, il te prend en chasse |
 | Brute | vague 2 | Très solide, frappe fort sur les barrières |
-| Cracheur (vert) | vague 3 | Reste en retrait et crache de l'acide sur la barrière et sur toi, par-dessus la horde |
-| Hurleur (orange) | vague 4 | Son cri rend les zombies proches plus rapides et plus forts (yeux rouges) : les tours le visent en priorité |
-| Fouisseur (brun) | vague 5 | S'enterre devant une barrière et ressort juste derrière. Intouchable sous terre. Un Phare le fait sortir de terre |
+| Cracheur (peau verdâtre, poche lumineuse sous la gorge) | vague 3 | Reste en retrait et crache de l'acide sur la barrière et sur toi, par-dessus la horde |
+| Hurleur (mâchoire démesurée) | vague 4 | S'arrête pour hurler, bras levés : son cri rend les zombies proches plus rapides et plus forts (yeux rouges) ; les tours le visent en priorité |
+| Fouisseur (torse nu, couvert de terre) | vague 5 | S'enterre devant une barrière et ressort juste derrière. Intouchable sous terre. Un Phare le fait sortir de terre |
 | Boss de siège | vagues 5 et 10 | Énorme, insensible à l'étourdissement |
 
-Les zombies marchent plutôt lentement (un Rôdeur avance à 1,8 m/s, un Coureur à 3,9 m/s), et un peu plus vite à chaque vague.
+Les zombies marchent plutôt lentement (un Rôdeur avance à 1,8 m/s, un Coureur à 3,9 m/s), et un peu plus vite à chaque vague. Un coup porte quand la main du zombie arrive sur toi : en reculant pendant son élan, tu peux l'esquiver.
 
 ### 6 tours
 
@@ -151,7 +151,7 @@ L'**établi** est près du Cœur. Il s'utilise entre les vagues, et le jeu est e
 
 - **Santé** : elle remonte au maximum dès qu'une vague est repoussée.
 - **Implants** : après un siège, tu choisis 1 implant parmi 3. Chacun a un bonus et un malus.
-- **Tir à la tête** : x2 dégâts.
+- **Tir à la tête** : x2 dégâts. La zone de la tête suit l'animation (un zombie penché a la tête plus bas).
 - **Score** : chaque zombie abattu rapporte des points (10 pour un Rôdeur, 300 pour un Boss), chaque combo +10, chaque vague repoussée 50 x son numéro, et la victoire 1000 plus les PV restants du Cœur. Le record est gardé.
 - **Mort** : tu réapparais au Cœur après un délai qui s'allonge à chaque mort. La partie est perdue si le Cœur tombe.
 
@@ -168,7 +168,9 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 | `wave_manager.gd` | Phases et composition des vagues |
 | `player.gd` | Joueur FPS : tir, munitions spéciales, marquage, construction, réparation |
 | `tower.gd`, `socket.gd` | Les 6 tours et leurs ancrages |
-| `zombie.gd` | Types de zombies, déplacement, états (gelé, en feu, chargé, étourdi, enragé, enterré) |
+| `zombie.gd` | Types de zombies, déplacement, animations, états (gelé, en feu, chargé, étourdi, enragé, enterré) |
+| `zombie_pose.gd` | Réactions ajoutées à l'animation : recul quand un zombie est touché, vacillement quand il est étourdi |
+| `zombie_models.gd` | Repères des modèles (yeux, vitesse de marche des animations), écrits par `tools/make_models.py` |
 | `barrier.gd` | Barrières du chemin et barricade |
 | `projectile.gd` | Crachat d'acide et obus de mortier |
 | `gadgets.gd`, `decoy.gd`, `drone.gd` | Gadgets : barricade, leurre sonore, drone de récolte |
@@ -187,6 +189,24 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 ## Textures et sons
 
 Toutes les textures (`assets/textures`) et tous les sons (`assets/sounds`) sont générés par le script `tools/generate_assets.py`, à partir de bruit mathématique. Aucune ressource externe n'est utilisée, donc il n'y a aucun problème de droits. Pour les régénérer : `python tools/generate_assets.py` (il faut numpy et pillow).
+
+## Modèles 3D (zombies et armes)
+
+Les modèles de `assets/models` sont fabriqués par le code avec **Blender 4** (gratuit), sans aucune ressource externe :
+
+- `tools/sdf.py` : un petit moteur de sculpture (volumes qui se fondent les uns dans les autres, transformés en maillage) ;
+- `tools/sculpt.py` : l'anatomie de chaque zombie (muscles, côtes, visage creusé), ses vêtements plissés et déchirés, ses plaies et ses couleurs ;
+- `tools/zombie_anims.py` : le squelette et les animations (marche, course, attaque, crachat, cri, creusage, deux morts) ;
+- `tools/weapon_models.py` : le pistolet et le fusil, pièce par pièce ;
+- `tools/make_models.py` : l'enchaînement complet. Chaque zombie est sculpté en détail, puis allégé pour le jeu (8 000 triangles, 11 000 pour le boss) ; les couleurs, le relief fin et les ombres sont « cuits » dans des textures.
+
+Pour tout régénérer, depuis le dossier du dépôt (compter une dizaine de minutes) :
+
+```
+blender -b --factory-startup -P tools/make_models.py
+```
+
+Ajoute `-- --only rodeur,pistolet` pour ne refaire que certains modèles, et `--preview <dossier>` pour obtenir des images de contrôle. Le Python intégré à Blender doit avoir numpy (c'est le cas de la version Windows de blender.org).
 
 ## Tests automatiques
 
@@ -208,7 +228,7 @@ Le chargement de tous les scripts et scènes :
 godot --headless --path . res://tests/load_check.tscn
 ```
 
-Des captures d'écran (menu, barrière attaquée, nouveaux zombies, construction, établi, réglages) :
+Des captures d'écran (menu, barrière attaquée, les sept zombies, visée au fusil, rechargement, zombies de près, construction, établi, réglages) :
 
 ```
 godot --path . --fixed-fps 60 res://tests/screenshot.tscn -- <dossier_de_sortie>

@@ -29,6 +29,22 @@ const AIM_FOV := 55.0
 const REPAIR_RATE := 80.0  # PV par seconde
 const REPAIR_COST := 10.0  # PV réparés par ferraille
 const VIEWMODEL_LAYER := 2  # Couche visuelle de l'arme : la lampe torche ne l'éclaire pas.
+# Modèles 3D des armes (tools/make_models.py). Pièces mobiles : Glissiere ou Culasse, Chargeur,
+# Detente, Chien ; repères : Bouche (sortie du canon) et Visee (point aligné en visée).
+const WEAPON_MODELS := {
+	"pistol": "res://assets/models/arme_pistolet.gltf",
+	"rifle": "res://assets/models/arme_fusil.gltf",
+}
+const ACTION_TRAVEL := {"pistol": 0.028, "rifle": 0.05}  # Recul de la glissière ou de la culasse (m).
+const MAG_DROP := {"pistol": Vector3(0, -0.956, 0.292), "rifle": Vector3(0, -0.995, -0.105)}  # Sortie du chargeur.
+const ADS_DEPTH := {"pistol": -0.22, "rifle": -0.13}  # Distance de l'arme à l'œil en visée.
+# Geste de rechargement (décalage, rotation) : l'arme remonte vers le centre et pivote vers la main
+# gauche, on voit le chargeur sortir puis rentrer.
+const RELOAD_POSE := {
+	"pistol": [Vector3(-0.07, 0.06, 0.04), Vector3(0.3, 0.35, 0.35)],
+	"rifle": [Vector3(-0.06, 0.06, 0.02), Vector3(0.15, 0.3, 0.4)],
+}
+const HAMMER_COCKED := 0.75
 
 var max_hp := 100.0
 var hp := 100.0
@@ -44,6 +60,9 @@ var build_choice := 0  # Index dans Tower.BUILD_ORDER.
 var _camera: Camera3D
 var _gun_root: Node3D
 var _models := {}
+var _parts := {}  # Pour chaque arme : pièces mobiles, leurs positions de repos et les repères.
+var _action_kick := 0.0  # 1 au moment du tir, la glissière ou la culasse revient ensuite en place.
+var _trigger_pull := 0.0
 var _muzzle_flash: MeshInstance3D
 var _flashlight: SpotLight3D
 var _fire_cd := 0.0
@@ -102,7 +121,7 @@ func _ready() -> void:
 	fill.light_energy = 1.6
 	fill.omni_range = 1.5
 	fill.light_cull_mask = VIEWMODEL_LAYER
-	fill.position = Vector3(0.3, 0.3, 0.2)
+	fill.position = Vector3(-0.25, 0.35, 0.15)  # En haut à gauche : éclaire les faces de l'arme qu'on voit.
 	_camera.add_child(fill)
 	_spawn_point = global_position
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
@@ -115,37 +134,23 @@ func _build_viewmodels() -> void:
 	_gun_root = Node3D.new()
 	_gun_root.scale = Vector3.ONE * 0.6
 	_camera.add_child(_gun_root)
-	var steel := Fx.material(Color(0.16, 0.16, 0.17))
-	steel.metallic = 0.85
-	steel.roughness = 0.35
-	var polymer := Fx.material(Color(0.05, 0.05, 0.05))
-	polymer.roughness = 0.75
-
-	var pistol := Node3D.new()
-	_part(pistol, Vector3(0.05, 0.05, 0.24), Vector3(0, 0.03, -0.05), steel)  # glissière
-	_part(pistol, Vector3(0.045, 0.035, 0.2), Vector3(0, -0.01, -0.04), polymer)  # carcasse
-	var grip := _part(pistol, Vector3(0.042, 0.13, 0.06), Vector3(0, -0.08, 0.04), polymer)
-	grip.rotation.x = -0.25
-	_part(pistol, Vector3(0.012, 0.012, 0.012), Vector3(0, 0.06, -0.15), steel)  # guidon
-	_models["pistol"] = pistol
-	_gun_root.add_child(pistol)
-
-	var rifle := Node3D.new()
-	_part(rifle, Vector3(0.06, 0.08, 0.36), Vector3(0, 0, 0), steel)  # boîte de culasse
-	_part(rifle, Vector3(0.065, 0.07, 0.25), Vector3(0, 0, -0.3), polymer)  # garde-main
-	var barrel := Fx.mesh_with(_cyl(0.012, 0.25), steel)
-	barrel.rotation.x = PI * 0.5
-	barrel.position = Vector3(0, 0.01, -0.53)
-	barrel.layers = VIEWMODEL_LAYER
-	rifle.add_child(barrel)
-	var mag := _part(rifle, Vector3(0.035, 0.16, 0.07), Vector3(0, -0.11, -0.06), steel)
-	mag.rotation.x = 0.2
-	var rgrip := _part(rifle, Vector3(0.04, 0.11, 0.05), Vector3(0, -0.08, 0.1), polymer)
-	rgrip.rotation.x = -0.3
-	_part(rifle, Vector3(0.05, 0.08, 0.22), Vector3(0, -0.02, 0.28), polymer)  # crosse
-	_part(rifle, Vector3(0.03, 0.03, 0.08), Vector3(0, 0.06, -0.02), polymer)  # viseur
-	_models["rifle"] = rifle
-	_gun_root.add_child(rifle)
+	for id in WEAPON_MODELS:
+		var model: Node3D = load(WEAPON_MODELS[id]).instantiate()
+		_gun_root.add_child(model)
+		_models[id] = model
+		for node in model.find_children("*", "MeshInstance3D", true, false):
+			var mi := node as MeshInstance3D
+			mi.layers = VIEWMODEL_LAYER
+			mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+			for i in mi.get_surface_override_material_count():
+				_finish_material(mi.get_active_material(i) as StandardMaterial3D)
+		var parts := {}
+		for key in ["Glissiere", "Culasse", "Chargeur", "Detente", "Chien", "Bouche", "Visee"]:
+			var n := model.find_child(key, true, false) as Node3D
+			parts[key] = n
+			if n:
+				parts[key + "_repos"] = n.transform
+		_parts[id] = parts
 
 	var flash_mesh := QuadMesh.new()
 	flash_mesh.size = Vector2(0.18, 0.18)
@@ -159,32 +164,67 @@ func _build_viewmodels() -> void:
 	_muzzle_flash = MeshInstance3D.new()
 	_muzzle_flash.mesh = flash_mesh
 	_muzzle_flash.visible = false
+	_muzzle_flash.layers = VIEWMODEL_LAYER
 	_gun_root.add_child(_muzzle_flash)
 	_show_model()
 
 
-func _part(parent: Node3D, size: Vector3, pos: Vector3, mat: Material) -> MeshInstance3D:
-	var mi := Fx.box_mat(size, mat)
-	mi.position = pos
-	mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
-	mi.layers = VIEWMODEL_LAYER
-	parent.add_child(mi)
-	return mi
+## Matériaux des armes : grain de surface (pointillé des poignées, acier légèrement inégal),
+## vitre teintée du viseur, réticule et points de visée qui brillent dans le noir.
+## Les modèles n'ont pas de coordonnées de texture : les textures sont projetées (triplanaire).
+func _finish_material(mat: StandardMaterial3D) -> void:
+	if mat == null or mat.has_meta("fini"):
+		return
+	mat.set_meta("fini", true)
+	match mat.resource_name:
+		"polymere", "caoutchouc":
+			mat.normal_enabled = true
+			mat.normal_texture = _grain(0.18 if mat.resource_name == "caoutchouc" else 0.1, 6.0, FastNoiseLite.TYPE_CELLULAR)
+			mat.normal_scale = 0.6
+			mat.uv1_triplanar = true
+			mat.uv1_scale = Vector3.ONE * 25.0
+		"acier_noir", "acier_brut":
+			mat.roughness = 1.0
+			mat.roughness_texture = _grain(0.02, 0.0, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, mat.resource_name == "acier_brut")
+			mat.uv1_triplanar = true
+			mat.uv1_scale = Vector3.ONE * 8.0
+		"verre":
+			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
+			mat.albedo_color = Color(0.25, 0.35, 0.4, 0.18)
+			mat.metallic_specular = 1.0
+			mat.roughness = 0.05
+		"reticule", "tritium":
+			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+			mat.emission_energy_multiplier = 3.0
 
 
-func _cyl(radius: float, height: float) -> CylinderMesh:
-	var c := CylinderMesh.new()
-	c.top_radius = radius
-	c.bottom_radius = radius
-	c.height = height
-	c.radial_segments = 10
-	return c
+## Texture de bruit : relief en pointillé (normal_strength > 0) ou rugosité qui varie.
+func _grain(frequency: float, normal_strength: float, kind: FastNoiseLite.NoiseType, bright := false) -> NoiseTexture2D:
+	var noise := FastNoiseLite.new()
+	noise.noise_type = kind
+	noise.frequency = frequency
+	noise.seed = 7
+	var tex := NoiseTexture2D.new()
+	tex.width = 256
+	tex.height = 256
+	tex.seamless = true
+	tex.noise = noise
+	if normal_strength > 0.0:
+		tex.as_normal_map = true
+		tex.bump_strength = normal_strength
+	else:
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color.from_hsv(0, 0, 0.22 if bright else 0.32))
+		ramp.set_color(1, Color.from_hsv(0, 0, 0.36 if bright else 0.5))
+		tex.color_ramp = ramp
+	return tex
 
 
 func _show_model() -> void:
 	for id in _models:
 		_models[id].visible = id == weapon
-	_muzzle_flash.position = Vector3(0, 0.03, -0.2) if weapon == "pistol" else Vector3(0, 0.01, -0.7)
+	var muzzle: Node3D = _parts[weapon]["Bouche"]
+	_muzzle_flash.position = muzzle.position if muzzle else Vector3(0, 0.03, -0.2)
 
 
 func apply_implants() -> void:
@@ -429,6 +469,8 @@ func _shoot() -> void:
 	_muzzle_flash.visible = true
 	_muzzle_flash.rotation.z = randf() * TAU
 	get_tree().create_timer(0.04).timeout.connect(func(): _muzzle_flash.visible = false)
+	_action_kick = 1.0
+	_trigger_pull = 1.0
 	_apply_recoil(w)
 	if ammo[weapon] <= 0:
 		_start_reload()
@@ -520,17 +562,20 @@ func _animate_view(delta: float) -> void:
 	var shake := Vector3(randf_range(-1, 1), randf_range(-1, 1), 0) * _shake * 0.05
 	_camera.position = Vector3(cos(_bob * 0.5) * bob_amount * 0.6, 1.6 + absf(sin(_bob)) * bob_amount, 0) + shake
 
-	# Position de l'arme : à la hanche, en visée, en rechargement, au changement.
+	# Position de l'arme : à la hanche, en visée (repère Visee au centre de l'écran), en rechargement, au changement.
 	var hip := Vector3(0.15, -0.13, -0.28)
-	var ads := Vector3(0.0, -0.064 if weapon == "rifle" else -0.055, -0.22)
+	var sight: Node3D = _parts[weapon]["Visee"]
+	var sight_pos := sight.position * _gun_root.scale.x if sight else Vector3(0, 0.06, 0)
+	var ads := Vector3(-sight_pos.x, -sight_pos.y, ADS_DEPTH[weapon])
 	var pos := hip.lerp(ads, _aim_blend)
 	pos += Vector3(cos(_bob * 0.5) * bob_amount * 0.5, -absf(sin(_bob)) * bob_amount * 0.5, 0)
 	var rot := Vector3(0, _kick.y * 2.0, sin(_bob) * bob_amount * 0.6)
 	if reloading > 0.0:
-		var total := reload_time(weapon)
-		var k := sin(clampf(1.0 - reloading / total, 0.0, 1.0) * PI)
-		pos += Vector3(0, -0.12 * k, 0)
-		rot += Vector3(-0.5 * k, 0.4 * k, 0.3 * k)
+		var t := clampf(1.0 - reloading / reload_time(weapon), 0.0, 1.0)
+		var k := smoothstep(0.0, 0.14, t) * (1.0 - smoothstep(0.86, 1.0, t))
+		var seat := maxf(0.0, 1.0 - absf(t - 0.8) / 0.04)  # Le chargeur claque en place.
+		pos += RELOAD_POSE[weapon][0] * k + Vector3(0, 0.012 * seat, 0)
+		rot += RELOAD_POSE[weapon][1] * k + Vector3(0.06 * seat, 0, 0)
 	if _switch_anim > 0.0:
 		pos.y -= _switch_anim * 0.6
 	_gun_base_pos = _gun_base_pos.lerp(pos, min(1.0, delta * 18.0))
@@ -538,6 +583,36 @@ func _animate_view(delta: float) -> void:
 	# Le coup de recul s'ajoute sans lissage pour rester sec.
 	_gun_root.position = _gun_base_pos + Vector3(0, _vm_kick * 0.012, _vm_kick * 0.06)
 	_gun_root.rotation = _gun_base_rot + Vector3(_vm_kick * 0.35, 0, 0)
+	_animate_parts(delta)
+
+
+## Pièces mobiles : la glissière (ou la culasse) recule à chaque tir et reste ouverte quand le
+## pistolet est vide, la détente et le chien bougent, le chargeur sort puis rentre au rechargement.
+func _animate_parts(delta: float) -> void:
+	_action_kick = move_toward(_action_kick, 0.0, delta * 14.0)
+	_trigger_pull = move_toward(_trigger_pull, 0.0, delta * 7.0)
+	var p: Dictionary = _parts[weapon]
+	var k := 1.0 - reloading / reload_time(weapon) if reloading > 0.0 else 0.0
+	var back := _action_kick
+	if weapon == "pistol" and ammo["pistol"] <= 0 and k < 0.82:
+		back = 1.0
+	elif weapon == "rifle" and k > 0.8:
+		back = sin(clampf((k - 0.8) / 0.18, 0.0, 1.0) * PI)  # On réarme la culasse.
+	var action: Node3D = p["Glissiere"] if p["Glissiere"] else p["Culasse"]
+	if action:
+		action.transform = p[action.name + "_repos"].translated_local(Vector3(0, 0, ACTION_TRAVEL[weapon] * back))
+	if p["Detente"]:
+		p["Detente"].transform = p["Detente_repos"].rotated_local(Vector3.RIGHT, -0.3 * _trigger_pull)
+	if p["Chien"]:
+		# Armé au repos ; il tombe au tir puis la glissière le réarme en reculant.
+		var fall := _action_kick * _action_kick
+		p["Chien"].transform = p["Chien_repos"].rotated_local(Vector3.RIGHT, HAMMER_COCKED * (1.0 - fall))
+	if p["Chargeur"]:
+		var out := 0.0
+		if reloading > 0.0:
+			out = smoothstep(0.08, 0.3, k) if k < 0.45 else 1.0 - smoothstep(0.5, 0.78, k)
+		p["Chargeur"].transform = p["Chargeur_repos"].translated(MAG_DROP[weapon] * 0.16 * out)
+		p["Chargeur"].visible = not (k > 0.3 and k < 0.5)
 
 
 ## Choisit la tour à construire (molette ou touche C).

@@ -1,6 +1,6 @@
 extends Node
 ## Captures d'écran automatiques pour vérifier le rendu : menu principal, barrière de l'Avant-poste
-## attaquée, nouveaux zombies de près, barre de construction, établi et réglages.
+## attaquée, les sept zombies, visée et rechargement, zombies de près, construction, établi et réglages.
 ## Lancer : godot --path . --fixed-fps 60 res://tests/screenshot.tscn -- <dossier_de_sortie>
 
 # Tours posées pour les captures : [ancrage le plus proche, type].
@@ -60,47 +60,67 @@ func _ready() -> void:
 		if n is Projectile:
 			n.queue_free()
 	wm._enter("prep", 25.0)
-	# 3. Les trois nouveaux zombies de près, à la lampe torche (et une brute enragée par le Hurleur).
-	_place(p, Vector3(-18, 0.2, -6), 0.0, -3.0, "pistol")
+	# 3. Les sept zombies, éclairés pour la capture, qui avancent vers le joueur.
+	_place(p, Vector3(-18, 0.2, -6), 0.0, 4.0, "pistol")
 	p._flashlight.visible = true
+	var lamp := OmniLight3D.new()
+	lamp.omni_range = 14.0
+	lamp.light_energy = 1.6
+	lamp.light_color = Color(1.0, 0.92, 0.82)
+	lamp.shadow_enabled = true
+	_main.add_child(lamp)
+	lamp.global_position = p.global_position + Vector3(1.5, 3.2, -2.5)
 	await _frames(5)
-	var demo := [["cracheur", 3.6, -1.5], ["hurleur", 4.8, 0.1], ["fouisseur", 3.5, 1.6], ["brute", 7.0, -0.3]]
+	var lineup := [["brute", 6.2, -3.4], ["rodeur", 4.4, -2.2], ["coureur", 4.9, -1.0], ["cracheur", 4.1, 0.2],
+		["hurleur", 4.8, 1.4], ["fouisseur", 4.3, 2.5], ["boss", 9.5, 4.2]]
+	for d in lineup:
+		_pose_zombie(p, d[0], d[1], d[2], "walk", randf())
+	await _frames(20)
+	await _capture("zombies-modeles")
+	# Visée au fusil (viseur holographique) sur la horde, puis rechargement du pistolet.
+	_place(p, p.global_position, 0.0, 2.0, "rifle")
+	Input.action_press("aim")
+	await _frames(40)
+	await _capture("visee-fusil")
+	Input.action_release("aim")
+	_place(p, p.global_position, 0.0, 2.0, "pistol")
+	await _frames(30)
+	p._start_reload()
+	await _frames(int(p.reload_time("pistol") * 60.0 * 0.38))
+	await _capture("rechargement-pistolet")
+	await _frames(60)
+	for z in get_tree().get_nodes_in_group("zombies"):
+		z.queue_free()
+	lamp.queue_free()
+	# 4. Zombies de près, à la lampe torche : le Hurleur crie, le Cracheur se cambre, une brute enragée.
+	_place(p, Vector3(-18, 0.2, -6), 0.0, -3.0, "pistol")
+	await _frames(5)
+	var demo := [["cracheur", 3.6, -1.5, "spit", 0.38], ["hurleur", 4.8, 0.1, "scream", 0.45],
+		["fouisseur", 3.5, 1.6, "walk", 0.3], ["brute", 7.0, -0.3, "walk", 0.6]]
 	for d in demo:
-		var z := Zombie.new()
-		_main.add_child(z)
-		z.setup(d[0], 1.0)
-		z.set_physics_process(false)
-		z.global_position = p.global_position + Vector3(d[2], -0.2, -d[1])
-		z.look_at(Vector3(p.global_position.x, z.global_position.y, p.global_position.z), Vector3.UP)
-		z._walk_phase = randf() * TAU
-		z.velocity = -z.global_transform.basis.z * 1.5
-		if d[0] == "hurleur":
-			z._scream_anim = 0.9
-		elif d[0] == "cracheur":
-			z._attack_anim = 0.55
-		else:
+		var z := _pose_zombie(p, d[0], d[1], d[2], d[3], d[4])
+		if d[0] == "brute" or d[0] == "fouisseur":
 			z.buff_time = 5.0
-		z._update_status(0.0)
-		z._animate(0.05)
+			z._update_status(0.0)
 	await _frames(20)
 	await _capture("nouveaux-zombies")
 	p._flashlight.visible = false
 	for z in get_tree().get_nodes_in_group("zombies"):
 		z.queue_free()
-	# 4. Barre de construction : le joueur vise un ancrage vide de la Muraille.
+	# 5. Barre de construction : le joueur vise un ancrage vide de la Muraille.
 	_place(p, Vector3(-4, 0.2, 10.6), 0.0, -21.0, "rifle")
 	await _frames(30)
 	p.cycle_build(2)
 	await _frames(10)
 	await _capture("construction")
-	# 5. Établi.
+	# 6. Établi.
 	_place(p, Vector3(-5.5, 0.2, 30.5), 180.0, -10.0, "rifle")
 	await _frames(10)
 	_main.open_bench()
 	await _frames(10)
 	await _capture("etabli")
 	_main.bench_panel.close()
-	# 6. Réglages (menu pause).
+	# 7. Réglages (menu pause).
 	_main.pause_menu.open()
 	_main.pause_menu._open_settings()
 	await _frames(10)
@@ -115,6 +135,20 @@ func _place(p: Player, pos: Vector3, rot_y: float, pitch: float, weapon: String)
 	p._aim_pitch = deg_to_rad(pitch)
 	if p.weapon != weapon:
 		p._switch(weapon)
+
+
+## Zombie immobile, tourné vers le joueur, figé dans une pose de son animation (moment de 0 à 1).
+func _pose_zombie(p: Player, type: String, dist: float, side: float, anim: String, moment: float) -> Zombie:
+	var z := Zombie.new()
+	_main.add_child(z)
+	z.setup(type, 1.0)
+	z.set_physics_process(false)
+	z.global_position = p.global_position + Vector3(side, -0.2, -dist)
+	z.look_at(Vector3(p.global_position.x, z.global_position.y, p.global_position.z), Vector3.UP)
+	z._anim.play(anim)
+	z._anim.seek(moment * z._anim.current_animation_length, true)
+	z._anim.pause()
+	return z
 
 
 func _socket_near(pos: Vector3) -> Socket:

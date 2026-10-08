@@ -623,10 +623,8 @@ class Crosshair extends Control:
 	func _draw() -> void:
 		var col := Color(1, 1, 1, 0.9)
 		var shadow := Color(0, 0, 0, 0.5)
-		if aiming:
-			draw_circle(Vector2.ZERO, 2.5, shadow)
-			draw_circle(Vector2.ZERO, 1.5, col)
-		else:
+		# En visée, ce sont les organes de visée de l'arme (guidon, réticule du viseur) qui servent de repère.
+		if not aiming:
 			var gap := 6.0 + spread * 420.0
 			for d in [Vector2.UP, Vector2.DOWN, Vector2.LEFT, Vector2.RIGHT]:
 				draw_line(d * gap, d * (gap + 9.0), shadow, 4.0)

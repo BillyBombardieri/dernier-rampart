@@ -1,24 +1,24 @@
 class_name Zombie
 extends CharacterBody3D
-## Zombie à forme humaine qui suit le couloir jusqu'au Cœur. Le corps est animé par le code.
+## Zombie qui suit le couloir jusqu'au Cœur. Son corps est un modèle 3D sculpté, texturé et animé
+## (assets/models, fabriqués par tools/make_models.py) : marche, course, coups, crachat, cri, mort.
 ## Il s'arrête devant les barrières pour les casser. Il ne s'en prend jamais aux tours : seulement
 ## aux barrières, au joueur et au Cœur. Certains types chassent le joueur, crachent de l'acide
 ## (Cracheur), renforcent les autres (Hurleur) ou creusent sous les barrières (Fouisseur).
 ## États : gelé (Cryo), en feu, chargé (Arc), étourdi (Mortier), enragé (cri du Hurleur), marqué.
 
 const TYPES := {
-	"rodeur": {"hp": 60.0, "speed": 1.8, "damage": 8.0, "size": 1.0, "bulk": 1.0, "lean": 0.1, "scrap": 3, "points": 10},
-	"coureur": {"hp": 35.0, "speed": 3.9, "damage": 6.0, "size": 0.95, "bulk": 0.85, "lean": 0.35, "scrap": 3, "points": 12},
-	"brute": {"hp": 280.0, "speed": 1.15, "damage": 25.0, "size": 1.35, "bulk": 1.5, "lean": 0.15, "scrap": 8, "points": 40},
-	"cracheur": {"hp": 55.0, "speed": 1.65, "damage": 14.0, "size": 1.0, "bulk": 0.95, "lean": 0.05, "scrap": 5, "points": 25},
-	"hurleur": {"hp": 110.0, "speed": 1.5, "damage": 8.0, "size": 1.15, "bulk": 0.8, "lean": 0.0, "scrap": 8, "points": 35},
-	"fouisseur": {"hp": 80.0, "speed": 2.1, "damage": 16.0, "size": 0.95, "bulk": 1.15, "lean": 0.5, "scrap": 6, "points": 30},
-	"boss": {"hp": 2400.0, "speed": 1.0, "damage": 45.0, "size": 2.3, "bulk": 1.4, "lean": 0.2, "scrap": 50, "points": 300},
+	"rodeur": {"hp": 60.0, "speed": 1.8, "damage": 8.0, "size": 1.0, "bulk": 1.0, "scrap": 3, "points": 10},
+	"coureur": {"hp": 35.0, "speed": 3.9, "damage": 6.0, "size": 0.95, "bulk": 0.85, "scrap": 3, "points": 12},
+	"brute": {"hp": 280.0, "speed": 1.15, "damage": 25.0, "size": 1.35, "bulk": 1.5, "scrap": 8, "points": 40},
+	"cracheur": {"hp": 55.0, "speed": 1.65, "damage": 14.0, "size": 1.0, "bulk": 0.95, "scrap": 5, "points": 25},
+	"hurleur": {"hp": 110.0, "speed": 1.5, "damage": 8.0, "size": 1.15, "bulk": 0.8, "scrap": 8, "points": 35},
+	"fouisseur": {"hp": 80.0, "speed": 2.1, "damage": 16.0, "size": 0.95, "bulk": 1.15, "scrap": 6, "points": 30},
+	"boss": {"hp": 2400.0, "speed": 1.0, "damage": 45.0, "size": 2.3, "bulk": 1.4, "scrap": 50, "points": 300},
 }
-const SHIRT_COLORS := [
-	Color(0.45, 0.42, 0.38), Color(0.3, 0.35, 0.45), Color(0.5, 0.3, 0.28),
-	Color(0.35, 0.4, 0.3), Color(0.6, 0.58, 0.52), Color(0.25, 0.25, 0.27),
-]
+const Models := preload("res://scripts/zombie_models.gd")
+const VARIANTS := {"rodeur": ["rodeur", "rodeur_b", "rodeur_c"]}  # Plusieurs modèles pour le même zombie.
+const LOOPS := ["idle", "walk", "run", "dig"]
 const GRAVITY := 20.0
 const HEADSHOT_MULT := 2.0
 const SPIT_RANGE := 14.0
@@ -29,6 +29,12 @@ const DIG_DISTANCE := 6.0  # Le Fouisseur creuse quand il arrive à cette distan
 const DIG_COOLDOWN := 4.0
 const BUFF_SPEED := 1.3
 const BUFF_DAMAGE := 1.25
+const ATTACK_TIME := 1.0  # Un coup toutes les secondes ; l'animation est calée sur cette durée.
+const SPIT_TIME := 0.9
+const SCREAM_TIME := 1.3  # Le Hurleur s'arrête le temps de son cri.
+const STRIKE_MARGIN := 1.2  # Le joueur esquive un coup s'il s'éloigne d'autant pendant l'élan.
+
+static var _scenes := {}  # Modèle importé de chaque type, chargé une seule fois.
 
 signal died(zombie: Zombie)
 
@@ -51,11 +57,9 @@ var path_index := 1
 
 var _marked_time := 0.0
 var _attack_cd := 0.0
-var _attack_anim := 0.0
 var _hit_kick := 0.0
-var _walk_phase := randf() * TAU
+var _last_hit_dir := Vector3.ZERO
 var _groan_cd := randf_range(2.0, 8.0)
-var _lean := 0.1
 var _lane := randf_range(-1.4, 1.4)  # Décalage sur la largeur du chemin : la horde ne marche pas en file.
 var _think_cd := 0.0
 var _blocker: Barrier = null
@@ -63,7 +67,11 @@ var _decoy: Node3D = null
 var _spit_target: Node3D = null
 var _spit_cd := randf_range(0.5, 1.5)
 var _scream_cd := randf_range(2.0, 4.0)
-var _scream_anim := 0.0
+var _hold_time := 0.0
+var _strike_target: Node3D = null
+var _strike_time := 0.0
+var _spit_aim: Node3D = null
+var _spit_time := 0.0
 var _dig_state := ""  # Fouisseur : "walk" (en surface), "dig", "under" puis "rise".
 var _dig_timer := 0.0
 var _dig_dest := Vector3.ZERO
@@ -71,14 +79,19 @@ var _under_time := 0.0
 var _rumble_cd := 0.0
 var _burn_tick := 0.0
 var _anim_time := 0.0
-var _rig: Node3D
-var _torso: Node3D
-var _head: Node3D
-var _arms: Array[Node3D] = []
-var _legs: Array[Node3D] = []
+var _rig: Node3D  # Porte le modèle : on le descend sous terre (Fouisseur) ou on l'enfonce à la mort.
+var _model: Node3D
+var _model_name := ""  # Modèle utilisé (une des variantes du type).
+var _model_scale := 1.0
+var _anim: AnimationPlayer
+var _action_time := 0.0  # Durée restante d'un geste (coup, crachat, cri) avant de reprendre la marche.
+var _skeleton: Skeleton3D
+var _pose: ZombiePose
+var _head_bone := -1
+var _eyes: Node3D
 var _materials: Array[StandardMaterial3D] = []
 var _base_tints: Array[Color] = []
-var _eye_mat: StandardMaterial3D
+var _tinted := false
 var _mark_label: Label3D
 var _fire: CPUParticles3D
 var _sparks: CPUParticles3D
@@ -95,7 +108,6 @@ func setup(p_type: String, hp_scale: float, speed_scale := 1.0, damage_scale := 
 	speed = s["speed"] * speed_scale * randf_range(0.9, 1.1)
 	damage = s["damage"] * damage_scale
 	size = s["size"]
-	_lean = s["lean"]
 	collision_layer = Fx.LAYER_ZOMBIES
 	collision_mask = Fx.LAYER_WORLD | Fx.LAYER_PLAYER
 	var shape := CollisionShape3D.new()
@@ -105,7 +117,7 @@ func setup(p_type: String, hp_scale: float, speed_scale := 1.0, damage_scale := 
 	shape.shape = cs
 	shape.position.y = 0.95 * size
 	add_child(shape)
-	_build_body(s["bulk"])
+	_build_model()
 	_mark_label = Label3D.new()
 	_mark_label.text = "▼ MARQUÉ"
 	_mark_label.modulate = Color(1, 0.25, 0.25)
@@ -122,110 +134,75 @@ func setup(p_type: String, hp_scale: float, speed_scale := 1.0, damage_scale := 
 	add_to_group("zombies")
 
 
-func _build_body(bulk: float) -> void:
-	var skin_tint := Color(0.85, 0.9, 0.8).lerp(Color(0.7, 0.62, 0.6), randf())
-	var shirt_tint: Color = SHIRT_COLORS[randi() % SHIRT_COLORS.size()]
-	match type:
-		"boss":
-			skin_tint = Color(0.6, 0.5, 0.55)
-		"cracheur":
-			skin_tint = Color(0.62, 0.78, 0.45)
-		"hurleur":
-			skin_tint = Color(0.82, 0.78, 0.76)
-			shirt_tint = Color(0.32, 0.18, 0.15)
-		"fouisseur":
-			skin_tint = Color(0.55, 0.47, 0.38)
-			shirt_tint = Color(0.3, 0.25, 0.2)
-	var skin := _mat("skin", skin_tint)
-	var shirt := _mat("cloth", shirt_tint)
-	var pants := _mat("cloth", Color(0.22, 0.24, 0.3).lerp(Color(0.35, 0.3, 0.25), randf()))
-	var dark := Fx.material(Color(0.05, 0.02, 0.02))
-	_eye_mat = Fx.material(Color(0.05, 0.02, 0.02))
-
+func _build_model() -> void:
+	_model_name = (VARIANTS[type] as Array).pick_random() if VARIANTS.has(type) else type
+	var scene: PackedScene = _scenes.get(_model_name)
+	if scene == null:
+		scene = load("res://assets/models/zombie_%s.gltf" % _model_name)
+		_scenes[_model_name] = scene
 	_rig = Node3D.new()
-	_rig.scale = Vector3(size * bulk, size, size * bulk)
 	add_child(_rig)
+	_model = scene.instantiate()
+	# Le modèle regarde vers +Z ; le zombie avance vers -Z. Légères différences de taille d'un zombie à l'autre.
+	_model_scale = size * randf_range(0.96, 1.04)
+	_model.rotation.y = PI
+	_model.scale = Vector3.ONE * _model_scale
+	_rig.add_child(_model)
+	_anim = _model.find_child("AnimationPlayer", true, false) as AnimationPlayer
+	for n in LOOPS:
+		if _anim.has_animation(n):
+			_anim.get_animation(n).loop_mode = Animation.LOOP_LINEAR
+	_anim.play("idle")
+	_anim.seek(randf() * _anim.current_animation_length)
+	_skeleton = _model.find_children("*", "Skeleton3D", true, false)[0] as Skeleton3D
+	_head_bone = _skeleton.find_bone("head")
+	_pose = ZombiePose.new()
+	_skeleton.add_child(_pose)
+	# Chaque zombie a ses propres matériaux : teinte légèrement différente, gel, brûlure, charge.
+	var tint := Color(1, 1, 1).lerp(Color(0.86, 0.9, 0.82), randf()).lerp(Color(0.95, 0.85, 0.8), randf() * 0.5)
+	for mesh in _model.find_children("*", "MeshInstance3D", true, false):
+		var mi := mesh as MeshInstance3D
+		mi.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_ON
+		for i in mi.get_surface_override_material_count():
+			var mat := mi.get_active_material(i) as StandardMaterial3D
+			if mat == null:
+				continue
+			mat = mat.duplicate() as StandardMaterial3D
+			mat.albedo_color = tint
+			mi.set_surface_override_material(i, mat)
+			_materials.append(mat)
+			_base_tints.append(tint)
+	_build_eyes()
 
-	# Jambes (pivot à la hanche).
-	for side in [-1.0, 1.0]:
-		var hip := Node3D.new()
-		hip.position = Vector3(0.12 * side, 0.95, 0)
-		_rig.add_child(hip)
-		var leg := Fx.mesh_with(_capsule(0.09, 0.95), pants)
-		leg.position.y = -0.47
-		hip.add_child(leg)
-		var foot := Fx.box_mat(Vector3(0.12, 0.08, 0.26), dark)
-		foot.position = Vector3(0, -0.92, -0.06)
-		hip.add_child(foot)
-		_legs.append(hip)
 
-	# Torse (pivot au bassin pour pouvoir le pencher).
-	_torso = Node3D.new()
-	_torso.position.y = 0.95
-	_rig.add_child(_torso)
-	var chest := Fx.mesh_with(_capsule(0.2, 0.75), shirt)
-	chest.position.y = 0.36
-	chest.scale = Vector3(1.15, 1.0, 0.8)
-	_torso.add_child(chest)
-
-	_head = Node3D.new()
-	_head.position.y = 0.8
-	_torso.add_child(_head)
-	var skull := SphereMesh.new()
-	skull.radius = 0.13
-	skull.height = 0.3
-	var head_mesh := Fx.mesh_with(skull, skin)
-	head_mesh.position.y = 0.06
-	_head.add_child(head_mesh)
-	for side in [-1.0, 1.0]:
-		var eye := Fx.box_mat(Vector3(0.05, 0.03, 0.02), _eye_mat)
-		eye.position = Vector3(0.045 * side, 0.09, -0.12)
-		_head.add_child(eye)
-	var jaw := Fx.box_mat(Vector3(0.12, 0.04, 0.03), dark)
-	jaw.position = Vector3(0, 0.0, -0.12)
-	_head.add_child(jaw)
-
-	# Bras tendus vers l'avant (pivot à l'épaule).
-	for side in [-1.0, 1.0]:
-		var shoulder := Node3D.new()
-		shoulder.position = Vector3(0.27 * side, 0.65, 0)
-		_torso.add_child(shoulder)
-		var sleeve := Fx.mesh_with(_capsule(0.07, 0.4), shirt)
-		sleeve.position.y = -0.18
-		shoulder.add_child(sleeve)
-		var forearm := Fx.mesh_with(_capsule(0.055, 0.45), skin)
-		forearm.position.y = -0.52
-		shoulder.add_child(forearm)
-		_arms.append(shoulder)
-
-	# Détails propres à chaque type.
-	match type:
-		"cracheur":
-			# Poche de gorge gonflée d'acide et bouche qui luit en vert.
-			var sac := SphereMesh.new()
-			sac.radius = 0.11
-			sac.height = 0.2
-			var glow := Fx.material(Color(0.45, 0.85, 0.2), 0.6)
-			var sac_mesh := Fx.mesh_with(sac, glow)
-			sac_mesh.position = Vector3(0, -0.06, -0.07)
-			_head.add_child(sac_mesh)
-			jaw.material_override = Fx.material(Color(0.4, 0.95, 0.2), 2.5)
-		"hurleur":
-			# Mâchoire démesurée et longs bras.
-			jaw.scale = Vector3(1.3, 3.0, 1.2)
-			jaw.position.y = -0.03
-			jaw.material_override = Fx.material(Color(0.5, 0.05, 0.03), 1.5)
-			for arm in _arms:
-				arm.scale = Vector3(1.0, 1.25, 1.0)
-		"fouisseur":
-			# Griffes pour creuser.
-			var claw_mat := Fx.material(Color(0.12, 0.1, 0.08))
-			for arm in _arms:
-				for k in 3:
-					var claw := Fx.box_mat(Vector3(0.02, 0.16, 0.02), claw_mat)
-					claw.position = Vector3(-0.04 + k * 0.04, -0.82, -0.02)
-					claw.rotation.x = -0.4
-					arm.add_child(claw)
+## Yeux rouges et lumineux quand le Hurleur l'a enragé : deux petites sphères qui suivent la tête.
+func _build_eyes() -> void:
+	var data: Dictionary = Models.DATA[_model_name]
+	var att := BoneAttachment3D.new()
+	att.bone_name = "head"
+	_skeleton.add_child(att)
+	# Repère du modèle -> repère de l'os de la tête au repos.
+	var to_skeleton := Transform3D.IDENTITY
+	var n: Node = _skeleton
+	while n != _model:
+		to_skeleton = (n as Node3D).transform * to_skeleton
+		n = n.get_parent()
+	var to_head := _skeleton.get_bone_global_rest(_head_bone).affine_inverse() * to_skeleton.affine_inverse()
+	var sphere := SphereMesh.new()
+	sphere.radius = data["eye_radius"]
+	sphere.height = sphere.radius * 2.0
+	sphere.radial_segments = 8
+	sphere.rings = 4
+	sphere.material = Fx.material(Color(1.0, 0.15, 0.05), 5.0)
+	_eyes = Node3D.new()
+	_eyes.visible = false
+	att.add_child(_eyes)
+	for eye_pos in data["eyes"]:
+		var eye := MeshInstance3D.new()
+		eye.mesh = sphere
+		eye.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
+		eye.position = to_head * (eye_pos as Vector3)
+		_eyes.add_child(eye)
 
 
 func _build_mound() -> void:
@@ -256,22 +233,6 @@ func _build_mound() -> void:
 	_dirt.emitting = false
 	_dirt.position.y = 0.2
 	add_child(_dirt)
-
-
-func _mat(tex: String, tint: Color) -> StandardMaterial3D:
-	var m := Fx.textured(tex, 3.0, tint, false)
-	_materials.append(m)
-	_base_tints.append(tint)
-	return m
-
-
-func _capsule(radius: float, height: float) -> CapsuleMesh:
-	var c := CapsuleMesh.new()
-	c.radius = radius
-	c.height = height
-	c.radial_segments = 10
-	c.rings = 4
-	return c
 
 
 ## Score d'avancée sur le couloir (plus c'est haut, plus il est proche du Cœur).
@@ -338,6 +299,10 @@ func stun(duration: float) -> void:
 	if dead or burrowed or type == "boss":
 		return
 	stun_time = maxf(stun_time, duration)
+	# Un coup ou un crachat en préparation est interrompu.
+	_strike_target = null
+	_spit_aim = null
+	_action_time = 0.0
 	if _stun_ring == null:
 		var torus := TorusMesh.new()
 		torus.inner_radius = 0.22
@@ -372,7 +337,11 @@ func take_damage(amount: float, from_player := false, heavy := false, hit_pos :=
 	if dead or burrowed:
 		return
 	var where := hit_pos if hit_pos != Vector3.INF else global_position + Vector3(0, 1.3 * size, 0)
-	if from_player and hit_pos != Vector3.INF and hit_pos.y > global_position.y + 1.62 * size:
+	if hit_pos != Vector3.INF:
+		_last_hit_dir = Vector3(-hit_normal.x, 0.0, -hit_normal.z)
+		# Le buste pivote vers le côté touché.
+		_pose.twist = clampf((hit_pos - global_position).dot(global_transform.basis.x) * 3.0, -1.0, 1.0)
+	if from_player and hit_pos != Vector3.INF and hit_pos.y > head_height() - 0.02 * size:
 		amount *= HEADSHOT_MULT
 		Fx.popup(Game.main, where + Vector3(0, 0.4, 0), "TÊTE", Color(1.0, 0.4, 0.3), 40)
 	if from_player and heavy and frozen_time > 0.0:
@@ -388,7 +357,7 @@ func take_damage(amount: float, from_player := false, heavy := false, hit_pos :=
 	Fx.burst(Game.main, where, hit_normal, Color(0.35, 0.02, 0.02), 10 if from_player else 4, 3.5, 0.05)
 	if from_player:
 		Sfx.play_at(Game.main, "hit_flesh", where, -2.0, 0.15)
-	_hit_kick = min(1.0, _hit_kick + amount / max_hp * 3.0 + 0.2)
+	_hit_kick = minf(1.0, _hit_kick + amount / max_hp * 3.0 + 0.2)
 	hp -= amount
 	if hp <= 0.0:
 		_die()
@@ -399,6 +368,13 @@ func take_damage(amount: float, from_player := false, heavy := false, hit_pos :=
 				ignite(3.0, 6.0 * combo_scale())
 			"electrique":
 				charge(3.0)
+
+
+## Hauteur de la base du crâne (os de la tête, qui suit l'animation) : au-dessus, c'est un tir à la tête.
+func head_height() -> float:
+	if _skeleton == null or _head_bone < 0:
+		return global_position.y + 1.62 * size
+	return (_skeleton.global_transform * _skeleton.get_bone_global_pose(_head_bone)).origin.y
 
 
 ## Les combos suivent la montée en puissance des zombies au fil des vagues.
@@ -445,6 +421,9 @@ func _die() -> void:
 	if _mound:
 		_mound.visible = false
 	_rig.visible = true
+	_eyes.visible = false
+	_strike_target = null
+	_spit_aim = null
 	Game.kills += 1
 	Game.add_score(TYPES[type]["points"])
 	var value: int = TYPES[type]["scrap"]
@@ -456,13 +435,25 @@ func _die() -> void:
 		s.setup(int(ceil(float(value) / pieces)), global_position + offset)
 	Sfx.play_at(Game.main, "zombie_death", global_position, 0.0, 0.2)
 	died.emit(self)
-	# Le corps tombe en arrière, reste au sol un moment puis s'enfonce.
+	# Le corps s'effondre (en arrière s'il est touché de face), reste au sol un moment puis s'enfonce.
+	var anim := "die" if _falls_back() else "die_front"
+	_pose.flinch = 0.0
+	_pose.dizzy = 0.0
+	_anim.speed_scale = 1.0
+	_anim.play(anim, 0.1)
 	var tween := create_tween()
-	tween.tween_property(_rig, "rotation:x", PI * 0.5 * (1 if randf() < 0.5 else -1), 0.55).set_trans(Tween.TRANS_QUAD).set_ease(Tween.EASE_IN)
-	tween.parallel().tween_property(_rig, "position:y", 0.2 * size, 0.55)
-	tween.tween_interval(4.0)
-	tween.tween_property(_rig, "position:y", -1.0 * size, 1.5)
+	if _rig.position.y != 0.0:
+		tween.tween_property(_rig, "position:y", 0.0, 0.3)
+	tween.tween_interval(_anim.get_animation(anim).length + 2.5)
+	tween.tween_property(_rig, "position:y", -0.8 * size, 2.0)
 	tween.tween_callback(queue_free)
+
+
+## Une balle qui arrive de face le renverse en arrière ; sans tir connu, le hasard décide.
+func _falls_back() -> bool:
+	if _last_hit_dir == Vector3.ZERO:
+		return randf() < 0.6
+	return _last_hit_dir.dot(-global_transform.basis.z) < 0.0
 
 
 func _apply_dot(amount: float) -> void:
@@ -488,6 +479,16 @@ func _physics_process(delta: float) -> void:
 	if _groan_cd <= 0.0:
 		_groan_cd = randf_range(5.0, 12.0)
 		Sfx.play_at(Game.main, "groan_%d" % (randi() % 3), global_position + Vector3(0, 1.6, 0), -4.0, 0.15, 40.0)
+	# Gestes en cours : le coup porte et le crachat part au bon moment de l'animation.
+	if _strike_target != null:
+		_strike_time -= delta
+		if _strike_time <= 0.0:
+			_strike()
+	if _spit_aim != null:
+		_spit_time -= delta
+		if _spit_time <= 0.0:
+			_release_spit()
+	_hold_time = maxf(0.0, _hold_time - delta)
 	if not is_on_floor():
 		velocity.y -= GRAVITY * delta
 	else:
@@ -496,7 +497,7 @@ func _physics_process(delta: float) -> void:
 		velocity.x = 0.0
 		velocity.z = 0.0
 		move_and_slide()
-		_animate(delta)
+		_update_anim(delta)
 		return
 	_think_cd -= delta
 	if _think_cd <= 0.0:
@@ -511,7 +512,7 @@ func _physics_process(delta: float) -> void:
 	var target: Node3D = null
 	var target_pos := global_position
 	var reach := 1.4 + 0.4 * size
-	var hold := false
+	var hold := _hold_time > 0.0
 	var player: Player = Game.player as Player
 	var to_player := INF
 	if player and player.alive and _reachable(player.global_position):
@@ -556,9 +557,7 @@ func _physics_process(delta: float) -> void:
 		velocity.x = 0.0
 		velocity.z = 0.0
 		if _attack_cd <= 0.0:
-			_attack_cd = 1.0
-			_attack_anim = 1.0
-			target.take_damage(current_damage())
+			_swing(target)
 	elif dir.length() > 0.05:
 		dir = dir.normalized()
 		var spd := current_speed()
@@ -567,7 +566,26 @@ func _physics_process(delta: float) -> void:
 	if dir.length() > 0.05:
 		rotation.y = lerp_angle(rotation.y, atan2(-dir.x, -dir.z), min(1.0, delta * 6.0))
 	move_and_slide()
-	_animate(delta)
+	_update_anim(delta)
+
+
+## Lance un coup. Les dégâts tombent quand la main arrive sur la cible, pas au début du geste.
+func _swing(target: Node3D) -> void:
+	_attack_cd = ATTACK_TIME
+	_play_action("attack", ATTACK_TIME)
+	_strike_target = target
+	_strike_time = ATTACK_TIME * Models.ATTACK_HIT
+
+
+func _strike() -> void:
+	var t := _strike_target
+	_strike_target = null
+	if not is_instance_valid(t) or not t.alive:
+		return
+	# Le joueur qui recule pendant l'élan esquive le coup.
+	if t is Player and _flat_dist(t.global_position) > 1.4 + 0.4 * size + STRIKE_MARGIN:
+		return
+	t.take_damage(current_damage())
 
 
 ## Cherche, quelques fois par seconde, ce qui peut retenir ou attirer le zombie.
@@ -624,10 +642,20 @@ func _aim_point(t: Node3D) -> Vector3:
 	return t.global_position + Vector3(0, 1.0, 0)
 
 
+## Le Cracheur se cambre en gonflant sa poche, puis projette la tête en avant : l'acide part à ce moment.
 func _spit(t: Node3D) -> void:
 	_spit_cd = 2.6
-	_attack_anim = 1.0
-	var from := global_position + Vector3(0, 1.65 * size, 0) - global_transform.basis.z * 0.3
+	_play_action("spit", SPIT_TIME)
+	_spit_aim = t
+	_spit_time = SPIT_TIME * Models.SPIT_RELEASE
+
+
+func _release_spit() -> void:
+	var t := _spit_aim
+	_spit_aim = null
+	if not is_instance_valid(t) or not t.alive:
+		return
+	var from := global_position + Vector3(0, 1.62 * _model_scale, 0) - global_transform.basis.z * 0.3
 	var aim := _aim_point(t)
 	var flight := clampf(from.distance_to(aim) / 11.0, 0.5, 1.4)
 	Projectile.launch(Game.main, "acid", from, aim, flight, current_damage(), t)
@@ -635,7 +663,8 @@ func _spit(t: Node3D) -> void:
 
 
 func _scream() -> void:
-	_scream_anim = 1.0
+	_play_action("scream", SCREAM_TIME)
+	_hold_time = SCREAM_TIME
 	for node in get_tree().get_nodes_in_group("zombies"):
 		var z := node as Zombie
 		if z != self and not z.dead and _flat_dist(z.global_position) < SCREAM_RADIUS:
@@ -703,6 +732,7 @@ func _process_dig(delta: float) -> bool:
 				_dig_timer = DIG_COOLDOWN
 				_rig.position.y = 0.0
 				_snap_to_path()
+				_update_anim(delta)
 			return true
 	return false
 
@@ -722,6 +752,9 @@ func _start_dig() -> void:
 	_dig_timer = 1.0
 	_under_time = 0.0
 	velocity = Vector3.ZERO
+	_action_time = 0.0
+	_strike_target = null
+	_play("dig", 1.3, 0.15)
 	Fx.burst(Game.main, global_position + Vector3(0, 0.3, 0), Vector3.UP, Color(0.3, 0.24, 0.17), 24, 4.0, 0.1)
 	Fx.puff(Game.main, global_position + Vector3(0, 0.4, 0), Color(0.4, 0.33, 0.25, 0.6), 10, 1.0)
 	Sfx.play_at(Game.main, "dig", global_position, 0.0, 0.1)
@@ -731,6 +764,7 @@ func _start_rise() -> void:
 	_dig_state = "rise"
 	_dig_timer = 0.9
 	burrowed = false
+	_play("dig", 1.0, 0.0)
 	collision_layer = Fx.LAYER_ZOMBIES
 	_rig.visible = true
 	_mound.visible = false
@@ -765,36 +799,40 @@ func _snap_to_path() -> void:
 
 # ---------------------------------------------------------------- animation et états
 
-func _animate(delta: float) -> void:
-	var moving := Vector2(velocity.x, velocity.z).length()
-	_walk_phase += delta * moving * 2.4 / size
-	var stride := clampf(moving / 2.0, 0.0, 1.0) * (0.75 if type == "coureur" else 0.5)
-	_legs[0].rotation.x = sin(_walk_phase) * stride
-	_legs[1].rotation.x = -sin(_walk_phase) * stride
+func _update_anim(delta: float) -> void:
 	_hit_kick = move_toward(_hit_kick, 0.0, delta * 3.0)
-	_attack_anim = move_toward(_attack_anim, 0.0, delta * 2.5)
-	_scream_anim = move_toward(_scream_anim, 0.0, delta * 1.1)
-	var scream := sin(clampf(_scream_anim, 0.0, 1.0) * PI * 0.5)
-	# Penché vers l'avant, recule quand il est touché.
-	_torso.rotation.x = -_lean - sin(_walk_phase * 2.0) * 0.04 + _hit_kick * 0.5 + scream * 0.55
-	_torso.rotation.z = sin(_walk_phase) * 0.06
-	_torso.position.y = 0.95 + absf(sin(_walk_phase)) * 0.04
-	_head.rotation.z = sin(_walk_phase * 0.5) * 0.15
-	_head.rotation.x = 0.1 + _hit_kick * 0.6 - scream * 0.7
-	if stun_time > 0.0:
-		# Étourdi : tête et buste qui vacillent.
-		_torso.rotation.z = sin(_anim_time * 11.0) * 0.18
-		_head.rotation.z = sin(_anim_time * 7.0) * 0.35
-	# Bras tendus vers l'avant qui ballottent ; ils frappent vers le bas pendant une attaque.
-	var swing := sin(_attack_anim * PI) * 1.2
-	if type == "cracheur":
-		# Le Cracheur se cambre puis projette la tête en avant.
-		_torso.rotation.x += sin(_attack_anim * PI) * 0.4 - sin(_attack_anim * PI * 2.0) * 0.25
-		swing *= 0.2
-	_arms[0].rotation.x = 1.35 + sin(_walk_phase + 0.5) * 0.15 - swing - scream * 1.0
-	_arms[1].rotation.x = 1.25 - sin(_walk_phase + 0.5) * 0.15 - swing - scream * 1.0
-	_arms[0].rotation.z = 0.08 + scream * 0.9
-	_arms[1].rotation.z = -0.08 - scream * 0.9
+	_pose.flinch = _hit_kick
+	_pose.dizzy = move_toward(_pose.dizzy, 1.0 if stun_time > 0.0 else 0.0, delta * 4.0)
+	if _action_time > 0.0:
+		_action_time -= delta
+		return
+	# Marche (ou course) jouée à la vitesse du déplacement : les pieds ne glissent pas sur le sol.
+	var moving := Vector2(velocity.x, velocity.z).length()
+	if moving > 0.1:
+		var data: Dictionary = Models.DATA[_model_name]
+		var run: float = data["run"] * _model_scale
+		if run > 0.0 and moving > 0.6 * run:
+			_play("run", moving / run)
+		else:
+			_play("walk", moving / (data["walk"] * _model_scale))
+	else:
+		_play("idle", 0.5 if stun_time > 0.0 else 1.0)
+
+
+func _play(anim: String, speed := 1.0, blend := 0.25) -> void:
+	if _anim.current_animation != anim:
+		_anim.play(anim, blend)
+	_anim.speed_scale = clampf(speed, 0.3, 2.5)
+
+
+## Joue un geste en entier (coup, crachat, cri), calé sur la durée voulue, puis la marche reprend.
+func _play_action(anim: String, duration: float) -> void:
+	if _anim.current_animation == anim:
+		_anim.seek(0.0, true)
+	else:
+		_anim.play(anim, 0.12)
+	_anim.speed_scale = _anim.get_animation(anim).length / duration
+	_action_time = duration - 0.12
 
 
 func _update_status(delta: float) -> void:
@@ -826,14 +864,14 @@ func _update_status(delta: float) -> void:
 		_stun_ring.visible = stun_time > 0.0
 		_stun_ring.rotation.y += delta * 6.0
 	# Yeux rouges et lumineux quand le Hurleur l'a enragé.
-	var enraged := buff_time > 0.0
-	if _eye_mat.emission_enabled != enraged:
-		_eye_mat.emission_enabled = enraged
-		_eye_mat.emission = Color(1.0, 0.15, 0.05)
-		_eye_mat.emission_energy_multiplier = 5.0
+	_eyes.visible = buff_time > 0.0 and not burrowed
 	var ice := 0.65 if frozen_time > 0.0 else 0.0
 	var char_amount := 0.45 if burn_time > 0.0 else 0.0
 	var volt := (0.35 + 0.25 * sin(_anim_time * 25.0)) if charged_time > 0.0 else 0.0
+	var tinted := ice > 0.0 or char_amount > 0.0 or volt > 0.0
+	if not tinted and not _tinted:
+		return
+	_tinted = tinted
 	for i in _materials.size():
 		var c := _base_tints[i].lerp(Color(0.7, 0.9, 1.0), ice)
 		c = c.lerp(Color(0.15, 0.08, 0.05), char_amount)
