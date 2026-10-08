@@ -1,3 +1,4 @@
 .godot/
 /android/
 *.tmp
+__pycache__/

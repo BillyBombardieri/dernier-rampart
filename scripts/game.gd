@@ -1,5 +1,6 @@
 extends Node
-## État global de la partie (autoload "Game") : ressources, implants, références aux nœuds clés.
+## État global de la partie (autoload "Game") : ressources, score, implants, établi, gadgets,
+## références aux nœuds clés. Les touches et réglages sont dans l'autoload "Settings".
 
 signal changed
 signal message(text: String)
@@ -35,6 +36,28 @@ const IMPLANTS := {
 	},
 }
 
+# Établi : améliorations achetées avec de la ferraille.
+const BARREL_COSTS := [40, 80]  # Canon : +20 % de dégâts par niveau.
+const MAG_COSTS := [30, 60]  # Chargeur : +30 % de balles par niveau.
+const GENERATOR_COSTS := [50, 90, 140]  # Générateur : +2 énergie par niveau.
+const AMMO := {
+	"standard": {"name": "Standard", "desc": "Aucun effet spécial.", "cost": 0},
+	"incendiaire": {"name": "Incendiaires", "desc": "Mettent le feu à la cible (-10 % de dégâts).", "cost": 60},
+	"perforante": {"name": "Perforantes", "desc": "Traversent jusqu'à 3 zombies, +25 % sur Brutes et Boss.", "cost": 60},
+	"electrique": {"name": "Électriques", "desc": "Chargent la cible : un tir normal ensuite déclenche la SURCHARGE.", "cost": 60},
+}
+const GADGETS := {
+	"barricade": {"name": "Barricade", "desc": "Barre le chemin 20 s (250 PV). À poser sur le chemin.", "cooldown": 35.0},
+	"leurre": {"name": "Leurre sonore", "desc": "Attire les zombies proches pendant 8 s.", "cooldown": 30.0},
+	"drone": {"name": "Drone de récolte", "desc": "Ramasse la ferraille autour de toi pendant 25 s.", "cooldown": 45.0},
+}
+# Points gagnés quand une vague est repoussée (x numéro de vague) et en cas de victoire.
+const WAVE_POINTS := 50
+const VICTORY_POINTS := 1000
+# Prime de ferraille quand une vague est repoussée : de quoi financer tours, établi et réparations.
+const WAVE_SCRAP_BASE := 10
+const WAVE_SCRAP_PER_WAVE := 5
+
 var scrap := START_SCRAP
 var energy_used := 0
 var implants: Array[String] = []
@@ -46,14 +69,17 @@ var deaths := 0
 var hint := ""
 var portal_reveal := 1.0  # 1 = colonne et flèche du portail visibles (début de partie), 0 = discret.
 var tutorial_hold := false  # Le tutoriel bloque le compte à rebours de la première préparation.
+var score := 0
+var kills := 0
+var new_record := false
+var generator := 0
+var mods := {}  # arme -> {"barrel": int, "mag": int, "ammo": String, "owned": Array}
+var gadget_slots: Array[String] = ["barricade", "leurre"]
+var gadget_cd := {}  # gadget -> secondes avant de pouvoir le réutiliser
 
 var main: Node3D
 var player: Node3D
 var core: Node3D
-
-
-func _ready() -> void:
-	_setup_inputs()
 
 
 func reset() -> void:
@@ -68,10 +94,25 @@ func reset() -> void:
 	hint = ""
 	tutorial_hold = false
 	portal_reveal = 1.0
+	score = 0
+	kills = 0
+	new_record = false
+	generator = 0
+	mods = {
+		"pistol": {"barrel": 0, "mag": 0, "ammo": "standard", "owned": ["standard"]},
+		"rifle": {"barrel": 0, "mag": 0, "ammo": "standard", "owned": ["standard"]},
+	}
+	gadget_slots = ["barricade", "leurre"]
+	gadget_cd = {}
+
+
+func _process(delta: float) -> void:
+	for id in gadget_cd.keys():
+		gadget_cd[id] = maxf(0.0, gadget_cd[id] - delta)
 
 
 func energy_cap() -> int:
-	return ENERGY_BASE + (2 if has_implant("batterie") else 0)
+	return ENERGY_BASE + 2 * generator + (2 if has_implant("batterie") else 0)
 
 
 func request_energy(amount: int) -> bool:
@@ -87,6 +128,10 @@ func release_energy(amount: int) -> void:
 	changed.emit()
 
 
+func wave_scrap(w: int) -> int:
+	return WAVE_SCRAP_BASE + WAVE_SCRAP_PER_WAVE * w
+
+
 func add_scrap(amount: int) -> void:
 	scrap += amount
 	changed.emit()
@@ -99,6 +144,13 @@ func try_spend(amount: int) -> bool:
 	scrap -= amount
 	changed.emit()
 	return true
+
+
+func add_score(points: int) -> void:
+	if is_over:
+		return
+	score += points
+	changed.emit()
 
 
 func has_implant(id: String) -> bool:
@@ -123,6 +175,74 @@ func implant_choices(count: int) -> Array:
 	return pool.slice(0, count)
 
 
+# ---------------------------------------------------------------- établi
+
+func barrel_cost(weapon: String) -> int:
+	var lvl: int = mods[weapon]["barrel"]
+	return BARREL_COSTS[lvl] if lvl < BARREL_COSTS.size() else -1
+
+
+func mag_cost(weapon: String) -> int:
+	var lvl: int = mods[weapon]["mag"]
+	return MAG_COSTS[lvl] if lvl < MAG_COSTS.size() else -1
+
+
+func generator_cost() -> int:
+	return GENERATOR_COSTS[generator] if generator < GENERATOR_COSTS.size() else -1
+
+
+func buy_barrel(weapon: String) -> bool:
+	var cost := barrel_cost(weapon)
+	if cost < 0 or not try_spend(cost):
+		return false
+	mods[weapon]["barrel"] += 1
+	changed.emit()
+	return true
+
+
+func buy_mag(weapon: String) -> bool:
+	var cost := mag_cost(weapon)
+	if cost < 0 or not try_spend(cost):
+		return false
+	mods[weapon]["mag"] += 1
+	if player and player.has_method("refill"):
+		player.refill(weapon)
+	changed.emit()
+	return true
+
+
+## Achète (si besoin) puis équipe un type de munitions sur une arme.
+func choose_ammo(weapon: String, ammo: String) -> bool:
+	var owned: Array = mods[weapon]["owned"]
+	if not owned.has(ammo):
+		if not try_spend(AMMO[ammo]["cost"]):
+			return false
+		owned.append(ammo)
+	mods[weapon]["ammo"] = ammo
+	changed.emit()
+	return true
+
+
+func buy_generator() -> bool:
+	var cost := generator_cost()
+	if cost < 0 or not try_spend(cost):
+		return false
+	generator += 1
+	say("Générateur amélioré : %d énergie disponible." % energy_cap())
+	changed.emit()
+	return true
+
+
+func set_gadget(slot: int, id: String) -> void:
+	var other := 1 - slot
+	if gadget_slots[other] == id:
+		gadget_slots[other] = gadget_slots[slot]
+	gadget_slots[slot] = id
+	changed.emit()
+
+
+# ---------------------------------------------------------------- messages et fin
+
 func say(text: String) -> void:
 	message.emit(text)
 
@@ -130,50 +250,8 @@ func say(text: String) -> void:
 func end_game(victory: bool) -> void:
 	if is_over:
 		return
+	if victory:
+		score += VICTORY_POINTS + int(core.hp) if core else VICTORY_POINTS
 	is_over = true
+	new_record = Settings.submit_score(score, wave)
 	ended.emit(victory)
-
-
-func _setup_inputs() -> void:
-	# Clavier AZERTY : les lettres sont lues d'après ce qui est écrit sur la touche.
-	var keys := {
-		"move_forward": [KEY_Z],
-		"move_back": [KEY_S],
-		"move_left": [KEY_Q],
-		"move_right": [KEY_D],
-		"jump": [KEY_SPACE],
-		"sprint": [KEY_SHIFT],
-		"reload": [KEY_R],
-		"weapon_1": [KEY_KP_1],
-		"weapon_2": [KEY_KP_2],
-		"mark": [KEY_F],
-		"build_gun": [KEY_E],
-		"build_cryo": [KEY_C],
-		"toggle_power": [KEY_X],
-		"skip_phase": [KEY_ENTER, KEY_KP_ENTER],
-		"flashlight": [KEY_L],
-		"help": [KEY_H],
-		"skip_tutorial": [KEY_P],
-	}
-	for action in keys:
-		if not InputMap.has_action(action):
-			InputMap.add_action(action)
-		for k in keys[action]:
-			var ev := InputEventKey.new()
-			ev.keycode = k
-			InputMap.action_add_event(action, ev)
-	# Rangée du haut (& et é en AZERTY) : lue par position pour marcher sans Maj.
-	for pair in [["weapon_1", KEY_1], ["weapon_2", KEY_2]]:
-		var ev := InputEventKey.new()
-		ev.physical_keycode = pair[1]
-		InputMap.action_add_event(pair[0], ev)
-	if not InputMap.has_action("fire"):
-		InputMap.add_action("fire")
-		var mb := InputEventMouseButton.new()
-		mb.button_index = MOUSE_BUTTON_LEFT
-		InputMap.action_add_event("fire", mb)
-	if not InputMap.has_action("aim"):
-		InputMap.add_action("aim")
-		var rb := InputEventMouseButton.new()
-		rb.button_index = MOUSE_BUTTON_RIGHT
-		InputMap.action_add_event("aim", rb)

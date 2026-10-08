@@ -5,6 +5,10 @@ extends StaticBody3D
 var ring := ""
 var tower: Tower = null
 
+var _preview: MeshInstance3D
+var _preview_type := ""
+var _preview_time := 0.0
+
 
 func setup(p_ring: String) -> void:
 	ring = p_ring
@@ -42,11 +46,30 @@ func build(type: String) -> void:
 		return
 	tower = Tower.new()
 	add_child(tower)
-	tower.setup(type, self)
 	tower.position = Vector3(0, 0.3, 0)
+	tower.setup(type, self)
 	if not tower.powered:
-		Game.say("Plus assez d'énergie : la tour est posée mais éteinte (X pour couper une autre tour).")
+		Game.say("Plus assez d'énergie : la tour est posée mais éteinte (%s pour couper une autre tour)." % Settings.key_label("toggle_power"))
 
 
 func clear_tower() -> void:
 	tower = null
+
+
+## Montre au sol la portée de la tour choisie, tant que le joueur vise l'ancrage.
+func preview(type: String) -> void:
+	_preview_time = 0.15
+	if _preview_type != type:
+		if _preview:
+			_preview.queue_free()
+		_preview_type = type
+		_preview = Tower.range_ring(Tower.STATS[type]["range"], Tower.STATS[type]["color"])
+		add_child(_preview)
+	_preview.visible = true
+
+
+func _process(delta: float) -> void:
+	if _preview_time > 0.0:
+		_preview_time -= delta
+		if _preview_time <= 0.0 and _preview:
+			_preview.visible = false

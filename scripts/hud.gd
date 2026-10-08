@@ -1,7 +1,8 @@
 class_name Hud
 extends CanvasLayer
-## Interface moderne : minimap, vague et Cœur, vie, munitions, ressources, viseur dynamique,
-## indicateurs du portail et du Cœur, notifications, objectif du tutoriel, aide, implants et fin.
+## Interface moderne : minimap, vague, Cœur et barrières, vie, munitions, ressources, score,
+## gadgets, choix des tours, viseur dynamique, indicateurs du portail et du Cœur, notifications,
+## objectif du tutoriel, aide, implants et fin de partie.
 
 const PHASE_NAMES := {
 	"prep": "PRÉPARATION",
@@ -13,25 +14,6 @@ const ACCENT := Color(1.0, 0.72, 0.25)
 const DANGER := Color(1.0, 0.28, 0.22)
 const CORE_BLUE := Color(0.35, 0.65, 1.0)
 const PANEL_BG := Color(0.04, 0.05, 0.07, 0.72)
-const HELP_TEXT := """[b]DÉPLACEMENT[/b]
-ZQSD  bouger      Espace  sauter      Maj  courir
-
-[b]COMBAT[/b]
-Clic gauche  tirer      Clic droit  viser
-& / é  changer d'arme      R  recharger
-F  marquer un zombie (les tours le ciblent, +25 %)
-L  lampe torche
-
-[b]CONSTRUCTION[/b]
-E sur un ancrage  Mitrailleuse      C  Cryo
-E sur une tour  améliorer      X  allumer / éteindre
-Maintenir E sur un relais ou le Cœur  réparer
-
-[b]PARTIE[/b]
-Entrée  lancer la vague      H  afficher / masquer l'aide
-P  passer le tutoriel      Échap  libérer la souris
-
-[color=#7fd8ff]COMBO : la Cryo gèle, un tir de pistolet lourd BRISE (x3)[/color]"""
 
 var wave_manager: WaveManager
 
@@ -41,27 +23,36 @@ var _phase_bar: ProgressBar
 var _core_bar: ProgressBar
 var _core_label: Label
 var _scrap_label: Label
+var _score_label: Label
+var _help_hint: Label
 var _energy_bar: ProgressBar
 var _energy_label: Label
 var _hp_bar: ProgressBar
 var _hp_label: Label
 var _implants_label: Label
+var _gadgets_label: RichTextLabel
 var _weapon_label: Label
+var _ammo_type_label: Label
 var _ammo_label: Label
 var _mag_label: Label
 var _reload_bar: ProgressBar
 var _slots_label: RichTextLabel
 var _prompt_panel: PanelContainer
 var _prompt_label: RichTextLabel
+var _build_bar: HBoxContainer
+var _build_cards: Array[PanelContainer] = []
+var _gate_rows: Array = []  # [barrière, barre, texte]
 var _toasts: VBoxContainer
 var _objective_panel: PanelContainer
 var _objective_title: Label
 var _objective_text: RichTextLabel
 var _help_panel: PanelContainer
+var _help_text: RichTextLabel
 var _implant_panel: PanelContainer
 var _implant_box: VBoxContainer
 var _end_panel: PanelContainer
 var _end_label: Label
+var _end_score: Label
 var _vignette: ColorRect
 var _crosshair: Crosshair
 var _indicators: Indicators
@@ -83,6 +74,7 @@ func _ready() -> void:
 	_build_bottom_left()
 	_build_bottom_right()
 	_build_prompt()
+	_build_build_bar()
 	_build_help()
 	_build_implant_panel()
 	_build_end_panel()
@@ -198,6 +190,7 @@ func _build_top_left() -> void:
 	_scrap_label = _text(v, 18, ACCENT)
 	_energy_label = _text(v, 14, Color(0.8, 0.9, 1.0))
 	_energy_bar = _bar(v, Color(0.45, 0.8, 1.0), 6)
+	_score_label = _text(v, 14, Color(0.95, 0.95, 0.95))
 
 
 func _build_top_center() -> void:
@@ -223,11 +216,25 @@ func _build_top_center() -> void:
 	_core_bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	_core_bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
 	_core_label = _text(core_row, 13, Color(0.85, 0.9, 1.0))
+	# Une ligne par barrière d'avant-poste : on voit tout de suite laquelle est attaquée.
+	for node in get_tree().get_nodes_in_group("gates"):
+		var b := node as Barrier
+		var gate_row := HBoxContainer.new()
+		gate_row.add_theme_constant_override("separation", 8)
+		v.add_child(gate_row)
+		var gate_tag := _text(gate_row, 12, Color(0.85, 0.85, 0.85))
+		gate_tag.text = b.display_name.replace("Barrière de l'", "").replace("Barrière de la ", "").to_upper()
+		gate_tag.custom_minimum_size = Vector2(96, 0)
+		var bar := _bar(gate_row, Color(0.85, 0.85, 0.8), 6)
+		bar.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		bar.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+		var value := _text(gate_row, 12, Color(0.85, 0.85, 0.85))
+		_gate_rows.append([b, bar, value])
 	_toasts = VBoxContainer.new()
 	_toasts.add_theme_constant_override("separation", 6)
 	_toasts.custom_minimum_size = Vector2(560, 0)
 	_toasts.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_anchor(_toasts, Control.PRESET_CENTER_TOP, Vector2(-280, 124))
+	_anchor(_toasts, Control.PRESET_CENTER_TOP, Vector2(-280, 124 + 22 * _gate_rows.size()))
 	add_child(_toasts)
 
 
@@ -242,15 +249,14 @@ func _build_objective() -> void:
 	_objective_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_objective_text.custom_minimum_size = Vector2(312, 0)
 	_objective_panel.visible = false
-	var help_hint := _text(self, 13, Color(1, 1, 1, 0.55))
-	help_hint.text = "[H] aide"
-	_anchor(help_hint, Control.PRESET_BOTTOM_RIGHT, Vector2(-72, -26))
+	_help_hint = _text(self, 13, Color(1, 1, 1, 0.55))
+	_anchor(_help_hint, Control.PRESET_BOTTOM_RIGHT, Vector2(-72, -26))
 
 
 func _build_bottom_left() -> void:
 	var p := _panel()
 	p.custom_minimum_size = Vector2(300, 0)
-	_anchor(p, Control.PRESET_BOTTOM_LEFT, Vector2(20, -100))
+	_anchor(p, Control.PRESET_BOTTOM_LEFT, Vector2(20, -128))
 	var v := VBoxContainer.new()
 	p.add_child(v)
 	var row := HBoxContainer.new()
@@ -260,15 +266,18 @@ func _build_bottom_left() -> void:
 	_hp_label = _text(row, 22, Color.WHITE)
 	_hp_bar = _bar(v, Color(0.35, 0.9, 0.45), 10)
 	_implants_label = _text(v, 13, Color(0.8, 0.8, 0.8))
+	_gadgets_label = _rich(v, 14)
+	_gadgets_label.custom_minimum_size = Vector2(272, 0)
 
 
 func _build_bottom_right() -> void:
 	var p := _panel()
 	p.custom_minimum_size = Vector2(280, 0)
-	_anchor(p, Control.PRESET_BOTTOM_RIGHT, Vector2(-300, -150))
+	_anchor(p, Control.PRESET_BOTTOM_RIGHT, Vector2(-300, -168))
 	var v := VBoxContainer.new()
 	p.add_child(v)
 	_weapon_label = _text(v, 15, Color(0.85, 0.85, 0.85), HORIZONTAL_ALIGNMENT_RIGHT)
+	_ammo_type_label = _text(v, 12, ACCENT, HORIZONTAL_ALIGNMENT_RIGHT)
 	var row := HBoxContainer.new()
 	row.alignment = BoxContainer.ALIGNMENT_END
 	v.add_child(row)
@@ -282,20 +291,19 @@ func _build_bottom_right() -> void:
 
 func _build_prompt() -> void:
 	_prompt_panel = _panel()
-	_prompt_panel.custom_minimum_size = Vector2(420, 0)
-	_anchor(_prompt_panel, Control.PRESET_CENTER_BOTTOM, Vector2(-210, -200))
+	_prompt_panel.custom_minimum_size = Vector2(520, 0)
+	_anchor(_prompt_panel, Control.PRESET_CENTER_BOTTOM, Vector2(-260, -210))
 	_prompt_label = _rich(_prompt_panel, 17)
-	_prompt_label.custom_minimum_size = Vector2(392, 0)
+	_prompt_label.custom_minimum_size = Vector2(492, 0)
 	_prompt_label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_prompt_panel.visible = false
 
 
 func _build_help() -> void:
 	_help_panel = _panel()
-	_anchor(_help_panel, Control.PRESET_CENTER, Vector2(-270, -230))
-	var r := _rich(_help_panel, 16)
-	r.custom_minimum_size = Vector2(510, 0)
-	r.text = HELP_TEXT
+	_anchor(_help_panel, Control.PRESET_CENTER, Vector2(-295, -270))
+	_help_text = _rich(_help_panel, 15)
+	_help_text.custom_minimum_size = Vector2(560, 0)
 	_help_panel.visible = false
 
 
@@ -315,10 +323,50 @@ func _build_implant_panel() -> void:
 
 func _build_end_panel() -> void:
 	_end_panel = _panel()
-	_end_panel.custom_minimum_size = Vector2(480, 0)
-	_anchor(_end_panel, Control.PRESET_CENTER, Vector2(-240, -110))
+	_end_panel.custom_minimum_size = Vector2(520, 0)
+	_anchor(_end_panel, Control.PRESET_CENTER, Vector2(-260, -150))
+	_end_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_end_panel.visible = false
-	_end_label = _text(_end_panel, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 10)
+	_end_panel.add_child(v)
+	_end_label = _text(v, 30, Color.WHITE, HORIZONTAL_ALIGNMENT_CENTER)
+	_end_score = _text(v, 18, Color(0.9, 0.9, 0.9), HORIZONTAL_ALIGNMENT_CENTER)
+	var row := HBoxContainer.new()
+	row.alignment = BoxContainer.ALIGNMENT_CENTER
+	row.add_theme_constant_override("separation", 12)
+	v.add_child(row)
+	Ui.button(row, "RECOMMENCER", _restart, 17, Vector2(200, 44))
+	Ui.button(row, "MENU PRINCIPAL", func():
+		get_tree().paused = false
+		get_tree().change_scene_to_file(PauseMenu.MENU_SCENE)
+	, 17, Vector2(200, 44))
+
+
+func _build_build_bar() -> void:
+	# Cartes des tours, au-dessus du message d'interaction quand on vise un ancrage vide.
+	_build_bar = HBoxContainer.new()
+	_build_bar.add_theme_constant_override("separation", 6)
+	_build_bar.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_anchor(_build_bar, Control.PRESET_CENTER_BOTTOM, Vector2(-393, -338))
+	add_child(_build_bar)
+	for type in Tower.BUILD_ORDER:
+		var data: Dictionary = Tower.STATS[type]
+		var card := _panel(_build_bar)
+		card.custom_minimum_size = Vector2(126, 0)
+		var v := VBoxContainer.new()
+		v.add_theme_constant_override("separation", 1)
+		card.add_child(v)
+		var name_label := _text(v, 14, data["color"])
+		name_label.text = data["name"]
+		var cost := _text(v, 13, Color(0.9, 0.9, 0.9))
+		cost.text = "⚙ %d   ⚡ %d" % [data["cost"], data["energy"]]
+		var info := _text(v, 11, Color(0.75, 0.75, 0.75))
+		info.text = data["short"]
+		info.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		info.custom_minimum_size = Vector2(100, 0)
+		_build_cards.append(card)
+	_build_bar.visible = false
 
 
 # ------------------------------------------------------------------ mise à jour
@@ -328,6 +376,8 @@ func _process(delta: float) -> void:
 	var core := Game.core as Structure
 	if Input.is_action_just_pressed("help"):
 		_help_panel.visible = not _help_panel.visible
+		if _help_panel.visible:
+			_help_text.text = _help()
 
 	var siege := Game.wave % WaveManager.SIEGE_EVERY == 0
 	_wave_label.text = "VAGUE %d / %d%s" % [Game.wave, Game.LAST_WAVE, "  ☠ SIÈGE" if siege else ""]
@@ -350,11 +400,25 @@ func _process(delta: float) -> void:
 		_core_bar.max_value = core.max_hp
 		_core_bar.value = core.hp
 		_core_label.text = "%d" % int(core.hp)
+	for row in _gate_rows:
+		var b: Barrier = row[0]
+		var bar: ProgressBar = row[1]
+		var value: Label = row[2]
+		if not is_instance_valid(b):
+			continue
+		bar.max_value = b.max_hp
+		bar.value = b.hp
+		value.text = "%d" % int(b.hp) if b.alive else "DÉTRUITE"
+		var col := Color(0.85, 0.85, 0.8) if b.hp > b.max_hp * 0.35 else DANGER
+		(bar.get_theme_stylebox("fill") as StyleBoxFlat).bg_color = col
+		value.add_theme_color_override("font_color", Color(0.85, 0.85, 0.85) if b.alive else DANGER)
 
 	_scrap_label.text = "⚙ %d  ferraille" % Game.scrap
 	_energy_label.text = "⚡ Énergie  %d / %d" % [Game.energy_used, Game.energy_cap()]
 	_energy_bar.max_value = Game.energy_cap()
 	_energy_bar.value = Game.energy_used
+	_score_label.text = "★ %d points" % Game.score
+	_help_hint.text = "[%s] aide" % Settings.key_label("help")
 
 	if p:
 		_hp_label.text = "%d" % int(max(p.hp, 0))
@@ -367,8 +431,12 @@ func _process(delta: float) -> void:
 		for id in Game.implants:
 			names.append(Game.IMPLANTS[id]["name"])
 		_implants_label.text = "Implants : " + (", ".join(names) if not names.is_empty() else "aucun")
+		_gadgets_label.text = "%s   %s" % [_gadget_slot(0), _gadget_slot(1)]
 		var w: Dictionary = Player.WEAPONS[p.weapon]
 		_weapon_label.text = String(w["name"]).to_upper()
+		var ammo_type: String = Game.mods[p.weapon]["ammo"]
+		_ammo_type_label.text = "" if ammo_type == "standard" else "munitions %s" % String(Game.AMMO[ammo_type]["name"]).to_lower()
+		var mag := p.mag_size(p.weapon)
 		if p.reloading > 0.0:
 			_ammo_label.text = "--"
 			_reload_bar.visible = true
@@ -377,16 +445,17 @@ func _process(delta: float) -> void:
 		else:
 			_ammo_label.text = "%d" % p.ammo[p.weapon]
 			_reload_bar.visible = false
-		var low: bool = p.ammo[p.weapon] <= int(w["mag"]) / 4
+		var low: bool = p.ammo[p.weapon] <= mag / 4
 		_ammo_label.add_theme_color_override("font_color", DANGER if low and p.reloading <= 0.0 else Color.WHITE)
-		_mag_label.text = " / %d" % w["mag"]
-		_slots_label.text = "[right]%s   %s[/right]" % [_slot("&", "Pistolet", p.weapon == "pistol"), _slot("é", "Fusil", p.weapon == "rifle")]
+		_mag_label.text = " / %d" % mag
+		_slots_label.text = "[right]%s   %s[/right]" % [_slot(Settings.key_label("weapon_1"), "Pistolet", p.weapon == "pistol"), _slot(Settings.key_label("weapon_2"), "Fusil", p.weapon == "rifle")]
 		_crosshair.spread = p.spread_amount()
 		_crosshair.aiming = p.aiming
 		_crosshair.visible = p.alive
+		_update_build_bar(p)
 
 	if Game.hint != "":
-		_prompt_label.text = "[center]%s[/center]" % _format_keys(Game.hint)
+		_prompt_label.text = "[center]%s[/center]" % Game.hint
 		_prompt_panel.visible = true
 	else:
 		_prompt_panel.visible = false
@@ -395,17 +464,63 @@ func _process(delta: float) -> void:
 	(_vignette.material as ShaderMaterial).set_shader_parameter("hurt", _hurt)
 
 
+func _update_build_bar(p: Player) -> void:
+	_build_bar.visible = p.socket_in_sight != null and p.alive
+	if not _build_bar.visible:
+		return
+	for i in _build_cards.size():
+		var card := _build_cards[i]
+		var data: Dictionary = Tower.STATS[Tower.BUILD_ORDER[i]]
+		var sb := card.get_theme_stylebox("panel") as StyleBoxFlat
+		var selected := i == p.build_choice
+		sb.border_color = ACCENT if selected else Color(1, 1, 1, 0.08)
+		sb.set_border_width_all(2 if selected else 1)
+		var affordable := Game.scrap >= int(data["cost"])
+		card.modulate = Color(1, 1, 1, 1.0 if affordable else 0.45)
+
+
+func _gadget_slot(slot: int) -> String:
+	var id: String = Game.gadget_slots[slot]
+	var key := Settings.key_label("gadget_1" if slot == 0 else "gadget_2")
+	var left: float = Game.gadget_cd.get(id, 0.0)
+	var gname: String = Game.GADGETS[id]["name"]
+	if left > 0.0:
+		return "[color=#8a8a8a][%s] %s %d s[/color]" % [key, gname, int(ceil(left))]
+	return "[color=#ffb840][b][%s][/b][/color] %s" % [key, gname]
+
+
 func _slot(key: String, label: String, active: bool) -> String:
 	if active:
 		return "[color=#ffb840][b][%s] %s[/b][/color]" % [key, label]
 	return "[color=#8a8a8a][%s] %s[/color]" % [key, label]
 
 
-## Met en forme les touches ("E : ...") façon touche de clavier.
-func _format_keys(text: String) -> String:
-	var re := RegEx.new()
-	re.compile("(^|\\s)(Maintenir E|[A-ZÉ]) : ")
-	return re.sub(text, "$1[color=#ffb840][b][$2][/b][/color] ", true)
+## Aide des commandes, construite d'après les touches choisies dans les réglages.
+func _help() -> String:
+	var k := func(action: String) -> String: return "[color=#ffb840][b]%s[/b][/color]" % Settings.key_label(action)
+	var lines := [
+		"[b]DÉPLACEMENT[/b]",
+		"%s %s %s %s  bouger      %s  sauter      %s  courir" % [k.call("move_forward"), k.call("move_left"), k.call("move_back"), k.call("move_right"), k.call("jump"), k.call("sprint")],
+		"",
+		"[b]COMBAT[/b]",
+		"%s  tirer      %s  viser      %s / %s ou molette  changer d'arme      %s  recharger" % [k.call("fire"), k.call("aim"), k.call("weapon_1"), k.call("weapon_2"), k.call("reload")],
+		"%s  marquer un zombie (les tours le ciblent, +25 %%)      %s  lampe torche" % [k.call("mark"), k.call("flashlight")],
+		"%s  %s      %s  %s" % [k.call("gadget_1"), Game.GADGETS[Game.gadget_slots[0]]["name"], k.call("gadget_2"), Game.GADGETS[Game.gadget_slots[1]]["name"]],
+		"",
+		"[b]CONSTRUCTION[/b]",
+		"Sur un ancrage : molette ou %s  choisir la tour,  %s  construire" % [k.call("cycle_tower"), k.call("interact")],
+		"Sur une tour intacte : %s  améliorer,  %s  allumer / éteindre" % [k.call("interact"), k.call("toggle_power")],
+		"Maintenir %s sur une tour, une barrière, un relais ou le Cœur : réparer" % k.call("interact"),
+		"%s sur l'établi (près du Cœur, entre les vagues) : armes, munitions, gadgets, générateur" % k.call("interact"),
+		"",
+		"[b]PARTIE[/b]",
+		"%s  lancer la vague      %s  aide      %s  passer le tutoriel      Échap  pause et réglages" % [k.call("skip_phase"), k.call("help"), k.call("skip_tutorial")],
+		"",
+		"[color=#7fd8ff]BRISÉ : la Cryo gèle, un tir de pistolet lourd brise (x3)[/color]",
+		"[color=#b8a8ff]SURCHARGE : un zombie chargé (Arc ou balles électriques) + un tir normal = onde électrique[/color]",
+		"[color=#ffa060]EMBRASEMENT : un obus de Mortier sur un zombie en feu propage l'incendie[/color]",
+	]
+	return "\n".join(lines)
 
 
 ## Objectif affiché en haut à droite (utilisé par le tutoriel). Texte vide = masqué.
@@ -441,6 +556,7 @@ func show_implants(options: Array) -> void:
 		b.text = "%s\n+ %s\n- %s" % [data["name"], data["plus"], data["minus"]]
 		b.custom_minimum_size = Vector2(470, 86)
 		b.add_theme_font_size_override("font_size", 16)
+		Ui.style_button(b)
 		b.pressed.connect(_pick_implant.bind(id))
 		_implant_box.add_child(b)
 	_implant_panel.visible = true
@@ -457,17 +573,25 @@ func _pick_implant(id: String) -> void:
 
 func _on_ended(victory: bool) -> void:
 	_end_label.text = ("VICTOIRE !\nTu as tenu les %d vagues." % Game.LAST_WAVE) if victory else ("LE CŒUR EST TOMBÉ\nTu as tenu jusqu'à la vague %d." % Game.wave)
-	_end_label.text += "\n\n[Entrée] recommencer"
 	_end_label.add_theme_color_override("font_color", ACCENT if victory else DANGER)
+	var record := "NOUVEAU RECORD !" if Game.new_record else "Record : %d points" % Settings.best_score
+	_end_score.text = "Score : %d points  ·  %d zombies abattus\n%s\n\n[%s] recommencer" % [Game.score, Game.kills, record, Settings.key_label("skip_phase")]
+	_end_score.add_theme_color_override("font_color", ACCENT if Game.new_record else Color(0.9, 0.9, 0.9))
 	_end_panel.visible = true
+	_build_bar.visible = false
+	_prompt_panel.visible = false
 	get_tree().paused = true
 	Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 
 
+func _restart() -> void:
+	get_tree().paused = false
+	get_tree().reload_current_scene()
+
+
 func _unhandled_input(event: InputEvent) -> void:
 	if _end_panel.visible and event.is_action_pressed("skip_phase"):
-		get_tree().paused = false
-		get_tree().reload_current_scene()
+		_restart()
 
 
 # ------------------------------------------------------------------ viseur

@@ -8,9 +8,11 @@ var _main: Node
 var _frames := 0
 var _last_wave := 0
 var _brise_checked := false
+var _seen_types := {}
 
 
 func _ready() -> void:
+	Settings.use_test_file()
 	_main = load("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	Game.ended.connect(_on_ended)
@@ -23,15 +25,20 @@ func _ready() -> void:
 			c.free()
 	Game.tutorial_hold = false
 	Game.scrap = 2000
+	Game.generator = 3
 	# Cœur quasi indestructible pour parcourir les 10 vagues et tester les implants.
 	Game.core.max_hp = 1000000.0
 	Game.core.hp = 1000000.0
+	# Les 6 types de tours, à tour de rôle sur les 9 ancrages.
 	var i := 0
 	for c in _main.get_children():
 		if c is Socket:
-			c.build("gun" if i % 2 == 0 else "cryo")
+			c.build(Tower.BUILD_ORDER[i % Tower.BUILD_ORDER.size()])
 			i += 1
-	print("Tours posées : ", get_tree().get_nodes_in_group("towers").size(), "  énergie ", Game.energy_used, "/", Game.energy_cap())
+	var types := []
+	for t in get_tree().get_nodes_in_group("towers"):
+		types.append("%s%s" % [t.type, "" if t.powered else "(éteinte)"])
+	print("Tours posées : ", types, "  énergie ", Game.energy_used, "/", Game.energy_cap())
 
 
 func _on_implant(options: Array, wm: WaveManager) -> void:
@@ -41,7 +48,11 @@ func _on_implant(options: Array, wm: WaveManager) -> void:
 
 
 func _on_ended(victory: bool) -> void:
-	print("FIN : victoire=", victory, " vague=", Game.wave, " cœur=", Game.core.hp, " morts joueur=", Game.deaths, " implants=", Game.implants)
+	var gates := []
+	for b in get_tree().get_nodes_in_group("gates"):
+		gates.append("%s %d/%d" % [b.display_name, int(b.hp), int(b.max_hp)])
+	print("FIN : victoire=", victory, " vague=", Game.wave, " cœur=", Game.core.hp, " morts joueur=", Game.deaths, " implants=", Game.implants, " score=", Game.score, " zombies abattus=", Game.kills)
+	print("Barrières : ", gates, "  tours restantes : ", get_tree().get_nodes_in_group("towers").size())
 	get_tree().quit(0)
 
 
@@ -59,7 +70,15 @@ func _physics_process(_delta: float) -> void:
 			break
 	if Game.wave != _last_wave:
 		_last_wave = Game.wave
-		print("Vague ", Game.wave, " | frame ", _frames, " | ferraille ", Game.scrap, " | cœur ", Game.core.hp, " | tours ", get_tree().get_nodes_in_group("towers").size())
+		var gates := []
+		for b in get_tree().get_nodes_in_group("gates"):
+			gates.append(int(b.hp))
+		print("Vague ", Game.wave, " | frame ", _frames, " | ferraille ", Game.scrap, " | cœur ", Game.core.hp, " | tours ", get_tree().get_nodes_in_group("towers").size(), " | barrières ", gates, " | score ", Game.score)
+	# Compte les types de zombies vus, pour vérifier que les nouveaux apparaissent.
+	for z in get_tree().get_nodes_in_group("zombies"):
+		if not _seen_types.has(z.type):
+			_seen_types[z.type] = Game.wave
+			print("  Premier ", z.type, " à la vague ", Game.wave)
 	# Joue le rôle du joueur : achève les zombies qui traînent (ex. le boss au pied du Cœur).
 	if _frames % 1500 == 0 and Game.phase == "assault":
 		var left := get_tree().get_nodes_in_group("zombies")

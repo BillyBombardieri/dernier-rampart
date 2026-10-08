@@ -1,6 +1,7 @@
 class_name Player
 extends CharacterBody3D
-## Le joueur en vue FPS : déplacement, tir (recul, visée, flash), marquage, construction et réparation.
+## Le joueur en vue FPS : déplacement, tir (recul, visée, flash, munitions spéciales), marquage,
+## construction, réparation, établi et gadgets.
 
 const WEAPONS := {
 	"pistol": {
@@ -37,6 +38,8 @@ var ammo := {"pistol": 10, "rifle": 30}
 var reloading := 0.0
 var respawn_time := 0.0
 var aiming := false
+var socket_in_sight: Socket = null  # Ancrage vide visé (l'interface affiche alors le choix des tours).
+var build_choice := 0  # Index dans Tower.BUILD_ORDER.
 
 var _camera: Camera3D
 var _gun_root: Node3D
@@ -79,7 +82,7 @@ func _ready() -> void:
 	add_child(shape)
 	_camera = Camera3D.new()
 	_camera.position.y = 1.6
-	_camera.fov = FOV
+	_camera.fov = Settings.fov
 	_camera.near = 0.03
 	_camera.current = true
 	add_child(_camera)
@@ -103,6 +106,8 @@ func _ready() -> void:
 	_camera.add_child(fill)
 	_spawn_point = global_position
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+	for id in WEAPONS:
+		ammo[id] = mag_size(id)
 	apply_implants()
 
 
@@ -190,13 +195,43 @@ func apply_implants() -> void:
 	Game.changed.emit()
 
 
+## Réglages changés dans le menu (champ de vision) : appliqués au retour en jeu.
+func apply_settings() -> void:
+	_camera.fov = Settings.fov
+
+
 func weapon_damage(id: String) -> float:
 	var dmg: float = WEAPONS[id]["damage"]
 	if id == "pistol" and Game.has_implant("main_lourde"):
 		dmg *= 1.5
 	if id == "rifle" and Game.has_implant("sang_froid"):
 		dmg *= 0.8
-	return dmg
+	return dmg * (1.0 + 0.2 * Game.mods[id]["barrel"])
+
+
+## Taille du chargeur, avec les améliorations de l'établi.
+func mag_size(id: String) -> int:
+	return int(round(WEAPONS[id]["mag"] * (1.0 + 0.3 * Game.mods[id]["mag"])))
+
+
+## Recharge gratuitement une arme (après l'achat d'un plus grand chargeur).
+func refill(id: String) -> void:
+	ammo[id] = mag_size(id)
+	if weapon == id:
+		reloading = 0.0
+	Game.changed.emit()
+
+
+func look_direction() -> Vector3:
+	return -_camera.global_transform.basis.z
+
+
+func eye_position() -> Vector3:
+	return _camera.global_position
+
+
+func add_shake(amount: float) -> void:
+	_shake = minf(1.0, _shake + amount)
 
 
 func reload_time(id: String) -> float:
@@ -237,9 +272,9 @@ func _respawn() -> void:
 
 func _unhandled_input(event: InputEvent) -> void:
 	if event is InputEventMouseMotion and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
-		var sens := MOUSE_SENS * (0.6 if aiming else 1.0)
+		var sens := MOUSE_SENS * Settings.sensitivity * (0.6 if aiming else 1.0)
 		rotate_y(-event.relative.x * sens)
-		var pitch_delta: float = -event.relative.y * sens
+		var pitch_delta: float = -event.relative.y * sens * (-1.0 if Settings.invert_y else 1.0)
 		# Tirer la souris vers le bas compense d'abord le recul, puis bouge la visée.
 		if pitch_delta < 0.0 and _kick_target.x > 0.0:
 			var used: float = min(_kick_target.x, -pitch_delta)
@@ -247,12 +282,19 @@ func _unhandled_input(event: InputEvent) -> void:
 			_kick.x -= used
 			pitch_delta += used
 		_aim_pitch = clamp(_aim_pitch + pitch_delta, -1.45, 1.45)
-	elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
-		Input.mouse_mode = Input.MOUSE_MODE_VISIBLE
 	elif event is InputEventMouseButton and event.pressed and Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
 		if not get_tree().paused:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			get_viewport().set_input_as_handled()
+	elif event is InputEventMouseButton and event.pressed and alive and not Game.is_over:
+		# Molette : choisit la tour à construire si on vise un ancrage vide, sinon change d'arme.
+		var mb := event as InputEventMouseButton
+		if mb.button_index in [MOUSE_BUTTON_WHEEL_UP, MOUSE_BUTTON_WHEEL_DOWN]:
+			var step := 1 if mb.button_index == MOUSE_BUTTON_WHEEL_DOWN else -1
+			if socket_in_sight:
+				cycle_build(step)
+			else:
+				_switch("rifle" if weapon == "pistol" else "pistol")
 
 
 func _physics_process(delta: float) -> void:
@@ -266,6 +308,10 @@ func _physics_process(delta: float) -> void:
 		return
 	if Input.is_action_just_pressed("flashlight"):
 		_flashlight.visible = not _flashlight.visible
+	if Input.is_action_just_pressed("gadget_1"):
+		Gadgets.use(0, self)
+	elif Input.is_action_just_pressed("gadget_2"):
+		Gadgets.use(1, self)
 	_move(delta)
 	_handle_weapons(delta)
 	_handle_interaction(delta)
@@ -298,10 +344,10 @@ func _handle_weapons(delta: float) -> void:
 	if reloading > 0.0:
 		reloading -= delta
 		if reloading <= 0.0:
-			ammo[weapon] = WEAPONS[weapon]["mag"]
+			ammo[weapon] = mag_size(weapon)
 			Game.changed.emit()
 		return
-	if Input.is_action_just_pressed("reload") and ammo[weapon] < WEAPONS[weapon]["mag"]:
+	if Input.is_action_just_pressed("reload") and ammo[weapon] < mag_size(weapon):
 		_start_reload()
 		return
 	if Input.mouse_mode != Input.MOUSE_MODE_CAPTURED:
@@ -343,19 +389,33 @@ func _shoot() -> void:
 	var moving := Vector2(velocity.x, velocity.z).length() / WALK_SPEED
 	var spread: float = w["spread"] * (0.25 if aiming else 1.0 + moving) + _recoil * 0.02
 	var offset := Vector2(randf_range(-spread, spread), randf_range(-spread, spread))
-	var hit := _ray(Fx.LAYER_WORLD | Fx.LAYER_ZOMBIES, 150.0, offset)
+	var ammo_type: String = Game.mods[weapon]["ammo"]
+	var dmg := weapon_damage(weapon) * (0.9 if ammo_type == "incendiaire" else 1.0)
+	# Les munitions perforantes traversent jusqu'à 3 zombies.
+	var max_hits := 3 if ammo_type == "perforante" else 1
+	var exclude: Array[RID] = [get_rid()]
 	var muzzle := _muzzle_flash.global_position
 	var end_point: Vector3 = _camera.global_position - _camera.global_transform.basis.z * 150.0
-	if not hit.is_empty():
+	var hits := 0
+	while hits < max_hits:
+		var hit := _ray(Fx.LAYER_WORLD | Fx.LAYER_ZOMBIES, 150.0, offset, exclude)
+		if hit.is_empty():
+			break
 		end_point = hit["position"]
 		if hit["collider"] is Zombie:
 			var z := hit["collider"] as Zombie
-			z.take_damage(weapon_damage(weapon), true, w["heavy"], hit["position"], hit["normal"])
+			var d := dmg * pow(0.7, hits)
+			if ammo_type == "perforante" and z.type in ["brute", "boss"]:
+				d *= 1.25
+			z.take_damage(d, true, w["heavy"], hit["position"], hit["normal"], ammo_type)
 			Game.hit_marker.emit(z.dead)
+			exclude.append(z.get_rid())
+			hits += 1
 		else:
 			Fx.burst(Game.main, end_point, hit["normal"], Color(0.4, 0.36, 0.3), 8, 3.0, 0.04)
 			Fx.burst(Game.main, end_point, hit["normal"], Color(1.0, 0.8, 0.4), 3, 6.0, 0.02)
-	Fx.tracer(Game.main, muzzle, end_point, Color(1.0, 0.85, 0.6))
+			break
+	Fx.tracer(Game.main, muzzle, end_point, _tracer_color(ammo_type))
 	Fx.flash(Game.main, muzzle, Color(1.0, 0.7, 0.35), 5.0, 7.0, 0.05)
 	Sfx.play(self, w["sound"], -2.0, 0.06)
 	_muzzle_flash.visible = true
@@ -365,6 +425,17 @@ func _shoot() -> void:
 	if ammo[weapon] <= 0:
 		_start_reload()
 	Game.changed.emit()
+
+
+func _tracer_color(ammo_type: String) -> Color:
+	match ammo_type:
+		"incendiaire":
+			return Color(1.0, 0.5, 0.15)
+		"electrique":
+			return Color(0.65, 0.6, 1.0)
+		"perforante":
+			return Color(0.9, 0.95, 1.0)
+	return Color(1.0, 0.85, 0.6)
 
 
 ## Recul : la vue monte vite puis revient doucement à sa place.
@@ -413,7 +484,7 @@ func _animate_view(delta: float) -> void:
 	_shake = move_toward(_shake, 0.0, delta * 2.5)
 	_switch_anim = move_toward(_switch_anim, 0.0, delta)
 	_aim_blend = move_toward(_aim_blend, 1.0 if aiming else 0.0, delta * 7.0)
-	_camera.fov = lerpf(FOV, AIM_FOV, _aim_blend) + _fov_punch
+	_camera.fov = lerpf(Settings.fov, Settings.fov * AIM_FOV / FOV, _aim_blend) + _fov_punch
 
 	# Balancement de la tête et pas : un pas par demi-oscillation, cadence réaliste.
 	var speed := Vector2(velocity.x, velocity.z).length()
@@ -461,40 +532,67 @@ func _animate_view(delta: float) -> void:
 	_gun_root.rotation = _gun_base_rot + Vector3(_vm_kick * 0.35, 0, 0)
 
 
+## Choisit la tour à construire (molette ou touche C).
+func cycle_build(step: int) -> void:
+	build_choice = wrapi(build_choice + step, 0, Tower.BUILD_ORDER.size())
+	Sfx.play(self, "ui_click", -12.0, 0.05)
+
+
 func _handle_interaction(delta: float) -> void:
-	var hit := _ray(Fx.LAYER_STRUCTURES, 7.0, Vector2.ZERO)
+	var hit := _ray(Fx.LAYER_STRUCTURES | Fx.LAYER_INTERACT, 7.0, Vector2.ZERO)
 	var target: Object = null if hit.is_empty() else hit["collider"]
 	if target is Tower:
 		target = (target as Tower).socket
 	Game.hint = ""
+	socket_in_sight = null
+	var e := Settings.key("interact")
 	if target is Socket:
 		var socket := target as Socket
 		if socket.tower == null:
-			Game.hint = "E : Mitrailleuse (%d)   C : Cryo (%d)" % [Tower.STATS["gun"]["cost"], Tower.STATS["cryo"]["cost"]]
-			if Input.is_action_just_pressed("build_gun"):
-				socket.build("gun")
-			elif Input.is_action_just_pressed("build_cryo"):
-				socket.build("cryo")
+			socket_in_sight = socket
+			if Input.is_action_just_pressed("cycle_tower"):
+				cycle_build(1)
+			var type: String = Tower.BUILD_ORDER[build_choice]
+			var data: Dictionary = Tower.STATS[type]
+			socket.preview(type)
+			Game.hint = "%s construire : [b]%s[/b] (%d ferraille, %d énergie)\n[color=#9a9a9a]Molette ou %s : choisir une autre tour[/color]" % [e, data["name"], data["cost"], data["energy"], Settings.key("cycle_tower")]
+			if Input.is_action_just_pressed("interact"):
+				socket.build(type)
 		else:
 			var t := socket.tower
-			var up := "niveau max" if t.level >= Tower.MAX_LEVEL else "E : améliorer (%d)" % t.upgrade_cost()
-			var power := "X : éteindre" if t.powered else "X : allumer"
-			Game.hint = "%s niv.%d   %s   %s   (énergie %d)" % [t.display_name(), t.level, up, power, t.energy_cost()]
-			if Input.is_action_just_pressed("build_gun"):
-				t.upgrade()
-			elif Input.is_action_just_pressed("toggle_power"):
+			t.hover()
+			var power := "%s %s" % [Settings.key("toggle_power"), "éteindre" if t.powered else "allumer"]
+			if t.hp < t.max_hp:
+				# Tour abîmée (acide, coups) : on la répare d'abord, on l'améliore ensuite.
+				Game.hint = "%s niv.%d · %d / %d PV   [color=#ffb840][b][Maintenir %s][/b][/color] réparer (1 ferraille pour %d PV)   %s" % [t.display_name(), t.level, int(t.hp), int(t.max_hp), Settings.key_label("interact"), int(REPAIR_COST), power]
+				if Input.is_action_pressed("interact"):
+					_repair(t, delta)
+			else:
+				var up := "niveau max" if t.level >= Tower.MAX_LEVEL else "%s améliorer (%d)" % [e, t.upgrade_cost()]
+				Game.hint = "%s niv.%d   %s   %s   (énergie %d)" % [t.display_name(), t.level, up, power, t.energy_cost()]
+				if Input.is_action_just_pressed("interact"):
+					t.upgrade()
+			if Input.is_action_just_pressed("toggle_power"):
 				t.toggle_power()
-	elif target is Structure:
-		var s := target as Structure
+	elif target is Workbench:
+		Game.hint = "%s ouvrir l'établi (armes, munitions, gadgets, générateur)" % e
+		if Game.phase == "assault":
+			Game.hint = "Établi : utilisable seulement entre les vagues"
+		elif Input.is_action_just_pressed("interact"):
+			Game.main.open_bench()
+	elif target is Structure or target is Barrier:
+		var s := target as Node3D
+		var s_name: String = s.display_name
 		if s.hp < s.max_hp:
-			Game.hint = "Maintenir E : réparer %s (1 ferraille pour %d PV)" % [s.display_name, int(REPAIR_COST)]
-			if Input.is_action_pressed("build_gun"):
+			var verb := "relever" if target is Barrier and not s.alive else "réparer"
+			Game.hint = "[color=#ffb840][b][Maintenir %s][/b][/color] %s %s (1 ferraille pour %d PV)" % [Settings.key_label("interact"), verb, s_name, int(REPAIR_COST)]
+			if Input.is_action_pressed("interact"):
 				_repair(s, delta)
 		else:
-			Game.hint = "%s en bon état" % s.display_name
+			Game.hint = "%s en bon état" % s_name
 
 
-func _repair(s: Structure, delta: float) -> void:
+func _repair(s: Node3D, delta: float) -> void:
 	_repair_bank += REPAIR_RATE * delta
 	while _repair_bank >= REPAIR_COST:
 		if Game.scrap <= 0:
@@ -507,9 +605,11 @@ func _repair(s: Structure, delta: float) -> void:
 		Game.changed.emit()
 
 
-func _ray(mask: int, length: float, offset: Vector2) -> Dictionary:
+func _ray(mask: int, length: float, offset: Vector2, exclude: Array[RID] = []) -> Dictionary:
 	var from := _camera.global_position
 	var b := _camera.global_transform.basis
 	var dir := (-b.z + b.x * offset.x + b.y * offset.y).normalized()
-	var query := PhysicsRayQueryParameters3D.create(from, from + dir * length, mask, [get_rid()])
+	if exclude.is_empty():
+		exclude = [get_rid()]
+	var query := PhysicsRayQueryParameters3D.create(from, from + dir * length, mask, exclude)
 	return get_world_3d().direct_space_state.intersect_ray(query)

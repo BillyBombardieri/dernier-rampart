@@ -6,12 +6,13 @@ config_version=5
 
 config/name="Dernier Rempart"
 config/description="FPS + tower defense solo contre des vagues de zombies."
-run/main_scene="res://scenes/main.tscn"
+run/main_scene="res://scenes/menu.tscn"
 config/features=PackedStringArray("4.7", "Forward Plus")
 
 [autoload]
 
 Game="*res://scripts/game.gd"
+Settings="*res://scripts/settings.gd"
 
 [display]
 

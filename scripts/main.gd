@@ -1,5 +1,6 @@
 extends Node3D
-## Construit la carte : portail, couloir boueux, deux anneaux (Avant-poste, Muraille), le Cœur et le décor.
+## Construit la carte : portail, couloir boueux, deux anneaux (Avant-poste, Muraille) avec chacun
+## une barrière en travers du chemin, le Cœur, l'établi et le décor.
 
 # Couloir suivi par les zombies, du portail jusqu'au Cœur.
 const PATH := [
@@ -7,18 +8,26 @@ const PATH := [
 	Vector3(12, 0, 6), Vector3(12, 0, 22), Vector3(0, 0, 30),
 ]
 const CORE_POS := Vector3(0, 0, 35)
+# Chaque anneau a un relais d'énergie, des ancrages pour les tours et une barrière qui coupe
+# le chemin (segment = tronçon du chemin barré). Les tours encadrent la barrière.
 const RINGS := {
 	"avant": {
-		"name": "Relais Avant-poste", "relay": Vector3(-24, 0, -30),
-		"sockets": [Vector3(5, 0, -45), Vector3(-5, 0, -42), Vector3(-8, 0, -36), Vector3(-24, 0, -14)],
+		"name": "Relais Avant-poste", "relay": Vector3(7, 0, -27),
+		"gate": {"name": "Barrière de l'Avant-poste", "pos": Vector3(0, 0, -43), "segment": 0, "hp": 600.0},
+		"sockets": [Vector3(-5.5, 0, -39.5), Vector3(5.5, 0, -39.5), Vector3(6.5, 0, -33), Vector3(-12, 0, -36)],
 	},
 	"muraille": {
-		"name": "Relais Muraille", "relay": Vector3(17, 0, 8),
-		"sockets": [Vector3(-12, 0, -8), Vector3(-4, 0, 6), Vector3(6, 0, 13), Vector3(18, 0, 14), Vector3(-6, 0, 24)],
+		"name": "Relais Muraille", "relay": Vector3(18, 0, 18),
+		"gate": {"name": "Barrière de la Muraille", "pos": Vector3(12, 0, 10.5), "segment": 4, "hp": 900.0},
+		"sockets": [Vector3(-12, 0, -8), Vector3(-4, 0, 6), Vector3(6, 0, 13), Vector3(18, 0, 13), Vector3(-6, 0, 24)],
 	},
 }
+const GATE_WIDTH := 7.2
+const WORKBENCH_POS := Vector3(-5.5, 0, 33)
 
 var path_points: Array[Vector3] = []
+var bench_panel: WorkbenchPanel
+var pause_menu: PauseMenu
 var _relays := {}
 var _blocked: Array[Vector3] = []  # Endroits où ne pas poser de décor.
 var _rng := RandomNumberGenerator.new()
@@ -41,6 +50,7 @@ func _ready() -> void:
 	_build_core()
 	_build_rings()
 	_build_base_walls()
+	_build_workbench()
 	_build_lights()
 	_build_props()
 	_spawn_player()
@@ -52,7 +62,12 @@ func _ready() -> void:
 	hud.wave_manager = wm
 	add_child(hud)
 	wm.implant_choice.connect(hud.show_implants)
-	if not Tutorial.already_done():
+	bench_panel = WorkbenchPanel.new()
+	add_child(bench_panel)
+	pause_menu = PauseMenu.new()
+	pause_menu.bench = bench_panel
+	add_child(pause_menu)
+	if not Settings.tutorial_done:
 		var tuto := Tutorial.new()
 		tuto.hud = hud
 		add_child(tuto)
@@ -60,6 +75,14 @@ func _ready() -> void:
 
 func relay_for_ring(ring: String) -> Structure:
 	return _relays.get(ring)
+
+
+## Ouvre l'établi, seulement entre les vagues.
+func open_bench() -> void:
+	if Game.phase == "assault":
+		Game.say("Trop dangereux pendant l'assaut : reviens à l'établi entre deux vagues.")
+		return
+	bench_panel.open()
 
 
 func _build_environment() -> void:
@@ -294,6 +317,12 @@ func _build_rings() -> void:
 			s.position = pos
 			s.setup(ring)
 			_blocked.append(pos)
+		var gate: Dictionary = data["gate"]
+		var barrier := Barrier.new()
+		add_child(barrier)
+		barrier.position = gate["pos"]
+		barrier.setup(gate["name"], ring, gate["hp"], gate["segment"], GATE_WIDTH)
+		_blocked.append(gate["pos"])
 
 
 func _build_base_walls() -> void:
@@ -312,6 +341,14 @@ func _build_base_walls() -> void:
 	var cloth := Fx.textured("cloth", 1.2, Color(0.55, 0.48, 0.34), false)
 	for start in [Vector3(4, 0, 29), Vector3(-26, 0, -6), Vector3(22, 0, 18)]:
 		_sandbags(start, 6, cloth)
+
+
+func _build_workbench() -> void:
+	var bench := Workbench.new()
+	add_child(bench)
+	bench.position = WORKBENCH_POS
+	bench.rotation.y = PI  # Le plan de travail fait face au Cœur.
+	_blocked.append(WORKBENCH_POS)
 
 
 func _sandbags(start: Vector3, count: int, mat: Material) -> void:
@@ -363,7 +400,7 @@ func _build_lights() -> void:
 		spot.add_child(lamp)
 		_blocked.append(base)
 	# Barils en feu.
-	for pos in [Vector3(-4, 0, 31), Vector3(16, 0, 2), Vector3(-22, 0, -26), Vector3(7, 0, -38)]:
+	for pos in [Vector3(-4, 0, 31), Vector3(16, 0, 2), Vector3(-22, 0, -26), Vector3(9.5, 0, -44.5)]:
 		_burning_barrel(pos, metal)
 
 

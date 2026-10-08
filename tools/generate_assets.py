@@ -287,6 +287,126 @@ def make_sounds() -> None:
     save_wav("wind", wind)
 
 
+def make_extra_sounds() -> None:
+    """Sons des tours, des nouveaux zombies, des barrières, des gadgets et de l'interface."""
+    rng = np.random.default_rng(900)
+
+    def noise(n):
+        return rng.standard_normal(n)
+
+    # Lance-flammes : souffle grave et grondant, avec des crépitements.
+    t = t_axis(0.6)
+    roar = bandpass(noise(t.size), 120, 1800) * (np.minimum(t / 0.05, 1) * np.exp(-np.maximum(t - 0.25, 0) / 0.15))
+    crackle = np.zeros(t.size)
+    for i in rng.integers(0, t.size - 200, 60):
+        crackle[i:i + 200] += noise(200) * np.exp(-np.arange(200) / 30) * rng.uniform(0.2, 1.0)
+    save_wav("flame", roar + bandpass(crackle, 1500, 7000) * 0.4)
+
+    # Arc électrique : bourdonnement carré haché et grésillement aigu.
+    t = t_axis(0.45)
+    buzz = np.sign(np.sin(2 * np.pi * (120 + 40 * rng.random()) * t)) * (0.6 + 0.4 * (rng.random(t.size) > 0.7))
+    hiss = bandpass(noise(t.size), 2500, 9000)
+    env = envelope(t, 0.002, 0.12)
+    save_wav("zap", (buzz * 0.5 + hiss) * env)
+
+    # Mortier : coup sourd et profond.
+    t = t_axis(0.8)
+    thump = np.sin(2 * np.pi * 55 * t * np.exp(-t * 3)) * envelope(t, 0.002, 0.2)
+    save_wav("mortar_fire", thump + lowpass(noise(t.size), 0.05) * envelope(t, 0.001, 0.08) * 3)
+
+    # Explosion : déflagration, grondement puis débris qui retombent.
+    t = t_axis(1.8)
+    boom = lowpass(noise(t.size), 0.02) * envelope(t, 0.002, 0.55) * 8
+    sub = np.sin(2 * np.pi * 38 * t * np.exp(-t * 1.5)) * envelope(t, 0.003, 0.4)
+    debris = np.zeros(t.size)
+    for start in rng.uniform(0.25, 1.4, 40):
+        i = int(start * RATE)
+        if i < t.size - 600:
+            debris[i:i + 600] += noise(600) * np.exp(-np.arange(600) / 90) * rng.uniform(0.05, 0.3)
+    save_wav("explosion", boom + sub + bandpass(debris, 800, 6000))
+
+    # Crachat : bruit mouillé et « blop » qui descend.
+    t = t_axis(0.35)
+    wet = bandpass(noise(t.size), 300, 3000) * envelope(t, 0.005, 0.06)
+    blop = np.sin(2 * np.pi * np.cumsum(400 - 700 * t) / RATE) * envelope(t, 0.005, 0.08)
+    save_wav("spit", wet + blop * 0.6)
+
+    # Acide qui grésille en touchant.
+    t = t_axis(0.7)
+    sizzle = bandpass(noise(t.size), 2000, 9000) * envelope(t, 0.01, 0.25) * (0.6 + 0.4 * np.sin(2 * np.pi * 37 * t))
+    splat = lowpass(noise(t.size), 0.08) * envelope(t, 0.001, 0.03) * 2
+    save_wav("acid_hit", sizzle + splat)
+
+    # Cri du Hurleur : voix rauque qui monte puis retombe, avec vibrato.
+    t = t_axis(1.6)
+    pitch = 170 + 260 * np.sin(np.pi * np.clip(t / 1.4, 0, 1)) ** 0.7 + 12 * np.sin(2 * np.pi * 7 * t)
+    phase = np.cumsum(2 * np.pi * pitch / RATE)
+    saw = 2 * ((phase / (2 * np.pi)) % 1.0) - 1
+    voice = bandpass(saw, 300, 3200) + bandpass(noise(t.size), 800, 4000) * 0.3
+    amp = np.sin(np.pi * np.clip(t / 1.6, 0, 1)) ** 0.5
+    save_wav("howl", voice * amp)
+
+    # Terre qui se soulève (Fouisseur).
+    t = t_axis(0.9)
+    rumble = lowpass(noise(t.size), 0.01) * envelope(t, 0.05, 0.35) * 10
+    grains = np.zeros(t.size)
+    for g in rng.gamma(2.0, 0.08, 120):
+        i = int(g * RATE)
+        if i < t.size - 50:
+            grains[i:i + 50] += noise(50) * np.exp(-np.arange(50) / 10)
+    save_wav("dig", rumble + bandpass(grains, 700, 5000) * 0.5)
+
+    # Phare : ping de sonar avec un écho.
+    t = t_axis(0.9)
+    ping = np.sin(2 * np.pi * 1400 * t) * envelope(t, 0.002, 0.18)
+    echo = np.concatenate([np.zeros(int(0.22 * RATE)), ping[: t.size - int(0.22 * RATE)]]) * 0.3
+    save_wav("ping", ping + echo)
+
+    # Grillage frappé : partiels métalliques et cliquetis.
+    t = t_axis(0.5)
+    clang = sum(np.sin(2 * np.pi * f * t) * np.exp(-t / d) for f, d in [(310, 0.12), (523, 0.09), (847, 0.06), (1290, 0.04)])
+    rattle = bandpass(noise(t.size), 2000, 7000) * envelope(t, 0.001, 0.1) * (rng.random(t.size) > 0.5)
+    save_wav("barrier_hit", clang * envelope(t, 0.001, 0.2) + rattle * 0.6)
+
+    # Barrière qui s'effondre : fracas de métal et de béton.
+    t = t_axis(1.4)
+    crash = lowpass(noise(t.size), 0.03) * envelope(t, 0.002, 0.4) * 6
+    clangs = np.zeros(t.size)
+    for start in rng.uniform(0.0, 0.8, 8):
+        i = int(start * RATE)
+        n = min(t.size - i, int(0.4 * RATE))
+        tt = np.arange(n) / RATE
+        f = rng.uniform(250, 900)
+        clangs[i:i + n] += (np.sin(2 * np.pi * f * tt) + 0.5 * np.sin(2 * np.pi * f * 2.76 * tt)) * np.exp(-tt / 0.1) * rng.uniform(0.3, 1.0)
+    save_wav("barrier_break", crash + clangs * 0.5)
+
+    # Leurre : bip électronique court.
+    t = t_axis(0.12)
+    beep = np.sign(np.sin(2 * np.pi * 2200 * t)) * 0.5 + np.sin(2 * np.pi * 2200 * t) * 0.5
+    save_wav("decoy", beep * np.minimum(t / 0.005, 1) * np.minimum((0.12 - t) / 0.02, 1))
+
+    # Drone : bourdonnement qui boucle sans coupure (fréquences entières sur 1 s).
+    t = t_axis(1.0)
+    hum = sum(np.sin(2 * np.pi * f * t) * a for f, a in [(180, 1.0), (360, 0.5), (540, 0.3), (1260, 0.15)])
+    save_wav("drone", hum * (0.8 + 0.2 * np.sin(2 * np.pi * 30 * t)))
+
+    # Interface : clic, amélioration, construction, lancer.
+    t = t_axis(0.06)
+    save_wav("ui_click", np.sin(2 * np.pi * 1800 * t) * envelope(t, 0.0005, 0.012) + bandpass(noise(t.size), 3000, 8000) * envelope(t, 0.0003, 0.004) * 0.5)
+    t = t_axis(0.7)
+    clicks = np.zeros(t.size)
+    for k in range(3):
+        i = int((0.03 + k * 0.08) * RATE)
+        clicks[i:i + 300] += noise(300) * np.exp(-np.arange(300) / 25)
+    chime = np.sin(2 * np.pi * np.cumsum(880 + 440 * np.clip((t - 0.25) / 0.1, 0, 1)) / RATE) * envelope(np.clip(t - 0.25, 0, None), 0.005, 0.2) * (t > 0.25)
+    save_wav("upgrade", bandpass(clicks, 1500, 7000) + chime * 0.6)
+    t = t_axis(0.6)
+    clank = sum(np.sin(2 * np.pi * f * t) * np.exp(-t / d) for f, d in [(140, 0.15), (410, 0.08), (980, 0.05)])
+    save_wav("build", clank * envelope(t, 0.001, 0.25) + lowpass(noise(t.size), 0.05) * envelope(t, 0.001, 0.05) * 3)
+    t = t_axis(0.3)
+    save_wav("throw", bandpass(noise(t.size), 400, 3000) * np.sin(np.pi * t / 0.3) ** 2)
+
+
 if __name__ == "__main__":
     make_ground()
     make_mud()
@@ -295,5 +415,6 @@ if __name__ == "__main__":
     make_skin()
     make_cloth()
     make_sounds()
+    make_extra_sounds()
     print("Textures :", sorted(p.name for p in TEX.iterdir()))
     print("Sons :", sorted(p.name for p in SND.iterdir()))

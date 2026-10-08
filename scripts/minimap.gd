@@ -1,9 +1,15 @@
 class_name Minimap
 extends Control
-## Minimap ronde qui tourne avec le joueur : couloir, ancrages, tours, relais, Cœur, portail, zombies et ferraille.
+## Minimap ronde qui tourne avec le joueur : couloir, barrières, ancrages, tours, relais, Cœur, établi,
+## portail, zombies (couleur selon le type), ferraille, leurres et drones.
 
 const RADIUS := 95.0
 const METERS := 55.0  # Distance visible du centre au bord.
+const ZOMBIE_COLORS := {
+	"cracheur": Color(0.55, 1.0, 0.3),
+	"hurleur": Color(1.0, 0.55, 0.15),
+	"fouisseur": Color(0.75, 0.55, 0.35),
+}
 
 var _pulse := 0.0
 
@@ -44,6 +50,17 @@ func _draw() -> void:
 			if a.distance_to(center) < RADIUS - 3 and b.distance_to(center) < RADIUS - 3:
 				draw_line(a, b, Color(0.55, 0.4, 0.25, 0.9), 4.0)
 
+	# Barrières : trait en travers du chemin (rouge pointillé quand elles sont détruites).
+	for node in get_tree().get_nodes_in_group("barriers"):
+		var b := node as Barrier
+		var side := Vector3(b.dir.z, 0, -b.dir.x) * b.half_width
+		var a: Vector2 = to_map.call(b.global_position - side)
+		var c: Vector2 = to_map.call(b.global_position + side)
+		if a.distance_to(center) < RADIUS - 4 and c.distance_to(center) < RADIUS - 4:
+			if b.alive:
+				draw_line(a, c, Color(0.95, 0.95, 0.9) if not b.temporary else Color(1.0, 0.8, 0.2), 3.0)
+			else:
+				draw_dashed_line(a, c, Color(1.0, 0.3, 0.25, 0.8), 2.0, 3.0)
 	for node in get_tree().get_nodes_in_group("scrap"):
 		_dot(to_map.call(node.global_position), 1.5, Color(1.0, 0.8, 0.3), center)
 	for node in Game.main.get_children():
@@ -51,20 +68,34 @@ func _draw() -> void:
 			var s := node as Socket
 			var col := Color(0.5, 0.5, 0.5)
 			if s.tower:
-				col = Color(1.0, 0.65, 0.2) if s.tower.type == "gun" else Color(0.4, 0.85, 1.0)
+				col = Tower.STATS[s.tower.type]["color"]
 				if not s.tower.is_active():
 					col = col.darkened(0.6)
 			_square(to_map.call(s.global_position), 3.5 if s.tower else 2.5, col, center)
+		elif node is Workbench:
+			_square(to_map.call(node.global_position), 3.0, Color(0.55, 1.0, 0.65), center)
 		elif node is Structure:
 			var st := node as Structure
 			var col := Color(0.35, 0.65, 1.0) if st.kind == "core" else Color(1.0, 0.85, 0.3)
 			if not st.alive:
 				col = Color(0.4, 0.4, 0.4)
 			_square(to_map.call(st.global_position), 6.0 if st.kind == "core" else 4.0, col, center, true)
+	for node in get_tree().get_nodes_in_group("decoys"):
+		var pulse := 2.5 + 1.5 * absf(sin(_pulse * 8.0))
+		_dot(to_map.call(node.global_position), pulse, Color(1.0, 0.9, 0.9), center)
+	for node in get_tree().get_nodes_in_group("drones"):
+		_dot(to_map.call(node.global_position), 2.0, Color(0.4, 1.0, 0.7), center)
 	for node in get_tree().get_nodes_in_group("zombies"):
 		var z := node as Zombie
-		var r := 2.5 if z.type in ["rodeur", "coureur"] else 4.5
-		_dot(to_map.call(z.global_position), r, Color(1.0, 0.3, 0.25) if not z.marked else Color(1, 1, 1), center)
+		var r := 2.5 if z.type in ["rodeur", "coureur"] else (6.0 if z.type == "boss" else 3.5)
+		var p: Vector2 = to_map.call(z.global_position)
+		if z.burrowed:
+			# Fouisseur sous terre : cercle brun qui pulse.
+			if p.distance_to(center) < RADIUS - 6:
+				draw_arc(p, 3.0 + 2.0 * absf(sin(_pulse * 5.0)), 0, TAU, 12, ZOMBIE_COLORS["fouisseur"], 1.5)
+			continue
+		var col: Color = ZOMBIE_COLORS.get(z.type, Color(1.0, 0.3, 0.25))
+		_dot(p, r, col if not z.marked else Color(1, 1, 1), center)
 
 	# Portail : toujours visible, collé au bord s'il est loin.
 	var portal: Vector2 = to_map.call(pts[0])

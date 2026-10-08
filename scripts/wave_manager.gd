@@ -10,12 +10,20 @@ const HP_PER_WAVE := 0.2
 const SPEED_PER_WAVE := 0.03
 const DAMAGE_PER_WAVE := 0.08
 const SIEGE_EVERY := 5
+# Message affiché la première fois qu'un nouveau type de zombie apparaît.
+const INTRO := {
+	"cracheur": "Nouveau zombie : le CRACHEUR (vert). Il crache de l'acide sur tes tours depuis 14 m, par-dessus les barrières.",
+	"hurleur": "Nouveau zombie : le HURLEUR (orange). Son cri rend les zombies autour de lui plus rapides et plus forts. Abats-le en priorité.",
+	"fouisseur": "Nouveau zombie : le FOUISSEUR (brun). Il creuse sous les barrières et ressort au pied d'une tour. Un Phare le fait sortir de terre.",
+}
 
 signal implant_choice(options: Array)
 
 var _queue: Array[String] = []
 var _spawn_cd := 0.0
 var _alive := 0
+var _seen := {}
+var _bonus := 0  # Prime de ferraille de la dernière vague repoussée.
 var wave_total := 1
 
 
@@ -48,7 +56,7 @@ func _enter(phase: String, duration: float) -> void:
 	match phase:
 		"prep":
 			var label := "NUIT DE SIÈGE" if is_siege(Game.wave) else "Vague %d" % Game.wave
-			Game.say("%s dans %d s. Construis tes défenses (Entrée pour lancer)." % [label, int(duration)])
+			Game.say("%s dans %d s. Construis tes défenses (%s pour lancer)." % [label, int(duration), Settings.key_label("skip_phase")])
 		"assault":
 			Sfx.play(self, "siren", -8.0, 0.0)
 			_queue = _build_queue(Game.wave)
@@ -56,7 +64,7 @@ func _enter(phase: String, duration: float) -> void:
 			_spawn_cd = 0.0
 			Game.say("NUIT DE SIÈGE : un boss arrive !" if is_siege(Game.wave) else "Vague %d : ils arrivent !" % Game.wave)
 		"harvest":
-			Game.say("Vague repoussée ! Ramasse la ferraille avant qu'elle disparaisse.")
+			Game.say("Vague repoussée : +%d ferraille de prime. Ramasse le reste avant qu'il disparaisse." % _bonus)
 	Game.changed.emit()
 
 
@@ -90,9 +98,12 @@ func _process(delta: float) -> void:
 
 
 func _wave_cleared() -> void:
+	Game.add_score(Game.WAVE_POINTS * Game.wave)
 	if Game.wave >= Game.LAST_WAVE:
 		Game.end_game(true)
 		return
+	_bonus = Game.wave_scrap(Game.wave)
+	Game.add_scrap(_bonus)
 	if is_siege(Game.wave):
 		var options := Game.implant_choices(3)
 		if not options.is_empty():
@@ -113,14 +124,25 @@ func _build_queue(w: int) -> Array[String]:
 	var count := 8 + w * 4
 	var runner_chance := minf(0.15 + 0.03 * w, 0.4)
 	var brute_chance := 0.0 if w < 2 else minf(0.06 + 0.02 * w, 0.22)
+	var spitter_chance := 0.0 if w < 3 else minf(0.06 + 0.015 * (w - 3), 0.14)
 	for i in count:
 		var r := randf()
 		var t := "rodeur"
 		if r < runner_chance:
 			t = "coureur"
+		elif r < runner_chance + spitter_chance:
+			t = "cracheur"
 		elif r > 1.0 - brute_chance:
 			t = "brute"
 		q.append(t)
+	# Hurleurs (dès la vague 4) au milieu de la vague, au cœur de la horde.
+	if w >= 4:
+		for i in 1 + (w - 4) / 3:
+			q.insert(randi_range(count / 4, count * 3 / 4), "hurleur")
+	# Fouisseurs (dès la vague 5) : ils creusent sous les barrières.
+	if w >= 5:
+		for i in 1 + (w - 5) / 2:
+			q.insert(randi_range(count / 5, count * 4 / 5), "fouisseur")
 	# Fin de vague : une ruée de coureurs pour mettre la pression.
 	if w >= 4:
 		for i in w - 2:
@@ -139,6 +161,9 @@ func _spawn(type: String) -> void:
 	z.setup(type, 1.0 + HP_PER_WAVE * w, 1.0 + SPEED_PER_WAVE * w, 1.0 + DAMAGE_PER_WAVE * w)
 	z.died.connect(_on_zombie_died)
 	_alive += 1
+	if INTRO.has(type) and not _seen.has(type):
+		_seen[type] = true
+		Game.say(INTRO[type])
 
 
 func _on_zombie_died(_z: Zombie) -> void:
