@@ -13,7 +13,7 @@ var _base_y := 0.0
 func setup(p_value: int, pos: Vector3) -> void:
 	value = p_value
 	global_position = Vector3(pos.x, 0.0, pos.z)
-	_base_y = 0.4
+	_base_y = 0.15
 	collision_layer = Fx.LAYER_PICKUPS
 	collision_mask = Fx.LAYER_PLAYER
 	monitoring = true
@@ -23,17 +23,27 @@ func setup(p_value: int, pos: Vector3) -> void:
 	shape.shape = ss
 	shape.position.y = 0.5
 	add_child(shape)
-	_mesh = Fx.box(Vector3(0.35, 0.35, 0.35), Color(1.0, 0.75, 0.2), 2.0)
+	# Petit tas de pièces métalliques, avec un léger reflet doré pour le repérer la nuit.
+	_mesh = MeshInstance3D.new()
 	_mesh.position.y = _base_y
 	add_child(_mesh)
+	var metal := Fx.textured("metal", 3.0, Color(0.9, 0.85, 0.8), false)
+	var glint := Fx.material(Color(1.0, 0.7, 0.3), 0.8)
+	glint.metallic = 1.0
+	glint.roughness = 0.25
+	for i in 3:
+		var piece := Fx.box_mat(Vector3(randf_range(0.12, 0.25), 0.05, randf_range(0.1, 0.3)), glint if i == 0 else metal)
+		piece.position = Vector3(randf_range(-0.1, 0.1), i * 0.04, randf_range(-0.1, 0.1))
+		piece.rotation = Vector3(randf_range(-0.4, 0.4), randf() * TAU, randf_range(-0.4, 0.4))
+		_mesh.add_child(piece)
 	add_to_group("scrap")
 	body_entered.connect(_on_body_entered)
 
 
 func _physics_process(delta: float) -> void:
 	_time += delta
-	_mesh.position.y = _base_y + sin(_time * 4.0) * 0.12
-	_mesh.rotation.y += delta * 2.0
+	_mesh.position.y = _base_y + sin(_time * 3.0) * 0.03
+	_mesh.rotation.y += delta * 0.8
 	if _time > LIFETIME:
 		queue_free()
 		return
@@ -52,5 +62,6 @@ func _physics_process(delta: float) -> void:
 func _on_body_entered(body: Node) -> void:
 	if body is Player:
 		Game.add_scrap(value)
+		Sfx.play(Game.main, "pickup", -8.0, 0.1)
 		Fx.popup(Game.main, global_position + Vector3(0, 1.2, 0), "+%d" % value, Color(1.0, 0.8, 0.3), 32)
 		queue_free()

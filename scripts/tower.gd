@@ -25,6 +25,8 @@ var max_hp := 200.0
 
 var _cooldown := 0.0
 var _head: Node3D
+var _muzzle: Node3D
+var _shots := 0
 var _light: MeshInstance3D
 var _label: Label3D
 
@@ -43,18 +45,42 @@ func setup(p_type: String, p_socket: Socket) -> void:
 	shape.position.y = 1.1
 	add_child(shape)
 	var color: Color = STATS[type]["color"]
-	var base := Fx.box(Vector3(1.4, 1.4, 1.4), color.darkened(0.4))
-	base.position.y = 0.7
+	var metal := Fx.textured("metal", 1.2, Color(0.85, 0.85, 0.85), false)
+	var dark_metal := Fx.textured("metal", 1.2, Color(0.45, 0.45, 0.45), false)
+	# Socle trapu + colonne.
+	var base := Fx.box_mat(Vector3(1.4, 0.5, 1.4), dark_metal)
+	base.position.y = 0.25
 	add_child(base)
+	var column := Fx.mesh_with(_cyl(0.35, 1.0), metal)
+	column.position.y = 1.0
+	add_child(column)
 	_head = Node3D.new()
 	_head.position.y = 1.7
 	add_child(_head)
-	_head.add_child(Fx.box(Vector3(0.8, 0.6, 0.8), color))
-	var barrel := Fx.box(Vector3(0.18, 0.18, 1.2), color.lightened(0.3))
-	barrel.position.z = -0.7
-	_head.add_child(barrel)
-	_light = Fx.box(Vector3(0.3, 0.12, 0.3), Color.GREEN, 3.0)
-	_light.position.y = 2.1
+	_head.add_child(Fx.box_mat(Vector3(0.9, 0.55, 1.0), metal))
+	if type == "gun":
+		for x in [-0.15, 0.15]:
+			var barrel := Fx.mesh_with(_cyl(0.06, 1.3), dark_metal)
+			barrel.rotation_degrees.x = 90
+			barrel.position = Vector3(x, 0.05, -1.0)
+			_head.add_child(barrel)
+		var ammo_box := Fx.box_mat(Vector3(0.35, 0.35, 0.5), dark_metal)
+		ammo_box.position = Vector3(0.6, -0.05, 0.1)
+		_head.add_child(ammo_box)
+	else:
+		var tank := Fx.mesh_with(_cyl(0.28, 0.9), Fx.material(color, 1.5))
+		tank.rotation_degrees.z = 90
+		tank.position = Vector3(0, 0.45, 0.2)
+		_head.add_child(tank)
+		var nozzle := Fx.mesh_with(_cyl(0.12, 0.9, 0.2), dark_metal)
+		nozzle.rotation_degrees.x = 90
+		nozzle.position = Vector3(0, 0.0, -0.9)
+		_head.add_child(nozzle)
+	_muzzle = Node3D.new()
+	_muzzle.position = Vector3(0, 0.05, -1.7)
+	_head.add_child(_muzzle)
+	_light = Fx.box(Vector3(0.12, 0.12, 0.12), Color.GREEN, 4.0)
+	_light.position = Vector3(0.5, 0.55, 0.5)
 	add_child(_light)
 	_label = Label3D.new()
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
@@ -151,7 +177,17 @@ func _physics_process(delta: float) -> void:
 	var dmg := tower_damage()
 	if target.marked:
 		dmg *= MARK_BONUS
-	Fx.tracer(Game.main, _head.global_position, aim, STATS[type]["color"])
+	_shots += 1
+	var from := _muzzle.global_position
+	if type == "gun":
+		Fx.tracer(Game.main, from, aim, Color(1.0, 0.8, 0.5))
+		if _shots % 3 == 0:
+			Fx.flash(Game.main, from, Color(1.0, 0.7, 0.4), 3.0, 5.0)
+			Sfx.play_at(Game.main, "tower_gun", from, -4.0, 0.1)
+	else:
+		Fx.tracer(Game.main, from, aim, STATS[type]["color"])
+		Fx.burst(Game.main, aim, Vector3.UP, Color(0.75, 0.9, 1.0), 10, 2.0, 0.08)
+		Sfx.play_at(Game.main, "cryo", from, -4.0, 0.1)
 	if type == "cryo":
 		target.freeze(STATS["cryo"]["freeze"] + 0.5 * (level - 1))
 	target.take_damage(dmg, false, false)
@@ -177,6 +213,15 @@ func _find_target() -> Zombie:
 			best_score = score
 			best = z
 	return best
+
+
+func _cyl(radius: float, height: float, top := -1.0) -> CylinderMesh:
+	var c := CylinderMesh.new()
+	c.bottom_radius = radius
+	c.top_radius = radius if top < 0.0 else top
+	c.height = height
+	c.radial_segments = 12
+	return c
 
 
 func _refresh() -> void:

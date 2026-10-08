@@ -8,6 +8,8 @@ const LAYER_STRUCTURES := 4
 const LAYER_PLAYER := 8
 const LAYER_PICKUPS := 16
 
+static var _textures := {}
+
 
 static func material(color: Color, emission := 0.0) -> StandardMaterial3D:
 	var mat := StandardMaterial3D.new()
@@ -89,3 +91,84 @@ static func popup(parent: Node, pos: Vector3, text: String, color: Color, size :
 	tween.tween_property(label, "global_position", pos + Vector3(0, 1.5, 0), 0.9)
 	tween.tween_property(label, "modulate:a", 0.0, 0.9)
 	tween.chain().tween_callback(label.queue_free)
+
+
+## Matériau réaliste (PBR) à partir des textures de assets/textures.
+## Les textures sont projetées selon la position dans le monde : pas d'étirement sur les grandes boîtes.
+static func textured(name: String, uv_scale := 0.25, tint := Color.WHITE, world := true) -> StandardMaterial3D:
+	var mat := StandardMaterial3D.new()
+	mat.albedo_texture = _tex(name + "_albedo")
+	mat.albedo_color = tint
+	mat.normal_enabled = true
+	mat.normal_texture = _tex(name + "_normal")
+	var rough := _tex(name + "_roughness")
+	if rough:
+		mat.roughness_texture = rough
+		mat.roughness_texture_channel = BaseMaterial3D.TEXTURE_CHANNEL_RED
+	mat.uv1_triplanar = true
+	mat.uv1_world_triplanar = world
+	mat.uv1_scale = Vector3.ONE * uv_scale
+	mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
+	return mat
+
+
+static func _tex(name: String) -> Texture2D:
+	if not _textures.has(name):
+		var path := "res://assets/textures/%s.png" % name
+		_textures[name] = load(path) if ResourceLoader.exists(path) else null
+	return _textures[name]
+
+
+static func box_mat(size: Vector3, mat: Material) -> MeshInstance3D:
+	var mesh := BoxMesh.new()
+	mesh.size = size
+	mesh.material = mat
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	return mi
+
+
+static func mesh_with(mesh: PrimitiveMesh, mat: Material) -> MeshInstance3D:
+	mesh.material = mat
+	var mi := MeshInstance3D.new()
+	mi.mesh = mesh
+	return mi
+
+
+## Gerbe de particules (sang, poussière, étincelles) qui se détruit toute seule.
+static func burst(parent: Node, pos: Vector3, normal: Vector3, color: Color, amount := 14, speed := 4.0, size := 0.06) -> void:
+	var p := CPUParticles3D.new()
+	p.one_shot = true
+	p.explosiveness = 0.95
+	p.amount = amount
+	p.lifetime = 0.7
+	p.direction = normal if normal.length() > 0.1 else Vector3.UP
+	p.spread = 45.0
+	p.initial_velocity_min = speed * 0.4
+	p.initial_velocity_max = speed
+	p.gravity = Vector3(0, -12, 0)
+	p.scale_amount_min = 0.5
+	p.scale_amount_max = 1.2
+	var mesh := BoxMesh.new()
+	mesh.size = Vector3.ONE * size
+	var mat := StandardMaterial3D.new()
+	mat.albedo_color = color
+	mat.roughness = 0.4
+	mesh.material = mat
+	p.mesh = mesh
+	parent.add_child(p)
+	p.global_position = pos
+	p.emitting = true
+	parent.get_tree().create_timer(1.2).timeout.connect(p.queue_free)
+
+
+## Éclair lumineux bref (flash de tir, impact).
+static func flash(parent: Node, pos: Vector3, color: Color, energy := 4.0, radius := 6.0, duration := 0.05) -> void:
+	var light := OmniLight3D.new()
+	light.light_color = color
+	light.light_energy = energy
+	light.omni_range = radius
+	light.shadow_enabled = false
+	parent.add_child(light)
+	light.global_position = pos
+	parent.get_tree().create_timer(duration).timeout.connect(light.queue_free)

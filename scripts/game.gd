@@ -4,6 +4,8 @@ extends Node
 signal changed
 signal message(text: String)
 signal ended(victory: bool)
+signal hit_marker(kill: bool)
+signal player_hurt(amount: float)
 
 const ENERGY_BASE := 6
 const START_SCRAP := 60
@@ -144,6 +146,7 @@ func _setup_inputs() -> void:
 		"build_cryo": [KEY_C],
 		"toggle_power": [KEY_X],
 		"skip_phase": [KEY_ENTER, KEY_KP_ENTER],
+		"flashlight": [KEY_L],
 	}
 	for action in keys:
 		if not InputMap.has_action(action):
@@ -162,3 +165,8 @@ func _setup_inputs() -> void:
 		var mb := InputEventMouseButton.new()
 		mb.button_index = MOUSE_BUTTON_LEFT
 		InputMap.action_add_event("fire", mb)
+	if not InputMap.has_action("aim"):
+		InputMap.add_action("aim")
+		var rb := InputEventMouseButton.new()
+		rb.button_index = MOUSE_BUTTON_RIGHT
+		InputMap.action_add_event("aim", rb)

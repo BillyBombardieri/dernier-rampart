@@ -14,6 +14,9 @@ var alive := true
 
 var _label: Label3D
 var _mesh: MeshInstance3D
+var _material: StandardMaterial3D
+var _glow: MeshInstance3D
+var _light: OmniLight3D
 var _color := Color.WHITE
 
 
@@ -32,9 +35,20 @@ func setup(p_kind: String, p_name: String, p_ring: String, p_hp: float, size: Ve
 	shape.shape = bs
 	shape.position.y = size.y * 0.5
 	add_child(shape)
-	_mesh = Fx.box(size, color, 0.6)
+	_material = Fx.textured("concrete" if kind == "core" else "metal", 0.5)
+	_mesh = Fx.box_mat(size, _material)
 	_mesh.position.y = size.y * 0.5
 	add_child(_mesh)
+	# Bande lumineuse et lumière qui montrent que le bâtiment est alimenté.
+	_glow = Fx.box(Vector3(size.x + 0.05, 0.25, size.z + 0.05), color, 4.0)
+	_glow.position.y = size.y * 0.75
+	add_child(_glow)
+	_light = OmniLight3D.new()
+	_light.light_color = color
+	_light.light_energy = 1.5
+	_light.omni_range = 8.0 if kind == "core" else 5.0
+	_light.position.y = size.y + 0.5
+	add_child(_light)
 	_label = Label3D.new()
 	_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_label.font_size = 40
@@ -51,9 +65,13 @@ func take_damage(amount: float) -> void:
 	if not alive or Game.is_over:
 		return
 	hp = max(0.0, hp - amount)
+	if randf() < 0.3:
+		Sfx.play_at(Game.main, "structure_hit", global_position, -6.0, 0.2)
 	if hp <= 0.0:
 		alive = false
-		_mesh.material_override = Fx.material(Color(0.15, 0.15, 0.15))
+		_set_powered(false)
+		Fx.burst(Game.main, global_position + Vector3(0, 2, 0), Vector3.UP, Color(1.0, 0.6, 0.2), 40, 8.0, 0.12)
+		Sfx.play_at(Game.main, "structure_hit", global_position, 6.0)
 		destroyed.emit()
 		if kind == "core":
 			Game.end_game(false)
@@ -68,11 +86,17 @@ func repair(amount: float) -> float:
 	hp = min(max_hp, hp + amount)
 	if not alive and hp >= max_hp:
 		alive = true
-		_mesh.material_override = null
+		_set_powered(true)
 		restored.emit()
 		Game.say("%s réparé, l'anneau est de nouveau alimenté." % display_name)
 	_refresh()
 	return hp - before
+
+
+func _set_powered(on: bool) -> void:
+	_material.albedo_color = Color.WHITE if on else Color(0.3, 0.28, 0.26)
+	_glow.visible = on
+	_light.visible = on
 
 
 func _refresh() -> void:

@@ -2,7 +2,9 @@
 
 FPS + tower defense solo. Tu défends une base contre des vagues de zombies : tu poses des tours sur des ancrages et tu te bats toi-même en vue à la première personne.
 
-Ce dépôt contient le **premier prototype jouable**. Il sert à vérifier que le mélange FPS + tours est amusant avant d'ajouter du contenu. Les graphismes sont volontairement simples (formes de base).
+Ce dépôt contient le **premier prototype jouable**. Il sert à vérifier que le mélange FPS + tours est amusant avant d'ajouter du contenu.
+
+Côté ambiance, la partie se joue au crépuscule, dans le brouillard, avec des projecteurs et des barils en feu. Les textures sont réalistes (terre, boue, béton, métal rouillé). Les zombies ont une forme humaine animée : ils marchent, frappent, encaissent les tirs et tombent au sol. Les armes ont du recul, un flash, une visée et des sons, et tu as une lampe torche.
 
 ## Récupérer le jeu sur Windows (et le mettre à jour facilement)
 
@@ -29,6 +31,8 @@ Après une mise à jour avec GitHub Desktop, Godot recharge les fichiers tout se
 | ZQSD | Se déplacer (clavier AZERTY) |
 | Souris | Viser |
 | Clic gauche | Tirer |
+| Clic droit (maintenu) | Viser (plus précis, zoom) |
+| L | Allumer / éteindre la lampe torche |
 | & / é (ou 1 / 2) | Pistolet lourd / Fusil d'assaut |
 | R | Recharger |
 | Espace / Maj | Sauter / Courir |
@@ -57,6 +61,7 @@ Après une mise à jour avec GitHub Desktop, Godot recharge les fichiers tout se
   - la Brute, qui casse les tours et les relais ;
   - le Boss de siège.
 - **Implants** : après un siège, tu choisis 1 implant parmi 3. Chacun a un bonus et un malus.
+- **Tir à la tête** : x2 dégâts.
 - **Mort** : tu réapparais au Cœur après un délai qui s'allonge à chaque mort. La partie est perdue si le Cœur tombe.
 
 ## Organisation du code
@@ -74,7 +79,13 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 | `structure.gd` | Cœur et relais (bâtiments avec des PV) |
 | `scrap.gd` | Ferraille à ramasser |
 | `hud.gd` | Interface |
-| `fx.gd` | Formes, traînées de tir, textes flottants |
+| `fx.gd` | Matériaux réalistes, particules, flashs, traînées de tir, textes flottants |
+| `sfx.gd` | Sons (dans l'espace 3D ou à plat) |
+| `flicker.gd` | Lumières qui vacillent (feu, lampe de secours) |
+
+## Textures et sons
+
+Toutes les textures (`assets/textures`) et tous les sons (`assets/sounds`) sont générés par le script `tools/generate_assets.py`, à partir de bruit mathématique. Aucune ressource externe n'est utilisée, donc il n'y a aucun problème de droits. Pour les régénérer : `python tools/generate_assets.py` (il faut numpy et pillow).
 
 ## Test automatique
 
@@ -82,6 +93,12 @@ Une partie simulée (tours posées partout, joueur immobile) :
 
 ```
 godot --headless --fixed-fps 60 --path . res://tests/smoke_test.tscn
+```
+
+Des captures d'écran de quelques points de vue :
+
+```
+godot --path . res://tests/screenshot.tscn -- <dossier_de_sortie>
 ```
 
 Le concept complet du jeu est dans le document de conception du projet.

@@ -21,6 +21,10 @@ var _implant_box: VBoxContainer
 var _end_panel: PanelContainer
 var _end_label: Label
 var _message_time := 0.0
+var _cross: Label
+var _hit_time := 0.0
+var _vignette: ColorRect
+var _hurt := 0.0
 
 
 func _ready() -> void:
@@ -40,15 +44,37 @@ func _ready() -> void:
 	_help.anchor_right = 1.0
 	_help.offset_left = -330
 	_help.modulate = Color(1, 1, 1, 0.75)
-	_help.text = "ZQSD : bouger   Espace : sauter   Maj : courir\nClic gauche : tirer   & / é : changer d'arme   R : recharger\nF : marquer un zombie (les tours le ciblent, +25 %)\nE / C sur un ancrage : poser une tour\nE : améliorer   X : allumer/éteindre une tour\nMaintenir E sur un relais ou le Cœur : réparer\nEntrée : passer la préparation   Échap : libérer la souris\n\nCOMBO : Cryo gèle, pistolet lourd = BRISÉ (x3)"
-	var cross := _centered_label(0, 28, Color.WHITE)
-	cross.anchor_top = 0.5
-	cross.anchor_bottom = 0.5
-	cross.offset_top = -20
-	cross.text = "+"
+	_help.text = "ZQSD : bouger   Espace : sauter   Maj : courir\nClic gauche : tirer   & / é : changer d'arme   R : recharger\nClic droit : viser   L : lampe torche\nF : marquer un zombie (les tours le ciblent, +25 %)\nE / C sur un ancrage : poser une tour\nE : améliorer   X : allumer/éteindre une tour\nMaintenir E sur un relais ou le Cœur : réparer\nEntrée : passer la préparation   Échap : libérer la souris\n\nCOMBO : Cryo gèle, pistolet lourd = BRISÉ (x3)"
+	_vignette = ColorRect.new()
+	_vignette.set_anchors_preset(Control.PRESET_FULL_RECT)
+	_vignette.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var shader := Shader.new()
+	shader.code = """
+shader_type canvas_item;
+uniform float hurt = 0.0;
+void fragment() {
+	vec2 d = UV - vec2(0.5);
+	float edge = smoothstep(0.25, 0.75, length(d) * 1.2);
+	float dark = edge * 0.55;
+	vec3 col = mix(vec3(0.0), vec3(0.5, 0.0, 0.0), hurt);
+	COLOR = vec4(col, clamp(dark + edge * hurt * 0.8, 0.0, 1.0));
+}
+"""
+	var sm := ShaderMaterial.new()
+	sm.shader = shader
+	_vignette.material = sm
+	add_child(_vignette)
+	move_child(_vignette, 0)
+	_cross = _centered_label(0, 28, Color.WHITE)
+	_cross.anchor_top = 0.5
+	_cross.anchor_bottom = 0.5
+	_cross.offset_top = -20
+	_cross.text = "+"
 	_build_implant_panel()
 	_build_end_panel()
 	Game.message.connect(_on_message)
+	Game.hit_marker.connect(_on_hit)
+	Game.player_hurt.connect(func(amount: float): _hurt = min(1.0, _hurt + amount / 25.0))
 	Game.ended.connect(_on_ended)
 
 
@@ -72,9 +98,23 @@ func _process(delta: float) -> void:
 			implants += "  [%s]" % Game.IMPLANTS[id]["name"]
 		_bottom.text = "PV : %d / %d     %s : %s\nImplants :%s" % [int(max(p.hp, 0)), int(p.max_hp), w["name"], ammo_text, implants if implants != "" else " aucun"]
 	_hint.text = Game.hint
+	_hurt = move_toward(_hurt, 0.0, delta * 0.8)
+	(_vignette.material as ShaderMaterial).set_shader_parameter("hurt", _hurt)
+	if _hit_time > 0.0:
+		_hit_time -= delta
+		if _hit_time <= 0.0:
+			_cross.text = "+"
+			_cross.modulate = Color.WHITE
+	_cross.visible = not (p and p.aiming)
 	if _message_time > 0.0:
 		_message_time -= delta
 		_message.modulate.a = clamp(_message_time, 0.0, 1.0)
+
+
+func _on_hit(kill: bool) -> void:
+	_cross.text = "X"
+	_cross.modulate = Color(1, 0.25, 0.2) if kill else Color(1, 1, 1)
+	_hit_time = 0.12
 
 
 func _on_message(text: String) -> void:

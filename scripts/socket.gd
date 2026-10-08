@@ -17,12 +17,21 @@ func setup(p_ring: String) -> void:
 	shape.shape = cs
 	shape.position.y = 0.2
 	add_child(shape)
-	var pad := Fx.cylinder(1.2, 0.3, Color(0.35, 0.4, 0.5))
+	var pad_mesh := CylinderMesh.new()
+	pad_mesh.top_radius = 1.2
+	pad_mesh.bottom_radius = 1.3
+	pad_mesh.height = 0.3
+	pad_mesh.radial_segments = 16
+	var pad := Fx.mesh_with(pad_mesh, Fx.textured("concrete", 0.5))
 	pad.position.y = 0.15
 	add_child(pad)
-	var ring_mark := Fx.cylinder(0.3, 0.32, Color(0.3, 0.8, 1.0), 1.5)
-	ring_mark.position.y = 0.16
-	add_child(ring_mark)
+	# Repères lumineux discrets pour voir où construire.
+	for i in 4:
+		var mark := Fx.box(Vector3(0.12, 0.04, 0.4), Color(1.0, 0.75, 0.2), 2.0)
+		var a := i * PI * 0.5
+		mark.position = Vector3(cos(a) * 0.9, 0.31, sin(a) * 0.9)
+		mark.rotation.y = -a + PI * 0.5
+		add_child(mark)
 
 
 func build(type: String) -> void:

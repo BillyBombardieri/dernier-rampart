@@ -31,6 +31,7 @@ func _enter(phase: String, duration: float) -> void:
 			var label := "NUIT DE SIÈGE" if is_siege(Game.wave) else "Vague %d" % Game.wave
 			Game.say("%s dans %d s. Construis tes défenses (Entrée pour lancer)." % [label, int(duration)])
 		"assault":
+			Sfx.play(self, "siren", -8.0, 0.0)
 			_queue = _build_queue(Game.wave)
 			_spawn_cd = 0.0
 			Game.say("NUIT DE SIÈGE : un boss arrive !" if is_siege(Game.wave) else "Vague %d : ils arrivent !" % Game.wave)
@@ -105,9 +106,9 @@ func _spawn(type: String) -> void:
 	Game.main.add_child(z)
 	z.global_position = portal + Vector3(randf_range(-2.5, 2.5), 0.2, randf_range(-1.5, 1.5))
 	z.setup(type, 1.0 + 0.15 * (Game.wave - 1))
-	z.tree_exited.connect(_on_zombie_gone.bind(z))
+	z.died.connect(_on_zombie_died)
 	_alive += 1
 
 
-func _on_zombie_gone(_z: Zombie) -> void:
+func _on_zombie_died(_z: Zombie) -> void:
 	_alive -= 1
