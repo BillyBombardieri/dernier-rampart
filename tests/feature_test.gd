@@ -443,7 +443,7 @@ func _test_upgrades() -> void:
 	_check(Settings.insignes == 1 + 3 + 6 and Upgrades.rank("vitalite") == 0, "tout rembourser rend les insignes (%d)" % Settings.insignes)
 	p.apply_implants()
 	_check(Upgrades.earned(0, 5, false) == 5, "défaite à la vague 6 du niveau 1 : 5 insignes")
-	_check(Upgrades.earned(3, 10, true) == 50, "victoire au niveau 4 : 30 + 20 insignes")
+	_check(Upgrades.earned(19, 10, true) == 24, "victoire au dernier niveau : 19 + 5 insignes")
 	Settings.load_settings()  # Relit le fichier de test : les achats y sont bien enregistrés.
 	_check(Settings.insignes == 10 and Upgrades.rank("vitalite") == 0, "insignes et améliorations sauvegardés")
 	Settings.insignes = 0
@@ -456,17 +456,28 @@ func _test_levels() -> void:
 	_check(not Settings.finish_level(0, false, 4) and Settings.unlocked_level == 0, "une défaite ne débloque rien")
 	_check(Settings.finish_level(0, true, 15) and Settings.unlocked_level == 1, "gagner le niveau 1 débloque le niveau 2")
 	_check(not Settings.finish_level(0, true, 15), "le regagner ne débloque rien de plus")
+	Settings.unlocked_level = 4
+	_check(Settings.finish_level(4, true, 15) and Levels.chapter_index(Settings.unlocked_level) == 1, "gagner le niveau 5 ouvre le chapitre 2")
+	_check(Levels.count() == 20 and Levels.title(7) == "Le Marais, niveau 3" and Levels.short(7) == "2-3", "4 chapitres de 5 niveaux")
 	var wm: WaveManager = _main.get_node("WaveManager")
 	var easy := wm._build_queue(1).size()
-	Game.level = 3
+	Game.level = Levels.count() - 1
 	var hard := wm._build_queue(1).size()
-	_check(hard > easy, "plus de zombies au niveau 4 (%d contre %d à la vague 1)" % [hard, easy])
+	_check(hard > easy, "plus de zombies au dernier niveau (%d contre %d à la vague 1)" % [hard, easy])
 	var bosses := wm._build_queue(10).count("boss")
-	_check(bosses == 2, "deux boss à la dernière vague du niveau 4")
-	# Chaque niveau se construit et ses zombies suivent le chemin jusqu'à la première barrière.
+	_check(bosses == 2, "deux boss à la dernière vague du dernier niveau")
+	var prev := 0.0
+	var rising := true
+	for i in Levels.count():
+		var d := Levels.difficulty(i)
+		rising = rising and d["hp"] > prev
+		prev = d["hp"]
+	_check(rising, "chaque niveau a des zombies plus solides que le précédent")
+	# Chaque chapitre se construit et ses zombies suivent le chemin jusqu'à la première barrière.
 	_main.queue_free()
 	await _frames(2)
-	for i in Levels.count():
+	for ch in Levels.CHAPTERS.size():
+		var i := ch * Levels.PER_CHAPTER
 		Game.level = i
 		_main = load("res://scenes/main.tscn").instantiate()
 		add_child(_main)
@@ -475,7 +486,7 @@ func _test_levels() -> void:
 				c.free()
 		Game.tutorial_hold = true
 		await _frames(2)
-		var name: String = Levels.get_level(i)["name"]
+		var name: String = Levels.chapter(i)["name"]
 		var sockets := _main.get_children().filter(func(c): return c is Socket).size()
 		_check(get_tree().get_nodes_in_group("gates").size() == 2 and sockets == 9, "%s : 2 barrières et 9 ancrages" % name)
 		var gate := _gate("avant")

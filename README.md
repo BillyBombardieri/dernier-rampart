@@ -35,22 +35,24 @@ Dans les **réglages** (aussi accessibles en partie avec **Échap**) :
 
 Tout est sauvegardé dans `reglages.cfg`, dans le dossier de sauvegarde de Godot (`%APPDATA%\Godot\app_userdata\Dernier Rempart` sous Windows) : réglages, touches, tutoriel déjà fait, record, niveaux débloqués, insignes et améliorations.
 
-## Les 4 niveaux
+## Chapitres et niveaux
 
-Chaque niveau a sa propre carte (chemin, barrières, ancrages, décor) et sa propre ambiance. Ils se débloquent l'un après l'autre : **gagner un niveau ouvre le suivant**. Chaque niveau est plus dur que le précédent : plus de zombies, plus solides, qui frappent plus fort, et les zombies spéciaux arrivent plus tôt. Les zombies ne vont **jamais plus vite** d'un niveau à l'autre.
+Le jeu compte **4 chapitres de 5 niveaux**. Chaque chapitre a sa propre carte (chemin, barrières, ancrages, décor) et sa propre ambiance. Les 5 niveaux d'un chapitre se jouent sur la même carte, chacun un peu plus dur que le précédent. **Gagner un niveau débloque le suivant**, et gagner le **5e niveau** ouvre le **chapitre suivant**. Les zombies ne vont **jamais plus vite** d'un niveau à l'autre : ils sont plus nombreux, plus solides, frappent plus fort et apparaissent un peu plus serrés.
 
-| Niveau | Environnement | Difficulté |
-|---|---|---|
-| 1 · La Brèche | Terrain vague au crépuscule, voitures rouillées, arbres morts | Normale |
-| 2 · Le Marais | Marécage noyé de brume, mares noires, roseaux, lucioles | PV x1,15, dégâts x1,1, +15 % de zombies, spéciaux 1 vague plus tôt |
-| 3 · La Raffinerie | Zone industrielle, conteneurs, cuves, projecteurs au sodium, cendres | PV x1,3, dégâts x1,2, +30 % de zombies, spéciaux 1 vague plus tôt, 2 boss à la vague 10 |
-| 4 · Le Col Gelé | Village de montagne en ruine, sapins, blizzard | PV x1,5, dégâts x1,3, +45 % de zombies, spéciaux 2 vagues plus tôt, 2 boss à la vague 10 |
+| Chapitre | Environnement |
+|---|---|
+| 1 · La Brèche | Terrain vague au crépuscule, voitures rouillées, arbres morts (la carte d'origine) |
+| 2 · Le Marais | Marécage noyé de brume, mares noires, roseaux, lucioles |
+| 3 · La Raffinerie | Zone industrielle, conteneurs, cuves, projecteurs au sodium, cendres qui tombent |
+| 4 · Le Col Gelé | Village de montagne en ruine, sapins enneigés, neige qui tombe |
 
-Après une victoire, le bouton **NIVEAU SUIVANT** lance directement le niveau débloqué.
+Du niveau 1 au niveau 20, les zombies passent de x1 à x1,42 de PV, de x1 à x1,25 de dégâts et de x1 à x1,4 en nombre. À partir du niveau 9, les zombies spéciaux arrivent une vague plus tôt, et à partir du niveau 11 la dernière Nuit de siège amène **deux boss**. Le niveau 1 est exactement le jeu d'origine.
+
+Après une victoire, le bouton **NIVEAU SUIVANT** lance directement le niveau débloqué. En partie, le panneau du haut affiche le niveau sous la forme « NIV. 2-3 » (chapitre 2, niveau 3).
 
 ## Améliorations permanentes
 
-Chaque partie rapporte des **insignes ★** : 1 par vague repoussée (x1,5 au niveau 2, x2 au niveau 3, x3 au niveau 4), plus une prime en cas de victoire (5 x le numéro du niveau). Tu les dépenses dans **AMÉLIORATIONS**, au menu principal. Elles restent d'une partie à l'autre. Les bonus sont modestes, pour que le jeu reste un défi :
+Chaque partie rapporte des **insignes ★** : 1 par vague repoussée, un peu plus dans les niveaux durs (x1 au niveau 1, jusqu'à x1,95 au niveau 20), plus 5 en cas de victoire. Tu les dépenses dans **AMÉLIORATIONS**, au menu principal. Elles restent d'une partie à l'autre. Les bonus sont modestes, pour que le jeu reste un défi :
 
 | Amélioration | Par rang | Rangs | Prix |
 |---|---|---|---|
@@ -111,7 +113,7 @@ Toutes les touches se changent dans **Réglages → Touches**.
 
 ## Ce que contient le prototype
 
-- **4 niveaux**, chacun sur sa carte : un portail, un chemin, deux avant-postes sur le chemin (Avant-poste et Muraille) et le Cœur.
+- **4 chapitres de 5 niveaux**, chaque chapitre sur sa carte : un portail, un chemin, deux avant-postes sur le chemin (Avant-poste et Muraille) et le Cœur.
 - **Phases** : Préparation → Assaut → Récolte, sur **10 vagues**. Les vagues 5 et 10 sont des **Nuits de siège** avec un boss.
 - **Deux ressources** :
   - la **ferraille**, laissée au sol par les zombies : il faut aller la ramasser, et elle disparaît à la fin de la récolte. Chaque vague repoussée rapporte aussi une prime (10 + 5 x le numéro de la vague) ;
@@ -195,9 +197,9 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 | `settings.gd` | Réglages (autoload `Settings`) : sensibilité, volume, touches, tutoriel, record |
 | `menu.gd` | Menu principal |
 | `level_panel.gd`, `upgrade_panel.gd` | Fenêtres du choix du niveau et des améliorations permanentes |
-| `levels.gd` | Les 4 niveaux : chemin, barrières, ancrages, ambiance, décor, météo et difficulté |
+| `levels.gd` | Les 4 chapitres (chemin, barrières, ancrages, ambiance, décor, météo) et la difficulté des 20 niveaux |
 | `upgrades.gd` | Améliorations permanentes et calcul des insignes |
-| `main.gd` | Construction de la carte du niveau : ambiance, chemin, avant-postes (barrières et ancrages), établi, Cœur, décor et météo |
+| `main.gd` | Construction de la carte du chapitre : ambiance, chemin, avant-postes (barrières et ancrages), établi, Cœur, décor et météo |
 | `wave_manager.gd` | Phases et composition des vagues |
 | `player.gd` | Joueur FPS : tir, munitions spéciales, marquage, construction, réparation |
 | `tower.gd`, `socket.gd` | Les 6 tours et leurs ancrages |
@@ -244,13 +246,13 @@ Ajoute `-- --only rodeur,pistolet` pour ne refaire que certains modèles, et `--
 
 ## Tests automatiques
 
-Une partie simulée de 10 vagues (tours posées partout, joueur immobile, Cœur presque indestructible). Ajoute `-- 2` (ou 3, 4) pour la jouer sur un autre niveau :
+Une partie simulée de 10 vagues (tours posées partout, joueur immobile, Cœur presque indestructible). Ajoute `-- 7` (de 1 à 20) pour la jouer sur un autre niveau :
 
 ```
 godot --headless --fixed-fps 60 --path . res://tests/smoke_test.tscn
 ```
 
-Les fonctionnalités une par une (barres de vie, barrières et réparation en maintenant E, combos, zombies, tours, Phare, santé entre les vagues, établi, gadgets, touches, score, menus, améliorations permanentes, les 4 niveaux) :
+Les fonctionnalités une par une (barres de vie, barrières et réparation en maintenant E, combos, zombies, tours, Phare, santé entre les vagues, établi, gadgets, touches, score, menus, améliorations permanentes, déblocage des niveaux et des chapitres, les 4 cartes) :
 
 ```
 godot --headless --fixed-fps 60 --path . res://tests/feature_test.tscn

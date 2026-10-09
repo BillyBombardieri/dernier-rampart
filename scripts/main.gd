@@ -1,5 +1,5 @@
 extends Node3D
-## Construit la carte du niveau choisi (Levels) : ambiance, portail, couloir, deux avant-postes
+## Construit la carte du chapitre du niveau choisi (Levels) : ambiance, portail, couloir, deux avant-postes
 ## (Avant-poste, Muraille) qui sont chacun une barrière en travers du chemin entourée d'ancrages
 ## pour les tours, le Cœur, l'établi, le décor et la météo.
 
@@ -27,8 +27,8 @@ var _weather: CPUParticles3D
 func _ready() -> void:
 	Game.reset()
 	Game.main = self
-	_rng.seed = 2026 + Game.level
-	level = Levels.get_level(Game.level)
+	_rng.seed = 2026 + Levels.chapter_index(Game.level)
+	level = Levels.chapter(Game.level)
 	for p in level["path"]:
 		path_points.append(p)
 	_build_environment()

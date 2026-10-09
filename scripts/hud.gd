@@ -386,7 +386,7 @@ func _process(delta: float) -> void:
 			Ui.pop_in(_help_panel, _help_panel, 0.15)
 
 	var siege := Game.wave % WaveManager.SIEGE_EVERY == 0
-	_wave_label.text = "NIV. %d · VAGUE %d / %d%s" % [Game.level + 1, Game.wave, Game.LAST_WAVE, "  ☠ SIÈGE" if siege else ""]
+	_wave_label.text = "NIV. %s · VAGUE %d / %d%s" % [Levels.short(Game.level), Game.wave, Game.LAST_WAVE, "  ☠ SIÈGE" if siege else ""]
 	_wave_label.add_theme_color_override("font_color", DANGER if siege else Color.WHITE)
 	var phase_name: String = PHASE_NAMES.get(Game.phase, Game.phase)
 	if wave_manager and Game.phase in ["prep", "harvest"]:
@@ -583,13 +583,17 @@ func _pick_implant(id: String) -> void:
 
 
 func _on_ended(victory: bool) -> void:
-	var level_name: String = Levels.get_level(Game.level)["name"]
+	var level_name := Levels.title(Game.level)
 	_end_label.text = ("VICTOIRE !\n%s : tu as tenu les %d vagues." % [level_name, Game.LAST_WAVE]) if victory else ("LE CŒUR EST TOMBÉ\n%s : tu as tenu jusqu'à la vague %d." % [level_name, Game.wave])
 	_end_label.add_theme_color_override("font_color", ACCENT if victory else DANGER)
 	var record := "NOUVEAU RECORD !" if Game.new_record else "Record : %d points" % Settings.best_score
 	var progress := "+%d insignes ★ (%d à dépenser dans Améliorations)" % [Game.earned_insignes, Settings.insignes]
 	if Game.unlocked_next:
-		progress += "\nNiveau débloqué : %s !" % Levels.get_level(Game.level + 1)["name"]
+		var next := Game.level + 1
+		if Levels.step(next) == 0:
+			progress += "\nNouveau chapitre débloqué : %s !" % Levels.chapter(next)["name"]
+		else:
+			progress += "\nNiveau suivant débloqué : %s" % Levels.title(next)
 	_end_score.text = "Score : %d points  ·  %d zombies abattus\n%s\n%s\n\n[%s] recommencer" % [Game.score, Game.kills, record, progress, Settings.key_label("skip_phase")]
 	_next_button.visible = victory and Game.level + 1 < Levels.count()
 	_end_score.add_theme_color_override("font_color", ACCENT if Game.new_record else Color(0.9, 0.9, 0.9))

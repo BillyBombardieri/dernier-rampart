@@ -24,7 +24,7 @@ func _ready() -> void:
 	var title := Ui.label(_main_box, "DERNIER REMPART", 64, Color(0.95, 0.92, 0.88), HORIZONTAL_ALIGNMENT_CENTER)
 	title.add_theme_constant_override("outline_size", 10)
 	title.add_theme_color_override("font_outline_color", Color(0.25, 0.02, 0.0, 0.9))
-	Ui.label(_main_box, "Tiens la base face aux zombies. 4 niveaux. Aucun renfort.", 17, Color(0.85, 0.75, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
+	Ui.label(_main_box, "Tiens la base face aux zombies. 4 chapitres, 20 niveaux. Aucun renfort.", 17, Color(0.85, 0.75, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0, 18)
 	_main_box.add_child(gap)

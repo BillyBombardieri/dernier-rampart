@@ -1,16 +1,15 @@
 class_name Levels
 extends RefCounted
-## Les niveaux : chacun a sa carte (chemin, barrières, ancrages, décor), son ambiance et sa
-## difficulté. Ils se débloquent l'un après l'autre : gagner un niveau ouvre le suivant.
-## Le Cœur est toujours au même endroit (0, 0, 35), avec la même base autour (établi, murets) :
-## le dernier point du chemin est donc toujours (0, 0, 30).
-##
-## Difficulté (multiplie les valeurs de la vague) : PV, dégâts, nombre de zombies, temps entre
-## deux apparitions ; "early" = les zombies spéciaux arrivent autant de vagues plus tôt ;
-## "bosses" = nombre de boss à la dernière Nuit de siège ; "points" = multiplicateur des insignes.
-## La vitesse des zombies ne change jamais d'un niveau à l'autre : ils restent lents.
+## Les chapitres et leurs niveaux. Chaque chapitre a sa carte (chemin, barrières, ancrages, décor),
+## son ambiance et sa météo, et compte 5 niveaux de plus en plus durs sur cette même carte.
+## Gagner un niveau débloque le suivant ; gagner le 5e niveau d'un chapitre ouvre le chapitre
+## suivant. Un niveau est repéré par son numéro global (0 = chapitre 1 niveau 1, 5 = chapitre 2
+## niveau 1...). Le Cœur est toujours au même endroit (0, 0, 35), avec la même base autour
+## (établi, murets) : le dernier point du chemin est donc toujours (0, 0, 30).
 
-const LEVELS := [
+const PER_CHAPTER := 5
+
+const CHAPTERS := [
 	{
 		"name": "La Brèche",
 		"place": "Terrain vague, au crépuscule",
@@ -43,7 +42,6 @@ const LEVELS := [
 		"barrels": [Vector3(-4, 0, 31), Vector3(16, 0, 2), Vector3(-22, 0, -26), Vector3(9.5, 0, -44.5)],
 		"props": {"count": 70, "rock": 5, "tree": 3, "wreck": 2},
 		"weather": "",
-		"difficulty": {"hp": 1.0, "damage": 1.0, "count": 1.0, "spawn": 1.0, "early": 0, "bosses": 1, "points": 1.0},
 	},
 	{
 		"name": "Le Marais",
@@ -77,7 +75,6 @@ const LEVELS := [
 		"barrels": [Vector3(-4, 0, 31), Vector3(-22, 0, -22), Vector3(-34, 0, -38), Vector3(-8, 0, 8)],
 		"props": {"count": 95, "tree": 4, "pool": 3, "reeds": 4, "rock": 1},
 		"weather": "fireflies",
-		"difficulty": {"hp": 1.15, "damage": 1.1, "count": 1.15, "spawn": 0.95, "early": 1, "bosses": 1, "points": 1.5},
 	},
 	{
 		"name": "La Raffinerie",
@@ -112,7 +109,6 @@ const LEVELS := [
 		"barrels": [Vector3(-4, 0, 31), Vector3(34, 0, -20), Vector3(0, 0, -30), Vector3(36, 0, -50), Vector3(20, 0, 16)],
 		"props": {"count": 55, "container": 5, "tank": 2, "wreck": 2, "rock": 1},
 		"weather": "ash",
-		"difficulty": {"hp": 1.3, "damage": 1.2, "count": 1.3, "spawn": 0.9, "early": 1, "bosses": 2, "points": 2.0},
 	},
 	{
 		"name": "Le Col Gelé",
@@ -125,8 +121,8 @@ const LEVELS := [
 		"rings": {
 			"avant": {"gate": Vector3(5, 0, -36), "segment": 1, "hp": 600.0,
 				"sockets": [Vector3(1, 0, -41.5), Vector3(9, 0, -30.5), Vector3(-5, 0, -30.5), Vector3(14, 0, -41.5)]},
-			"muraille": {"gate": Vector3(10, 0, 13), "segment": 6, "hp": 900.0,
-				"sockets": [Vector3(4.5, 0, 15), Vector3(15.5, 0, 11), Vector3(16, 0, 22), Vector3(3, 0, 0), Vector3(-5.5, 0, 21)]},
+			"muraille": {"gate": Vector3(2, 0, 6.15), "segment": 5, "hp": 900.0,
+				"sockets": [Vector3(-1, 0, 12), Vector3(5, 0, 0.5), Vector3(-5, 0, -1), Vector3(4.5, 0, 15), Vector3(15.5, 0, 13)]},
 		},
 		"env": {
 			"sky_top": Color(0.01, 0.02, 0.05), "sky_horizon": Color(0.13, 0.16, 0.23), "ground_horizon": Color(0.2, 0.22, 0.27),
@@ -146,18 +142,52 @@ const LEVELS := [
 		"barrels": [Vector3(-4, 0, 31), Vector3(-22, 0, -20), Vector3(24, 0, -14), Vector3(-4, 0, -46)],
 		"props": {"count": 85, "pine": 6, "ruin": 2, "rock": 2, "wreck": 1},
 		"weather": "snow",
-		"difficulty": {"hp": 1.5, "damage": 1.3, "count": 1.45, "spawn": 0.85, "early": 2, "bosses": 2, "points": 3.0},
 	},
 ]
 
 
+## Nombre total de niveaux (tous chapitres).
 static func count() -> int:
-	return LEVELS.size()
+	return CHAPTERS.size() * PER_CHAPTER
 
 
-static func get_level(index: int) -> Dictionary:
-	return LEVELS[clampi(index, 0, LEVELS.size() - 1)]
+static func chapter_index(level: int) -> int:
+	return clampi(level, 0, count() - 1) / PER_CHAPTER
 
 
-static func difficulty(index: int) -> Dictionary:
-	return get_level(index)["difficulty"]
+## Numéro du niveau dans son chapitre, de 0 à 4.
+static func step(level: int) -> int:
+	return clampi(level, 0, count() - 1) % PER_CHAPTER
+
+
+## La carte (chapitre) d'un niveau.
+static func chapter(level: int) -> Dictionary:
+	return CHAPTERS[chapter_index(level)]
+
+
+## « La Brèche, niveau 3 ».
+static func title(level: int) -> String:
+	return "%s, niveau %d" % [chapter(level)["name"], step(level) + 1]
+
+
+## Repère court pour le HUD : « 1-3 » (chapitre-niveau).
+static func short(level: int) -> String:
+	return "%d-%d" % [chapter_index(level) + 1, step(level) + 1]
+
+
+## Difficulté d'un niveau, qui monte un peu à chaque niveau, du premier (le jeu d'origine)
+## au dernier. Multiplie les valeurs de la vague : PV, dégâts, nombre de zombies, temps entre
+## deux apparitions. "early" = les zombies spéciaux arrivent autant de vagues plus tôt ;
+## "bosses" = boss à la dernière Nuit de siège ; "points" = multiplicateur des insignes.
+## La vitesse des zombies ne change jamais : ils restent lents.
+static func difficulty(level: int) -> Dictionary:
+	var g := float(clampi(level, 0, count() - 1))
+	return {
+		"hp": 1.0 + 0.022 * g,
+		"damage": 1.0 + 0.013 * g,
+		"count": 1.0 + 0.021 * g,
+		"spawn": 1.0 - 0.005 * g,
+		"early": 1 if g >= 8 else 0,
+		"bosses": 2 if g >= 10 else 1,
+		"points": 1.0 + 0.05 * g,
+	}

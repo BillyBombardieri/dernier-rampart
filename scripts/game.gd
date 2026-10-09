@@ -69,7 +69,7 @@ var deaths := 0
 var hint := ""
 var portal_reveal := 1.0  # 1 = colonne et flèche du portail visibles (début de partie), 0 = discret.
 var tutorial_hold := false  # Le tutoriel bloque le compte à rebours de la première préparation.
-var level := 0  # Niveau joué (index dans Levels.LEVELS), choisi dans le menu. Garde sa valeur d'une partie à l'autre.
+var level := 0  # Niveau joué (numéro global, voir Levels), choisi dans le menu. Garde sa valeur d'une partie à l'autre.
 var score := 0
 var kills := 0
 var new_record := false

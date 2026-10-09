@@ -14,8 +14,8 @@ const LIST := {
 	"recuperation": {"name": "Récupération", "desc": "+10 % de prime de vague", "per": 0.1, "costs": [3, 6, 9]},
 	"dynamo": {"name": "Dynamo", "desc": "+1 énergie pour les tours", "per": 1.0, "costs": [6, 12]},
 }
-# Insignes gagnés : 1 par vague repoussée (x le multiplicateur du niveau), plus une prime de
-# victoire de 5 x numéro du niveau.
+# Insignes gagnés : 1 par vague repoussée (x le multiplicateur du niveau, de 1 à 1,95), plus 5
+# en cas de victoire.
 const VICTORY_INSIGNES := 5
 
 
@@ -75,5 +75,5 @@ static func earned(level: int, waves_cleared: int, victory: bool) -> int:
 	var mult: float = Levels.difficulty(level)["points"]
 	var total := int(floor(waves_cleared * mult))
 	if victory:
-		total += VICTORY_INSIGNES * (level + 1)
+		total += VICTORY_INSIGNES
 	return total
