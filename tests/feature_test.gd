@@ -34,6 +34,8 @@ func _ready() -> void:
 	await _test_gadgets()
 	await _test_settings()
 	await _test_score_and_menus()
+	await _test_upgrades()
+	await _test_levels()
 	print("RÉSULTAT : %d réussis, %d échoués" % [_passed, _failed])
 	get_tree().quit(1 if _failed > 0 else 0)
 
@@ -423,3 +425,64 @@ func _test_score_and_menus() -> void:
 	_check(buttons.size() >= 4, "menu principal : %d boutons" % buttons.size())
 	menu.queue_free()
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+
+
+func _test_upgrades() -> void:
+	print("Améliorations permanentes")
+	Settings.insignes = 20
+	_check(Upgrades.buy("vitalite") and Upgrades.rank("vitalite") == 1 and Settings.insignes == 17, "acheter Vitalité rang 1 coûte 3 insignes")
+	_check(is_equal_approx(Upgrades.mult("vitalite"), 1.06), "Vitalité rang 1 : +6 % de PV")
+	var p := Game.player as Player
+	p.apply_implants()
+	_check(is_equal_approx(p.max_hp, 106.0), "le joueur a 106 PV max (%.0f)" % p.max_hp)
+	Upgrades.buy("dynamo")
+	_check(Game.energy_cap() == Game.ENERGY_BASE + 2 * Game.generator + 1, "Dynamo : +1 énergie")
+	Settings.insignes = 1
+	_check(not Upgrades.buy("armurier"), "impossible d'acheter sans assez d'insignes")
+	Upgrades.refund_all()
+	_check(Settings.insignes == 1 + 3 + 6 and Upgrades.rank("vitalite") == 0, "tout rembourser rend les insignes (%d)" % Settings.insignes)
+	p.apply_implants()
+	_check(Upgrades.earned(0, 5, false) == 5, "défaite à la vague 6 du niveau 1 : 5 insignes")
+	_check(Upgrades.earned(3, 10, true) == 50, "victoire au niveau 4 : 30 + 20 insignes")
+	Settings.load_settings()  # Relit le fichier de test : les achats y sont bien enregistrés.
+	_check(Settings.insignes == 10 and Upgrades.rank("vitalite") == 0, "insignes et améliorations sauvegardés")
+	Settings.insignes = 0
+
+
+func _test_levels() -> void:
+	print("Niveaux")
+	Settings.unlocked_level = 0
+	Settings.levels_won = []
+	_check(not Settings.finish_level(0, false, 4) and Settings.unlocked_level == 0, "une défaite ne débloque rien")
+	_check(Settings.finish_level(0, true, 15) and Settings.unlocked_level == 1, "gagner le niveau 1 débloque le niveau 2")
+	_check(not Settings.finish_level(0, true, 15), "le regagner ne débloque rien de plus")
+	var wm: WaveManager = _main.get_node("WaveManager")
+	var easy := wm._build_queue(1).size()
+	Game.level = 3
+	var hard := wm._build_queue(1).size()
+	_check(hard > easy, "plus de zombies au niveau 4 (%d contre %d à la vague 1)" % [hard, easy])
+	var bosses := wm._build_queue(10).count("boss")
+	_check(bosses == 2, "deux boss à la dernière vague du niveau 4")
+	# Chaque niveau se construit et ses zombies suivent le chemin jusqu'à la première barrière.
+	_main.queue_free()
+	await _frames(2)
+	for i in Levels.count():
+		Game.level = i
+		_main = load("res://scenes/main.tscn").instantiate()
+		add_child(_main)
+		for c in _main.get_children():
+			if c is Tutorial:
+				c.free()
+		Game.tutorial_hold = true
+		await _frames(2)
+		var name: String = Levels.get_level(i)["name"]
+		var sockets := _main.get_children().filter(func(c): return c is Socket).size()
+		_check(get_tree().get_nodes_in_group("gates").size() == 2 and sockets == 9, "%s : 2 barrières et 9 ancrages" % name)
+		var gate := _gate("avant")
+		var z := _spawn("rodeur", _main.path_points[0] + Vector3(0, 0.2, 0))
+		var start := z.global_position.distance_to(gate.global_position)
+		await _seconds(22.0)
+		_check(gate.hp < gate.max_hp, "%s : le rôdeur suit le chemin et tape la barrière (%.0f m au départ)" % [name, start])
+		_main.queue_free()
+		await _frames(2)
+	Game.level = 0

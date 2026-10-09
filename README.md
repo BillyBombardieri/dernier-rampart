@@ -26,14 +26,43 @@ Après une mise à jour avec GitHub Desktop, Godot recharge les fichiers tout se
 
 ## Menu principal et réglages
 
-Le jeu s'ouvre sur le **menu principal** : **JOUER**, **TUTORIEL** (rejoue le tutoriel guidé), **RÉGLAGES** et **QUITTER**. Ton **record** (meilleur score et vague atteinte) s'affiche en dessous.
+Le jeu s'ouvre sur le **menu principal** : **JOUER** (choix du niveau), **AMÉLIORATIONS** (améliorations permanentes), **TUTORIEL** (rejoue le tutoriel guidé), **RÉGLAGES** et **QUITTER**. Ton **record** (meilleur score et vague atteinte), les niveaux débloqués et tes insignes s'affichent en dessous.
 
 Dans les **réglages** (aussi accessibles en partie avec **Échap**) :
 
 - **Sensibilité de la souris**, **volume général**, **champ de vision** et **inverser l'axe vertical** ;
 - **Touches** : clique sur une action, puis appuie sur la nouvelle touche ou le bouton de souris (Échap pour annuler). Si la touche sert déjà à une autre action, les deux actions échangent leurs touches. **Touches par défaut** remet tout comme au départ.
 
-Tout est sauvegardé dans `reglages.cfg`, dans le dossier de sauvegarde de Godot (`%APPDATA%\Godot\app_userdata\Dernier Rempart` sous Windows) : réglages, touches, tutoriel déjà fait et record.
+Tout est sauvegardé dans `reglages.cfg`, dans le dossier de sauvegarde de Godot (`%APPDATA%\Godot\app_userdata\Dernier Rempart` sous Windows) : réglages, touches, tutoriel déjà fait, record, niveaux débloqués, insignes et améliorations.
+
+## Les 4 niveaux
+
+Chaque niveau a sa propre carte (chemin, barrières, ancrages, décor) et sa propre ambiance. Ils se débloquent l'un après l'autre : **gagner un niveau ouvre le suivant**. Chaque niveau est plus dur que le précédent : plus de zombies, plus solides, qui frappent plus fort, et les zombies spéciaux arrivent plus tôt. Les zombies ne vont **jamais plus vite** d'un niveau à l'autre.
+
+| Niveau | Environnement | Difficulté |
+|---|---|---|
+| 1 · La Brèche | Terrain vague au crépuscule, voitures rouillées, arbres morts | Normale |
+| 2 · Le Marais | Marécage noyé de brume, mares noires, roseaux, lucioles | PV x1,15, dégâts x1,1, +15 % de zombies, spéciaux 1 vague plus tôt |
+| 3 · La Raffinerie | Zone industrielle, conteneurs, cuves, projecteurs au sodium, cendres | PV x1,3, dégâts x1,2, +30 % de zombies, spéciaux 1 vague plus tôt, 2 boss à la vague 10 |
+| 4 · Le Col Gelé | Village de montagne en ruine, sapins, blizzard | PV x1,5, dégâts x1,3, +45 % de zombies, spéciaux 2 vagues plus tôt, 2 boss à la vague 10 |
+
+Après une victoire, le bouton **NIVEAU SUIVANT** lance directement le niveau débloqué.
+
+## Améliorations permanentes
+
+Chaque partie rapporte des **insignes ★** : 1 par vague repoussée (x1,5 au niveau 2, x2 au niveau 3, x3 au niveau 4), plus une prime en cas de victoire (5 x le numéro du niveau). Tu les dépenses dans **AMÉLIORATIONS**, au menu principal. Elles restent d'une partie à l'autre. Les bonus sont modestes, pour que le jeu reste un défi :
+
+| Amélioration | Par rang | Rangs | Prix |
+|---|---|---|---|
+| Vitalité | +6 % de points de vie | 3 | 3, 6, 10 |
+| Armurier | +5 % de dégâts aux armes | 3 | 4, 8, 12 |
+| Ingénieur | +5 % de dégâts des tours | 3 | 4, 8, 12 |
+| Maçonnerie | +8 % de PV aux barrières | 3 | 3, 6, 10 |
+| Réserves | +10 ferraille au départ | 3 | 2, 5, 8 |
+| Récupération | +10 % de prime de vague | 3 | 3, 6, 9 |
+| Dynamo | +1 énergie pour les tours | 2 | 6, 12 |
+
+**Tout rembourser** rend tous les insignes dépensés, pour essayer une autre combinaison.
 
 ## Premier lancement : le tutoriel
 
@@ -82,7 +111,7 @@ Toutes les touches se changent dans **Réglages → Touches**.
 
 ## Ce que contient le prototype
 
-- **1 carte** : un portail, un chemin, deux avant-postes sur le chemin (Avant-poste et Muraille) et le Cœur.
+- **4 niveaux**, chacun sur sa carte : un portail, un chemin, deux avant-postes sur le chemin (Avant-poste et Muraille) et le Cœur.
 - **Phases** : Préparation → Assaut → Récolte, sur **10 vagues**. Les vagues 5 et 10 sont des **Nuits de siège** avec un boss.
 - **Deux ressources** :
   - la **ferraille**, laissée au sol par les zombies : il faut aller la ramasser, et elle disparaît à la fin de la récolte. Chaque vague repoussée rapporte aussi une prime (10 + 5 x le numéro de la vague) ;
@@ -151,6 +180,7 @@ L'**établi** est près du Cœur. Il s'utilise entre les vagues, et le jeu est e
 
 - **Santé** : elle remonte au maximum dès qu'une vague est repoussée.
 - **Implants** : après un siège, tu choisis 1 implant parmi 3. Chacun a un bonus et un malus.
+- **Barre de vie** : une fine barre apparaît au-dessus d'un zombie blessé (du vert au rouge), puis s'efface s'il n'est plus touché.
 - **Tir à la tête** : x2 dégâts. La zone de la tête suit l'animation (un zombie penché a la tête plus bas).
 - **Score** : chaque zombie abattu rapporte des points (10 pour un Rôdeur, 300 pour un Boss), chaque combo +10, chaque vague repoussée 50 x son numéro, et la victoire 1000 plus les PV restants du Cœur. Le record est gardé.
 - **Mort** : tu réapparais au Cœur après un délai qui s'allonge à chaque mort. La partie est perdue si le Cœur tombe.
@@ -164,11 +194,15 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 | `game.gd` | État global (autoload `Game`) : ressources, score, implants, améliorations de l'établi, gadgets |
 | `settings.gd` | Réglages (autoload `Settings`) : sensibilité, volume, touches, tutoriel, record |
 | `menu.gd` | Menu principal |
-| `main.gd` | Construction de la carte, du chemin, des avant-postes (barrières et ancrages), de l'établi et du Cœur |
+| `level_panel.gd`, `upgrade_panel.gd` | Fenêtres du choix du niveau et des améliorations permanentes |
+| `levels.gd` | Les 4 niveaux : chemin, barrières, ancrages, ambiance, décor, météo et difficulté |
+| `upgrades.gd` | Améliorations permanentes et calcul des insignes |
+| `main.gd` | Construction de la carte du niveau : ambiance, chemin, avant-postes (barrières et ancrages), établi, Cœur, décor et météo |
 | `wave_manager.gd` | Phases et composition des vagues |
 | `player.gd` | Joueur FPS : tir, munitions spéciales, marquage, construction, réparation |
 | `tower.gd`, `socket.gd` | Les 6 tours et leurs ancrages |
 | `zombie.gd` | Types de zombies, déplacement, animations, états (gelé, en feu, chargé, étourdi, enragé, enterré) |
+| `health_bar.gd` | Barre de vie au-dessus des zombies blessés |
 | `zombie_pose.gd` | Réactions ajoutées à l'animation : recul quand un zombie est touché, vacillement quand il est étourdi |
 | `zombie_models.gd` | Repères des modèles (yeux, vitesse de marche des animations), écrits par `tools/make_models.py` |
 | `barrier.gd` | Barrières du chemin et barricade |
@@ -210,13 +244,13 @@ Ajoute `-- --only rodeur,pistolet` pour ne refaire que certains modèles, et `--
 
 ## Tests automatiques
 
-Une partie simulée de 10 vagues (tours posées partout, joueur immobile, Cœur presque indestructible) :
+Une partie simulée de 10 vagues (tours posées partout, joueur immobile, Cœur presque indestructible). Ajoute `-- 2` (ou 3, 4) pour la jouer sur un autre niveau :
 
 ```
 godot --headless --fixed-fps 60 --path . res://tests/smoke_test.tscn
 ```
 
-Les fonctionnalités une par une (barrières et réparation en maintenant E, combos, zombies, tours, Phare, santé entre les vagues, établi, gadgets, touches, score, menus) :
+Les fonctionnalités une par une (barres de vie, barrières et réparation en maintenant E, combos, zombies, tours, Phare, santé entre les vagues, établi, gadgets, touches, score, menus, améliorations permanentes, les 4 niveaux) :
 
 ```
 godot --headless --fixed-fps 60 --path . res://tests/feature_test.tscn

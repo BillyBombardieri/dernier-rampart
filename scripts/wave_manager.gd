@@ -81,7 +81,7 @@ func _process(delta: float) -> void:
 			_spawn_cd -= delta
 			if not _queue.is_empty() and _spawn_cd <= 0.0:
 				_spawn(_queue.pop_front())
-				_spawn_cd = max(0.3, 1.3 - 0.11 * Game.wave)
+				_spawn_cd = max(0.3, 1.3 - 0.11 * Game.wave) * Levels.difficulty(Game.level)["spawn"]
 				# À partir de la vague 3, les zombies arrivent parfois en meute serrée.
 				if Game.wave >= 3 and randf() < 0.15 + 0.03 * Game.wave:
 					_spawn_cd = 0.15
@@ -123,9 +123,12 @@ func implant_chosen(id: String) -> void:
 	_enter("harvest", HARVEST_TIME)
 
 
-func _build_queue(w: int) -> Array[String]:
+func _build_queue(wave: int) -> Array[String]:
 	var q: Array[String] = []
-	var count := 8 + w * 4
+	var diff := Levels.difficulty(Game.level)
+	var count := int(round((8 + wave * 4) * float(diff["count"])))
+	# Dans les niveaux plus durs, les zombies spéciaux arrivent quelques vagues plus tôt.
+	var w := wave + int(diff["early"])
 	var runner_chance := minf(0.15 + 0.03 * w, 0.4)
 	var brute_chance := 0.0 if w < 2 else minf(0.06 + 0.02 * w, 0.22)
 	var spitter_chance := 0.0 if w < 3 else minf(0.06 + 0.015 * (w - 3), 0.14)
@@ -151,8 +154,10 @@ func _build_queue(w: int) -> Array[String]:
 	if w >= 4:
 		for i in w - 2:
 			q.append("coureur")
-	if is_siege(w):
-		q.insert(count / 2, "boss")
+	if is_siege(wave):
+		var bosses := int(diff["bosses"]) if wave >= Game.LAST_WAVE else 1
+		for i in bosses:
+			q.insert(count / 2 + i * count / 4, "boss")
 	return q
 
 
@@ -162,7 +167,8 @@ func _spawn(type: String) -> void:
 	Game.main.add_child(z)
 	z.global_position = portal + Vector3(randf_range(-2.5, 2.5), 0.2, randf_range(-1.5, 1.5))
 	var w := Game.wave - 1
-	z.setup(type, 1.0 + HP_PER_WAVE * w, 1.0 + SPEED_PER_WAVE * w, 1.0 + DAMAGE_PER_WAVE * w)
+	var diff := Levels.difficulty(Game.level)
+	z.setup(type, (1.0 + HP_PER_WAVE * w) * float(diff["hp"]), 1.0 + SPEED_PER_WAVE * w, (1.0 + DAMAGE_PER_WAVE * w) * float(diff["damage"]))
 	z.died.connect(_on_zombie_died)
 	_alive += 1
 	if INTRO.has(type) and not _seen.has(type):

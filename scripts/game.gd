@@ -69,9 +69,12 @@ var deaths := 0
 var hint := ""
 var portal_reveal := 1.0  # 1 = colonne et flèche du portail visibles (début de partie), 0 = discret.
 var tutorial_hold := false  # Le tutoriel bloque le compte à rebours de la première préparation.
+var level := 0  # Niveau joué (index dans Levels.LEVELS), choisi dans le menu. Garde sa valeur d'une partie à l'autre.
 var score := 0
 var kills := 0
 var new_record := false
+var earned_insignes := 0  # Insignes gagnés à la fin de la partie.
+var unlocked_next := false  # Cette victoire vient de débloquer le niveau suivant.
 var generator := 0
 var mods := {}  # arme -> {"barrel": int, "mag": int, "ammo": String, "owned": Array}
 var gadget_slots: Array[String] = ["barricade", "leurre"]
@@ -83,7 +86,7 @@ var core: Node3D
 
 
 func reset() -> void:
-	scrap = START_SCRAP
+	scrap = START_SCRAP + int(Upgrades.bonus("reserves"))
 	energy_used = 0
 	implants.clear()
 	wave = 0
@@ -97,6 +100,8 @@ func reset() -> void:
 	score = 0
 	kills = 0
 	new_record = false
+	earned_insignes = 0
+	unlocked_next = false
 	generator = 0
 	mods = {
 		"pistol": {"barrel": 0, "mag": 0, "ammo": "standard", "owned": ["standard"]},
@@ -112,7 +117,7 @@ func _process(delta: float) -> void:
 
 
 func energy_cap() -> int:
-	return ENERGY_BASE + 2 * generator + (2 if has_implant("batterie") else 0)
+	return ENERGY_BASE + 2 * generator + (2 if has_implant("batterie") else 0) + int(Upgrades.bonus("dynamo"))
 
 
 func request_energy(amount: int) -> bool:
@@ -129,7 +134,7 @@ func release_energy(amount: int) -> void:
 
 
 func wave_scrap(w: int) -> int:
-	return WAVE_SCRAP_BASE + WAVE_SCRAP_PER_WAVE * w
+	return int(round((WAVE_SCRAP_BASE + WAVE_SCRAP_PER_WAVE * w) * Upgrades.mult("recuperation")))
 
 
 func add_scrap(amount: int) -> void:
@@ -254,4 +259,7 @@ func end_game(victory: bool) -> void:
 		score += VICTORY_POINTS + int(core.hp) if core else VICTORY_POINTS
 	is_over = true
 	new_record = Settings.submit_score(score, wave)
+	var cleared := LAST_WAVE if victory else wave - 1
+	earned_insignes = Upgrades.earned(level, cleared, victory)
+	unlocked_next = Settings.finish_level(level, victory, earned_insignes)
 	ended.emit(victory)

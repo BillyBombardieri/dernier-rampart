@@ -143,7 +143,7 @@ func tower_range() -> float:
 
 
 func tower_damage() -> float:
-	return STATS[type]["damage"] * pow(1.5, level - 1) * _dmg_mult
+	return STATS[type]["damage"] * pow(1.5, level - 1) * _dmg_mult * Upgrades.mult("ingenieur")
 
 
 ## Bonus que donne un Phare aux tours dans son halo : [portée, dégâts].

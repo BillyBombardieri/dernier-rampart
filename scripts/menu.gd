@@ -1,10 +1,14 @@
 extends Control
-## Menu principal : jouer, revoir le tutoriel, réglages, quitter, et le record.
+## Menu principal : jouer (choix du niveau), améliorations permanentes, revoir le tutoriel,
+## réglages, quitter, et le record.
 
 const GAME_SCENE := "res://scenes/main.tscn"
 
 var _main_box: VBoxContainer
 var _settings: SettingsPanel
+var _levels: LevelPanel
+var _upgrades: UpgradePanel
+var _insignes: Label
 
 
 func _ready() -> void:
@@ -20,44 +24,70 @@ func _ready() -> void:
 	var title := Ui.label(_main_box, "DERNIER REMPART", 64, Color(0.95, 0.92, 0.88), HORIZONTAL_ALIGNMENT_CENTER)
 	title.add_theme_constant_override("outline_size", 10)
 	title.add_theme_color_override("font_outline_color", Color(0.25, 0.02, 0.0, 0.9))
-	Ui.label(_main_box, "Tiens la base face aux zombies. 10 vagues. Aucun renfort.", 17, Color(0.85, 0.75, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
+	Ui.label(_main_box, "Tiens la base face aux zombies. 4 niveaux. Aucun renfort.", 17, Color(0.85, 0.75, 0.65), HORIZONTAL_ALIGNMENT_CENTER)
 	var gap := Control.new()
 	gap.custom_minimum_size = Vector2(0, 18)
 	_main_box.add_child(gap)
-	Ui.button(_main_box, "JOUER", _play, 22, Vector2(0, 54))
+	Ui.button(_main_box, "JOUER", func(): _open(_levels), 22, Vector2(0, 54))
+	Ui.button(_main_box, "AMÉLIORATIONS", func(): _open(_upgrades), 20, Vector2(0, 48))
 	Ui.button(_main_box, "TUTORIEL", func():
 		Settings.set_tutorial_done(false)
-		_play()
+		_play(0)
 	, 20, Vector2(0, 48))
 	Ui.button(_main_box, "RÉGLAGES", _open_settings, 20, Vector2(0, 48))
 	Ui.button(_main_box, "QUITTER", func(): get_tree().quit(), 20, Vector2(0, 48))
 	var record := "Record : %s points  ·  vague %d atteinte" % [_thousands(Settings.best_score), Settings.best_wave] if Settings.best_score > 0 else "Pas encore de record : à toi de jouer."
 	Ui.label(_main_box, record, 16, Ui.ACCENT, HORIZONTAL_ALIGNMENT_CENTER)
+	_insignes = Ui.label(_main_box, "", 15, Color(0.85, 0.85, 0.85), HORIZONTAL_ALIGNMENT_CENTER)
+	_refresh_insignes()
 	var footer := Ui.label(self, "Prototype · Godot 4.7 · clavier AZERTY", 13, Color(1, 1, 1, 0.4))
 	footer.set_anchors_and_offsets_preset(Control.PRESET_BOTTOM_LEFT, Control.PRESET_MODE_MINSIZE, 16)
 	_settings = SettingsPanel.new()
 	center.add_child(_settings)
 	_settings.visible = false
-	_settings.closed.connect(func():
-		_main_box.visible = true
-		Ui.pop_in(_main_box, center)
-	)
+	_levels = LevelPanel.new()
+	center.add_child(_levels)
+	_levels.visible = false
+	_levels.chosen.connect(_play)
+	_upgrades = UpgradePanel.new()
+	center.add_child(_upgrades)
+	_upgrades.visible = false
+	for panel in [_settings, _levels, _upgrades]:
+		panel.closed.connect(func():
+			_refresh_insignes()
+			_main_box.visible = true
+			Ui.pop_in(_main_box, center)
+		)
 	Ui.pop_in(_main_box, center, 0.45)
 
 
-func _play() -> void:
+func _play(level: int) -> void:
+	Game.level = level
 	get_tree().change_scene_to_file(GAME_SCENE)
 
 
 func _open_settings() -> void:
+	_open(_settings)
+
+
+func _open(panel: Control) -> void:
 	_main_box.visible = false
-	_settings.open()
+	panel.open()
+
+
+func _refresh_insignes() -> void:
+	var level_text := "Niveaux débloqués : %d / %d" % [Settings.unlocked_level + 1, Levels.count()]
+	_insignes.text = "%s  ·  ★ %d insignes à dépenser" % [level_text, Settings.insignes]
 
 
 func _unhandled_input(event: InputEvent) -> void:
-	if event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE and _settings.visible:
-		_settings.close()
-		get_viewport().set_input_as_handled()
+	if not (event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE):
+		return
+	for panel in [_settings, _levels, _upgrades]:
+		if panel.visible:
+			panel.close()
+			get_viewport().set_input_as_handled()
+			return
 
 
 func _thousands(n: int) -> String:

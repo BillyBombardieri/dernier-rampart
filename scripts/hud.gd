@@ -18,6 +18,7 @@ const PANEL_BG := Color(0.04, 0.05, 0.07, 0.72)
 var wave_manager: WaveManager
 
 var _wave_label: Label
+var _next_button: Button
 var _phase_label: Label
 var _phase_bar: ProgressBar
 var _core_bar: ProgressBar
@@ -323,8 +324,8 @@ func _build_implant_panel() -> void:
 
 func _build_end_panel() -> void:
 	_end_panel = _panel()
-	_end_panel.custom_minimum_size = Vector2(520, 0)
-	_anchor(_end_panel, Control.PRESET_CENTER, Vector2(-260, -150))
+	_end_panel.custom_minimum_size = Vector2(660, 0)
+	_anchor(_end_panel, Control.PRESET_CENTER, Vector2(-330, -170))
 	_end_panel.mouse_filter = Control.MOUSE_FILTER_STOP
 	_end_panel.visible = false
 	var v := VBoxContainer.new()
@@ -336,6 +337,10 @@ func _build_end_panel() -> void:
 	row.alignment = BoxContainer.ALIGNMENT_CENTER
 	row.add_theme_constant_override("separation", 12)
 	v.add_child(row)
+	_next_button = Ui.button(row, "NIVEAU SUIVANT", func():
+		Game.level += 1
+		_restart()
+	, 17, Vector2(200, 44))
 	Ui.button(row, "RECOMMENCER", _restart, 17, Vector2(200, 44))
 	Ui.button(row, "MENU PRINCIPAL", func():
 		get_tree().paused = false
@@ -381,7 +386,7 @@ func _process(delta: float) -> void:
 			Ui.pop_in(_help_panel, _help_panel, 0.15)
 
 	var siege := Game.wave % WaveManager.SIEGE_EVERY == 0
-	_wave_label.text = "VAGUE %d / %d%s" % [Game.wave, Game.LAST_WAVE, "  ☠ SIÈGE" if siege else ""]
+	_wave_label.text = "NIV. %d · VAGUE %d / %d%s" % [Game.level + 1, Game.wave, Game.LAST_WAVE, "  ☠ SIÈGE" if siege else ""]
 	_wave_label.add_theme_color_override("font_color", DANGER if siege else Color.WHITE)
 	var phase_name: String = PHASE_NAMES.get(Game.phase, Game.phase)
 	if wave_manager and Game.phase in ["prep", "harvest"]:
@@ -578,10 +583,15 @@ func _pick_implant(id: String) -> void:
 
 
 func _on_ended(victory: bool) -> void:
-	_end_label.text = ("VICTOIRE !\nTu as tenu les %d vagues." % Game.LAST_WAVE) if victory else ("LE CŒUR EST TOMBÉ\nTu as tenu jusqu'à la vague %d." % Game.wave)
+	var level_name: String = Levels.get_level(Game.level)["name"]
+	_end_label.text = ("VICTOIRE !\n%s : tu as tenu les %d vagues." % [level_name, Game.LAST_WAVE]) if victory else ("LE CŒUR EST TOMBÉ\n%s : tu as tenu jusqu'à la vague %d." % [level_name, Game.wave])
 	_end_label.add_theme_color_override("font_color", ACCENT if victory else DANGER)
 	var record := "NOUVEAU RECORD !" if Game.new_record else "Record : %d points" % Settings.best_score
-	_end_score.text = "Score : %d points  ·  %d zombies abattus\n%s\n\n[%s] recommencer" % [Game.score, Game.kills, record, Settings.key_label("skip_phase")]
+	var progress := "+%d insignes ★ (%d à dépenser dans Améliorations)" % [Game.earned_insignes, Settings.insignes]
+	if Game.unlocked_next:
+		progress += "\nNiveau débloqué : %s !" % Levels.get_level(Game.level + 1)["name"]
+	_end_score.text = "Score : %d points  ·  %d zombies abattus\n%s\n%s\n\n[%s] recommencer" % [Game.score, Game.kills, record, progress, Settings.key_label("skip_phase")]
+	_next_button.visible = victory and Game.level + 1 < Levels.count()
 	_end_score.add_theme_color_override("font_color", ACCENT if Game.new_record else Color(0.9, 0.9, 0.9))
 	_end_panel.visible = true
 	Ui.pop_in(_end_panel, _end_panel, 0.35)

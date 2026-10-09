@@ -59,6 +59,11 @@ var invert_y := false
 var tutorial_done := false
 var best_score := 0
 var best_wave := 0
+# Progression : niveaux débloqués, insignes à dépenser et améliorations permanentes achetées.
+var unlocked_level := 0
+var levels_won: Array = []
+var insignes := 0
+var upgrades := {}  # id -> rang
 var bindings := {}  # action -> {"kind": "k" | "p" | "m", "code": int}
 var _labels := {}  # Noms des touches déjà calculés (le HUD les demande à chaque image).
 var _path := PATH
@@ -81,6 +86,14 @@ func load_settings() -> void:
 	tutorial_done = cfg.get_value("tutoriel", "termine", false)
 	best_score = cfg.get_value("record", "score", 0)
 	best_wave = cfg.get_value("record", "vague", 0)
+	unlocked_level = int(cfg.get_value("progression", "niveau_debloque", 0))
+	levels_won = Array(cfg.get_value("progression", "niveaux_gagnes", []))
+	insignes = int(cfg.get_value("progression", "insignes", 0))
+	upgrades = {}
+	var saved_upgrades: Dictionary = cfg.get_value("progression", "ameliorations", {})
+	for id in saved_upgrades:
+		if Upgrades.LIST.has(id):
+			upgrades[id] = clampi(int(saved_upgrades[id]), 0, Upgrades.max_rank(id))
 	for entry in BINDABLE:
 		var saved: String = cfg.get_value("touches", entry[0], "")
 		var b := _parse(saved)
@@ -98,6 +111,10 @@ func save_settings() -> void:
 	cfg.set_value("tutoriel", "termine", tutorial_done)
 	cfg.set_value("record", "score", best_score)
 	cfg.set_value("record", "vague", best_wave)
+	cfg.set_value("progression", "niveau_debloque", unlocked_level)
+	cfg.set_value("progression", "niveaux_gagnes", levels_won)
+	cfg.set_value("progression", "insignes", insignes)
+	cfg.set_value("progression", "ameliorations", upgrades)
 	for action in bindings:
 		var b: Dictionary = bindings[action]
 		cfg.set_value("touches", action, "%s:%d" % [b["kind"], b["code"]])
@@ -108,6 +125,11 @@ func save_settings() -> void:
 ## aux réglages ni au record du joueur.
 func use_test_file() -> void:
 	_path = TEST_PATH
+	# Progression vierge pendant les tests : les améliorations du joueur ne faussent rien.
+	unlocked_level = 0
+	levels_won = []
+	insignes = 0
+	upgrades = {}
 
 
 func apply() -> void:
@@ -182,6 +204,21 @@ func submit_score(score: int, wave: int) -> bool:
 	best_wave = maxi(best_wave, wave)
 	save_settings()
 	return record
+
+
+## Fin d'une partie sur un niveau : ajoute les insignes, et une victoire débloque le niveau
+## suivant. Renvoie true si un nouveau niveau vient d'être débloqué.
+func finish_level(level: int, victory: bool, earned: int) -> bool:
+	insignes += earned
+	var unlocked := false
+	if victory:
+		if not levels_won.has(level):
+			levels_won.append(level)
+		if level + 1 < Levels.count() and unlocked_level < level + 1:
+			unlocked_level = level + 1
+			unlocked = true
+	save_settings()
+	return unlocked
 
 
 func set_tutorial_done(done: bool) -> void:

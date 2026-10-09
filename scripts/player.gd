@@ -128,6 +128,7 @@ func _ready() -> void:
 	for id in WEAPONS:
 		ammo[id] = mag_size(id)
 	apply_implants()
+	hp = max_hp
 
 
 func _build_viewmodels() -> void:
@@ -229,7 +230,7 @@ func _show_model() -> void:
 
 func apply_implants() -> void:
 	_speed_mult = 0.85 if Game.has_implant("batterie") else 1.0
-	var new_max := 80.0 if Game.has_implant("charognard") else 100.0
+	var new_max := (80.0 if Game.has_implant("charognard") else 100.0) * Upgrades.mult("vitalite")
 	hp = min(hp, new_max)
 	max_hp = new_max
 	Game.changed.emit()
@@ -246,7 +247,7 @@ func weapon_damage(id: String) -> float:
 		dmg *= 1.5
 	if id == "rifle" and Game.has_implant("sang_froid"):
 		dmg *= 0.8
-	return dmg * (1.0 + 0.2 * Game.mods[id]["barrel"])
+	return dmg * (1.0 + 0.2 * Game.mods[id]["barrel"]) * Upgrades.mult("armurier")
 
 
 ## Taille du chargeur, avec les améliorations de l'établi.

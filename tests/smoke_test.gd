@@ -1,6 +1,6 @@
 extends Node
 ## Test automatique : lance une partie, pose des tours partout et laisse les vagues tourner.
-## Lancer : godot --headless --fixed-fps 60 --path . res://tests/smoke_test.tscn
+## Lancer : godot --headless --fixed-fps 60 --path . res://tests/smoke_test.tscn [-- <numéro du niveau, 1 à 4>]
 
 const MAX_FRAMES := 120000
 
@@ -13,6 +13,9 @@ var _seen_types := {}
 
 func _ready() -> void:
 	Settings.use_test_file()
+	var args := OS.get_cmdline_user_args()
+	Game.level = clampi(int(args[0]) - 1, 0, Levels.count() - 1) if args.size() > 0 else 0
+	print("Niveau ", Game.level + 1, " : ", Levels.get_level(Game.level)["name"])
 	_main = load("res://scenes/main.tscn").instantiate()
 	add_child(_main)
 	Game.ended.connect(_on_ended)
