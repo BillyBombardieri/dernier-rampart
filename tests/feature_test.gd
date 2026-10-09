@@ -20,6 +20,7 @@ func _ready() -> void:
 	Game.tutorial_hold = true
 	Game.scrap = 2000
 	await _frames(2)
+	await _test_health_bar()
 	await _test_barrier()
 	await _test_repair_hold()
 	await _test_surcharge()
@@ -100,6 +101,22 @@ func _socket_near(pos: Vector3) -> Socket:
 		if c is Socket and (best == null or c.global_position.distance_to(pos) < best.global_position.distance_to(pos)):
 			best = c
 	return best
+
+
+func _test_health_bar() -> void:
+	print("Barre de vie des zombies")
+	var z := _spawn("rodeur", Vector3(-45, 0.2, 40))
+	await _frames(2)
+	_check(not z._bar.visible, "pas de barre tant que le zombie n'est pas blessé")
+	z.take_damage(z.max_hp * 0.5)
+	await _seconds(0.5)
+	_check(z._bar.visible and absf(z._bar.fill - 0.5) < 0.01, "blessé de moitié : barre visible à moitié pleine")
+	await _seconds(HealthBar.SHOW_TIME + HealthBar.FADE_TIME + 0.5)
+	_check(not z._bar.visible, "la barre s'efface quand il n'est plus touché")
+	z.take_damage(1e9)
+	await _frames(2)
+	_check(not z._bar.visible, "pas de barre sur un zombie mort")
+	await _clear_zombies()
 
 
 func _test_barrier() -> void:

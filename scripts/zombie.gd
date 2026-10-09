@@ -93,6 +93,7 @@ var _materials: Array[StandardMaterial3D] = []
 var _base_tints: Array[Color] = []
 var _tinted := false
 var _mark_label: Label3D
+var _bar: HealthBar
 var _fire: CPUParticles3D
 var _sparks: CPUParticles3D
 var _stun_ring: MeshInstance3D
@@ -125,9 +126,14 @@ func setup(p_type: String, hp_scale: float, speed_scale := 1.0, damage_scale := 
 	_mark_label.outline_size = 6
 	_mark_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
 	_mark_label.no_depth_test = true
-	_mark_label.position.y = 2.2 * size
+	_mark_label.position.y = 2.35 * size
 	_mark_label.visible = false
 	add_child(_mark_label)
+	# Fine barre de vie, visible seulement quand le zombie est blessé.
+	_bar = HealthBar.new()
+	_bar.setup(0.62 * sqrt(size))
+	_bar.position.y = 2.08 * size
+	add_child(_bar)
 	if type == "fouisseur":
 		_dig_state = "walk"
 		_build_mound()
@@ -362,6 +368,7 @@ func take_damage(amount: float, from_player := false, heavy := false, hit_pos :=
 	if hp <= 0.0:
 		_die()
 		return
+	_bar.set_fill(hp / max_hp)
 	if from_player:
 		match ammo:
 			"incendiaire":
@@ -413,6 +420,7 @@ func _die() -> void:
 	collision_mask = Fx.LAYER_WORLD
 	marked = false
 	_mark_label.visible = false
+	_bar.hide_now()
 	for fx in [_fire, _sparks, _dirt]:
 		if fx:
 			fx.emitting = false
@@ -462,6 +470,8 @@ func _apply_dot(amount: float) -> void:
 	hp -= amount
 	if hp <= 0.0:
 		_die()
+		return
+	_bar.set_fill(hp / max_hp)
 
 
 func _physics_process(delta: float) -> void:
@@ -843,6 +853,7 @@ func _update_status(delta: float) -> void:
 		if _marked_time <= 0.0:
 			marked = false
 			_mark_label.visible = false
+	_bar.suppressed = burrowed
 	buff_time = maxf(0.0, buff_time - delta)
 	stun_time = maxf(0.0, stun_time - delta)
 	charged_time = maxf(0.0, charged_time - delta)
