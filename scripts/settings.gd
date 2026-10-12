@@ -88,6 +88,7 @@ func load_settings() -> void:
 	best_wave = cfg.get_value("record", "vague", 0)
 	unlocked_level = int(cfg.get_value("progression", "niveau_debloque", 0))
 	levels_won = Array(cfg.get_value("progression", "niveaux_gagnes", []))
+	_sync_unlocked()
 	insignes = int(cfg.get_value("progression", "insignes", 0))
 	upgrades = {}
 	var saved_upgrades: Dictionary = cfg.get_value("progression", "ameliorations", {})
@@ -219,6 +220,15 @@ func finish_level(level: int, victory: bool, earned: int) -> bool:
 			unlocked = true
 	save_settings()
 	return unlocked
+
+
+## Un niveau gagné ouvre toujours le suivant, même s'il a été ajouté après la victoire
+## (nouveau chapitre dans une mise à jour) : sans ça, le joueur qui avait gagné le dernier
+## niveau resterait bloqué devant le nouveau chapitre.
+func _sync_unlocked() -> void:
+	for won in levels_won:
+		unlocked_level = maxi(unlocked_level, int(won) + 1)
+	unlocked_level = clampi(unlocked_level, 0, Levels.count() - 1)
 
 
 func set_tutorial_done(done: bool) -> void:

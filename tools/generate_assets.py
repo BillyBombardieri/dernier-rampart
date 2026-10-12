@@ -407,6 +407,27 @@ def make_extra_sounds() -> None:
     save_wav("throw", bandpass(noise(t.size), 400, 3000) * np.sin(np.pi * t / 0.3) ** 2)
 
 
+def make_ambience_sounds() -> None:
+    """Ambiances en boucle propres à un chapitre (pluie de la Ville Morte)."""
+    rng = np.random.default_rng(1200)
+    # Pluie : souffle large et doux, plus des gouttes qui claquent sur l'asphalte et la tôle.
+    # 9 s générées, la dernière seconde fondue dans la première pour une boucle sans raccord.
+    t = t_axis(9.0)
+    hiss = bandpass(rng.standard_normal(t.size), 500, 7000) * 0.5
+    hiss += lowpass(rng.standard_normal(t.size), 0.02) * 0.8
+    drops = np.zeros(t.size)
+    for i in rng.integers(0, t.size - 400, 2600):
+        n = np.arange(400)
+        hz = rng.uniform(1500, 5000)
+        drops[i:i + 400] += np.sin(2 * np.pi * hz * n / RATE) * np.exp(-n / rng.uniform(15, 60)) * rng.uniform(0.05, 0.4)
+    rain = hiss + drops
+    fade = RATE
+    loop = rain[:-fade].copy()
+    w = np.linspace(0.0, 1.0, fade)
+    loop[:fade] = loop[:fade] * w + rain[-fade:] * (1.0 - w)
+    save_wav("rain", loop)
+
+
 if __name__ == "__main__":
     make_ground()
     make_mud()
@@ -416,5 +437,6 @@ if __name__ == "__main__":
     make_cloth()
     make_sounds()
     make_extra_sounds()
+    make_ambience_sounds()
     print("Textures :", sorted(p.name for p in TEX.iterdir()))
     print("Sons :", sorted(p.name for p in SND.iterdir()))

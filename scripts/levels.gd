@@ -143,6 +143,41 @@ const CHAPTERS := [
 		"props": {"count": 85, "pine": 6, "ruin": 2, "rock": 2, "wreck": 1},
 		"weather": "snow",
 	},
+	{
+		"name": "La Ville Morte",
+		"place": "Centre-ville abandonné, sous la pluie",
+		"desc": "Rues noyées, voitures abandonnées, réverbères qui grésillent. La horde vient de partout.",
+		"path": [
+			Vector3(-30, 0, -55), Vector3(-30, 0, -40), Vector3(20, 0, -40), Vector3(20, 0, -22),
+			Vector3(-8, 0, -22), Vector3(-8, 0, -6), Vector3(14, 0, 4), Vector3(14, 0, 20),
+			Vector3(0, 0, 24), Vector3(0, 0, 30),
+		],
+		"rings": {
+			"avant": {"gate": Vector3(-15, 0, -40), "segment": 1, "hp": 600.0,
+				"sockets": [Vector3(-19, 0, -45.5), Vector3(-11, 0, -34.5), Vector3(-24, 0, -34.5), Vector3(-6, 0, -45.5)]},
+			"muraille": {"gate": Vector3(14, 0, 10), "segment": 6, "hp": 900.0,
+				"sockets": [Vector3(19.5, 0, 8), Vector3(8.5, 0, 12), Vector3(19.5, 0, 16), Vector3(20, 0, 2), Vector3(-5.5, 0, 18)]},
+		},
+		"env": {
+			"sky_top": Color(0.02, 0.025, 0.04), "sky_horizon": Color(0.2, 0.15, 0.12), "ground_horizon": Color(0.06, 0.06, 0.07),
+			"sun_rot": Vector3(-40, 20, 0), "sun_color": Color(0.62, 0.68, 0.85), "sun_energy": 0.35,
+			"ambient": 0.5, "exposure": 1.15, "saturation": 0.68,
+			"fog_color": Color(0.11, 0.115, 0.13), "fog": 0.012, "vol_albedo": Color(0.6, 0.62, 0.68), "vol_fog": 0.018,
+		},
+		"ground": {"tex": "concrete", "scale": 0.1, "tint": Color(0.36, 0.36, 0.38), "rough": 0.4},
+		"path_mat": {"tex": "concrete", "scale": 0.25, "tint": Color(0.22, 0.22, 0.24), "rough": 0.22},
+		"walls": [[Vector3(-40, 1.5, -12), Vector3(1.2, 3, 18)], [Vector3(34, 1.5, -32), Vector3(1.2, 3, 16)]],
+		"sandbags": [Vector3(-16, 0, -28), Vector3(26, 0, -12)],
+		"spots": [
+			[Vector3(-12, 0, 28), Vector3(-2, 0, 20)], [Vector3(22, 0, 24), Vector3(14, 0, 12)],
+			[Vector3(-36, 0, -46), Vector3(-26, 0, -40)], [Vector3(27, 0, -30), Vector3(18, 0, -38)],
+			[Vector3(-16, 0, -14), Vector3(-6, 0, -18)],
+		],
+		"spot_color": Color(1.0, 0.7, 0.4),
+		"barrels": [Vector3(-4, 0, 31), Vector3(26, 0, -44), Vector3(-36, 0, -32), Vector3(-14, 0, -2)],
+		"props": {"count": 60, "building": 5, "wreck": 3, "lamp": 3, "puddle": 2},
+		"weather": "rain",
+	},
 ]
 
 

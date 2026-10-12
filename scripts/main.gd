@@ -489,6 +489,12 @@ func _build_props() -> void:
 				_pine(pos)
 			"ruin":
 				_ruin(pos)
+			"building":
+				_building(pos)
+			"lamp":
+				_lamp(pos)
+			"puddle":
+				_puddle(pos)
 
 
 ## Matériau du sol ou du chemin d'un niveau : {"tex", "scale", "tint", "plain"}.
@@ -498,6 +504,8 @@ func _level_material(d: Dictionary) -> StandardMaterial3D:
 	if d.get("plain", false):
 		mat.albedo_texture = null
 		mat.roughness = 0.85
+	if d.has("rough"):  # Asphalte mouillé (Ville Morte) : plus lisse, il renvoie les lumières.
+		mat.roughness = d["rough"]
 	return mat
 
 
@@ -654,9 +662,104 @@ func _ruin(pos: Vector3) -> void:
 	ruin.rotation.y = _rng.randf() * TAU
 
 
+## Immeuble éventré (Ville Morte) : une carcasse de béton de 2 à 4 étages, fenêtres noires,
+## quelques-unes encore éclairées d'une lueur chaude, le toit arraché.
+func _building(pos: Vector3) -> void:
+	var w := _rng.randf_range(7.0, 11.0)
+	var d := _rng.randf_range(6.0, 9.0)
+	var floors := _rng.randi_range(2, 4)
+	var h := floors * 3.2
+	var tint: Color = [Color(0.5, 0.48, 0.46), Color(0.42, 0.4, 0.38), Color(0.55, 0.5, 0.44)][_rng.randi() % 3]
+	var concrete := Fx.textured("concrete", 0.35, tint)
+	var body := Fx.box_body(Vector3(w, h, d), Color.WHITE, Fx.LAYER_WORLD)
+	(body.get_child(1) as MeshInstance3D).material_override = concrete
+	var dark := Fx.material(Color(0.02, 0.02, 0.025))
+	dark.roughness = 0.15
+	var lit := Fx.material(Color(1.0, 0.72, 0.4), 1.6)
+	# Fenêtres sur les deux grandes façades, une par travée et par étage.
+	var cols := int(w / 2.4)
+	for side in [-1.0, 1.0]:
+		for f in floors:
+			for c in cols:
+				var x := -w * 0.5 + (c + 0.5) * w / cols
+				var win := Fx.box_mat(Vector3(1.1, 1.4, 0.06), lit if _rng.randf() < 0.06 else dark)
+				win.position = Vector3(x, -h * 0.5 + 1.7 + f * 3.2, side * (d * 0.5 + 0.02))
+				body.add_child(win)
+	# Dalles d'étage qui dépassent un peu, et un bord de toit cassé.
+	for f in range(1, floors):
+		var slab := Fx.box_mat(Vector3(w + 0.3, 0.25, d + 0.3), concrete)
+		slab.position.y = -h * 0.5 + f * 3.2
+		body.add_child(slab)
+	var broken := Fx.box_mat(Vector3(w * _rng.randf_range(0.3, 0.6), _rng.randf_range(0.8, 2.0), 0.4), concrete)
+	broken.position = Vector3(_rng.randf_range(-w, w) * 0.2, h * 0.5 + 0.5, d * 0.5 - 0.2)
+	body.add_child(broken)
+	add_child(body)
+	body.position = pos + Vector3(0, h * 0.5, 0)
+	body.rotation.y = _rng.randi_range(0, 3) * PI * 0.5 + _rng.randf_range(-0.15, 0.15)
+
+
+## Réverbère (Ville Morte). Un sur trois éclaire encore, en grésillant ; les autres sont morts.
+func _lamp(pos: Vector3) -> void:
+	var metal := Fx.material(Color(0.12, 0.13, 0.14))
+	metal.metallic = 0.7
+	metal.roughness = 0.4
+	var lamp := Node3D.new()
+	var pole := Fx.mesh_with(_cyl(0.09, 6.0, 0.07), metal)
+	pole.position.y = 3.0
+	lamp.add_child(pole)
+	var arm := Fx.box_mat(Vector3(0.08, 0.08, 1.6), metal)
+	arm.position = Vector3(0, 5.95, 0.75)
+	lamp.add_child(arm)
+	var alive := _rng.randf() < 0.34
+	var head := Fx.box(Vector3(0.35, 0.12, 0.6), Color(1.0, 0.68, 0.35) if alive else Color(0.15, 0.15, 0.15), 3.0 if alive else 0.0)
+	head.position = Vector3(0, 5.85, 1.5)
+	lamp.add_child(head)
+	var body := StaticBody3D.new()
+	body.collision_layer = Fx.LAYER_WORLD
+	var shape := CollisionShape3D.new()
+	var cs := CylinderShape3D.new()
+	cs.radius = 0.15
+	cs.height = 6.0
+	shape.shape = cs
+	shape.position.y = 3.0
+	body.add_child(shape)
+	lamp.add_child(body)
+	if alive:
+		var light := Flicker.new()
+		light.light_color = Color(1.0, 0.66, 0.34)
+		light.base_energy = 1.6
+		light.amount = 0.15
+		light.speed = 9.0
+		light.omni_range = 11.0
+		light.position = Vector3(0, 5.5, 1.5)
+		lamp.add_child(light)
+	lamp.rotation.y = _rng.randf() * TAU
+	add_child(lamp)
+	lamp.position = pos
+
+
+## Flaque d'eau de pluie sur l'asphalte : un miroir sombre et mince.
+func _puddle(pos: Vector3) -> void:
+	var r := _rng.randf_range(1.2, 2.6)
+	var disc := CylinderMesh.new()
+	disc.top_radius = r
+	disc.bottom_radius = r
+	disc.height = 0.01
+	disc.radial_segments = 18
+	var water := StandardMaterial3D.new()
+	water.albedo_color = Color(0.04, 0.045, 0.05)
+	water.metallic = 0.7
+	water.roughness = 0.03
+	var mi := Fx.mesh_with(disc, water)
+	mi.scale = Vector3(_rng.randf_range(1.0, 1.8), 1, _rng.randf_range(0.6, 1.0))
+	mi.rotation.y = _rng.randf() * TAU
+	mi.position = pos + Vector3(0, 0.02, 0)
+	add_child(mi)
+
+
 # ---------------------------------------------------------------- météo
 
-## Neige (Col Gelé), cendres (Raffinerie) ou lucioles (Marais), autour du joueur.
+## Neige (Col Gelé), cendres (Raffinerie), lucioles (Marais) ou pluie (Ville Morte), autour du joueur.
 func _build_weather() -> void:
 	var kind: String = level["weather"]
 	if kind == "":
@@ -696,6 +799,20 @@ func _build_weather() -> void:
 			q.size = Vector2(0.05, 0.05)
 			grad.set_color(0, Color(0.55, 0.52, 0.5, 0.8))
 			grad.set_color(1, Color(0.4, 0.38, 0.36, 0.0))
+		"rain":
+			# Traits fins et rapides, presque verticaux, un peu poussés par le vent.
+			p.amount = 1800
+			p.lifetime = 0.9
+			p.direction = Vector3(0.08, -1, 0.04)
+			p.spread = 3.0
+			p.initial_velocity_min = 16.0
+			p.initial_velocity_max = 20.0
+			p.gravity = Vector3(0, -6.0, 0)
+			q.size = Vector2(0.012, 0.42)
+			m.billboard_mode = BaseMaterial3D.BILLBOARD_FIXED_Y
+			m.billboard_keep_scale = true
+			grad.set_color(0, Color(0.72, 0.76, 0.82, 0.32))
+			grad.set_color(1, Color(0.72, 0.76, 0.82, 0.18))
 		"fireflies":
 			p.amount = 70
 			p.lifetime = 6.0
@@ -826,9 +943,20 @@ func _start_ambience() -> void:
 		w.loop_end = w.data.size() / 2
 	var p := AudioStreamPlayer.new()
 	p.stream = wind
-	p.volume_db = -14.0
+	p.volume_db = -20.0 if level["weather"] == "rain" else -14.0
 	p.autoplay = true
 	add_child(p)
+	if level["weather"] == "rain":
+		var rain := Sfx.stream("rain")
+		if rain is AudioStreamWAV:
+			var r := rain as AudioStreamWAV
+			r.loop_mode = AudioStreamWAV.LOOP_FORWARD
+			r.loop_end = r.data.size() / 2
+			var rp := AudioStreamPlayer.new()
+			rp.stream = r
+			rp.volume_db = -12.0
+			rp.autoplay = true
+			add_child(rp)
 
 
 func _spawn_player() -> void:

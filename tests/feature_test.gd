@@ -458,7 +458,14 @@ func _test_levels() -> void:
 	_check(not Settings.finish_level(0, true, 15), "le regagner ne débloque rien de plus")
 	Settings.unlocked_level = 4
 	_check(Settings.finish_level(4, true, 15) and Levels.chapter_index(Settings.unlocked_level) == 1, "gagner le niveau 5 ouvre le chapitre 2")
-	_check(Levels.count() == 20 and Levels.title(7) == "Le Marais, niveau 3" and Levels.short(7) == "2-3", "4 chapitres de 5 niveaux")
+	_check(Levels.count() == 25 and Levels.title(7) == "Le Marais, niveau 3" and Levels.short(22) == "5-3", "5 chapitres de 5 niveaux")
+	# Un joueur qui avait gagné le dernier niveau avant l'ajout d'un chapitre peut l'ouvrir.
+	Settings.levels_won = [19]
+	Settings.unlocked_level = 19
+	Settings._sync_unlocked()
+	_check(Settings.unlocked_level == 20, "un chapitre ajouté après coup s'ouvre si le précédent est gagné")
+	Settings.levels_won = [0, 4]
+	Settings.unlocked_level = 5
 	var wm: WaveManager = _main.get_node("WaveManager")
 	var easy := wm._build_queue(1).size()
 	Game.level = Levels.count() - 1

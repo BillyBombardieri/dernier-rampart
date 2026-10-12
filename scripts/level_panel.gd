@@ -1,6 +1,6 @@
 class_name LevelPanel
 extends PanelContainer
-## Choix du niveau dans le menu principal : 4 chapitres, chacun sur sa carte et dans son
+## Choix du niveau dans le menu principal : 5 chapitres, chacun sur sa carte et dans son
 ## environnement, avec 5 niveaux de plus en plus durs. Gagner un niveau débloque le suivant,
 ## et gagner le 5e niveau d'un chapitre ouvre le chapitre suivant.
 
@@ -27,9 +27,15 @@ func _ready() -> void:
 	add_child(v)
 	Ui.label(v, "CHOISIS TON NIVEAU", 28, Ui.ACCENT)
 	Ui.label(v, "5 niveaux par chapitre, chacun plus dur que le précédent. Gagne le 5e pour ouvrir le chapitre suivant.", 15, Ui.MUTED)
+	# Les chapitres défilent si l'écran est trop petit pour tous les montrer.
+	var scroll := ScrollContainer.new()
+	scroll.horizontal_scroll_mode = ScrollContainer.SCROLL_MODE_DISABLED
+	scroll.custom_minimum_size = Vector2(0, 470)
+	v.add_child(scroll)
 	_list = VBoxContainer.new()
 	_list.add_theme_constant_override("separation", 8)
-	v.add_child(_list)
+	_list.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	scroll.add_child(_list)
 	var bottom := HBoxContainer.new()
 	bottom.alignment = BoxContainer.ALIGNMENT_END
 	v.add_child(bottom)
