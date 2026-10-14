@@ -261,7 +261,7 @@ func _build_portal_beacon(p: Vector3, fwd: Vector3) -> void:
 func _process(delta: float) -> void:
 	# La neige, la cendre ou les lucioles suivent le joueur.
 	if _weather and Game.player:
-		_weather.global_position = Game.player.global_position + Vector3(0, 1.5 if level["weather"] == "fireflies" else 8.0, 0)
+		_weather.global_position = Game.player.global_position + Vector3(0, 1.5 if level["weather"] in ["fireflies", "dust"] else 8.0, 0)
 	if _beacon_mat == null:
 		return
 	# La colonne et le panneau ne s'affichent qu'au début de la partie (préparation de la
@@ -495,6 +495,10 @@ func _build_props() -> void:
 				_lamp(pos)
 			"puddle":
 				_puddle(pos)
+			"dune":
+				_dune(pos)
+			"post":
+				_post(pos)
 
 
 ## Matériau du sol ou du chemin d'un niveau : {"tex", "scale", "tint", "plain"}.
@@ -654,9 +658,10 @@ func _ruin(pos: Vector3) -> void:
 		wall.position = walls[i][0] + Vector3(0, h * 0.5, 0)
 		wall.rotation.y = walls[i][1]
 		ruin.add_child(wall)
-		var cap := Fx.box_mat(Vector3(len, 0.08, 0.6), Fx.material(Color(0.82, 0.85, 0.9)))
-		cap.position = Vector3(0, h * 0.5 + 0.04, 0)
-		wall.add_child(cap)
+		if level["weather"] == "snow":
+			var cap := Fx.box_mat(Vector3(len, 0.08, 0.6), Fx.material(Color(0.82, 0.85, 0.9)))
+			cap.position = Vector3(0, h * 0.5 + 0.04, 0)
+			wall.add_child(cap)
 	add_child(ruin)
 	ruin.position = pos
 	ruin.rotation.y = _rng.randf() * TAU
@@ -757,9 +762,58 @@ func _puddle(pos: Vector3) -> void:
 	add_child(mi)
 
 
+## Bosse de sable (Route Brûlée) : large et très basse (moins d'un mètre), sans collision.
+func _dune(pos: Vector3) -> void:
+	var r := _rng.randf_range(4.0, 8.0)
+	var sphere := SphereMesh.new()
+	sphere.radius = r
+	sphere.height = r * 2.0
+	sphere.radial_segments = 18
+	sphere.rings = 9
+	var mi := Fx.mesh_with(sphere, Fx.textured("ground", 0.12, Color(0.95, 0.76, 0.55)))
+	mi.scale = Vector3(1.0, _rng.randf_range(0.4, 0.8) / r, _rng.randf_range(0.6, 1.0))
+	mi.rotation.y = _rng.randf() * TAU
+	mi.position = pos + Vector3(0, -0.15, 0)
+	add_child(mi)
+
+
+## Poteau télégraphique en bois (Route Brûlée), souvent penché, avec un bout de câble qui pend.
+func _post(pos: Vector3) -> void:
+	var wood := Fx.textured("mud", 0.8, Color(0.42, 0.33, 0.24), false)
+	var post := Node3D.new()
+	var h := _rng.randf_range(6.0, 7.5)
+	var pole := Fx.mesh_with(_cyl(0.14, h, 0.11), wood)
+	pole.position.y = h * 0.5
+	post.add_child(pole)
+	var bar := Fx.box_mat(Vector3(1.8, 0.12, 0.12), wood)
+	bar.position.y = h - 0.5
+	post.add_child(bar)
+	var dark := Fx.material(Color(0.05, 0.05, 0.05))
+	for x in [-0.75, 0.75]:
+		var hang := _rng.randf_range(1.5, 3.5)
+		var wire := Fx.mesh_with(_cyl(0.012, hang), dark)
+		wire.position = Vector3(x, h - 0.5 - hang * 0.5, 0)
+		wire.rotation.z = _rng.randf_range(-0.2, 0.2)
+		post.add_child(wire)
+	var body := StaticBody3D.new()
+	body.collision_layer = Fx.LAYER_WORLD
+	var shape := CollisionShape3D.new()
+	var cs := CylinderShape3D.new()
+	cs.radius = 0.2
+	cs.height = h
+	shape.shape = cs
+	shape.position.y = h * 0.5
+	body.add_child(shape)
+	post.add_child(body)
+	post.rotation = Vector3(_rng.randf_range(-0.12, 0.12), _rng.randf() * TAU, _rng.randf_range(-0.12, 0.12))
+	add_child(post)
+	post.position = pos
+
+
 # ---------------------------------------------------------------- météo
 
-## Neige (Col Gelé), cendres (Raffinerie), lucioles (Marais) ou pluie (Ville Morte), autour du joueur.
+## Neige (Col Gelé), cendres (Raffinerie), lucioles (Marais), pluie (Ville Morte) ou poussière
+## (Route Brûlée), autour du joueur.
 func _build_weather() -> void:
 	var kind: String = level["weather"]
 	if kind == "":
@@ -813,6 +867,20 @@ func _build_weather() -> void:
 			m.billboard_keep_scale = true
 			grad.set_color(0, Color(0.72, 0.76, 0.82, 0.32))
 			grad.set_color(1, Color(0.72, 0.76, 0.82, 0.18))
+		"dust":
+			# Poussière soulevée par le vent : de fines particules qui filent presque à l'horizontale.
+			p.amount = 700
+			p.lifetime = 3.0
+			p.emission_box_extents = Vector3(24, 1.5, 24)
+			p.direction = Vector3(1, 0.05, 0.3)
+			p.spread = 12.0
+			p.initial_velocity_min = 5.0
+			p.initial_velocity_max = 9.0
+			p.gravity = Vector3(0, -0.2, 0)
+			q.size = Vector2(0.05, 0.05)
+			grad.set_color(0, Color(0.85, 0.7, 0.5, 0.0))
+			grad.add_point(0.3, Color(0.85, 0.7, 0.5, 0.5))
+			grad.set_color(grad.get_point_count() - 1, Color(0.85, 0.7, 0.5, 0.0))
 		"fireflies":
 			p.amount = 70
 			p.lifetime = 6.0
@@ -943,7 +1011,7 @@ func _start_ambience() -> void:
 		w.loop_end = w.data.size() / 2
 	var p := AudioStreamPlayer.new()
 	p.stream = wind
-	p.volume_db = -20.0 if level["weather"] == "rain" else -14.0
+	p.volume_db = {"rain": -20.0, "dust": -9.0}.get(level["weather"], -14.0)
 	p.autoplay = true
 	add_child(p)
 	if level["weather"] == "rain":

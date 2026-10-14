@@ -178,6 +178,40 @@ const CHAPTERS := [
 		"props": {"count": 60, "building": 5, "wreck": 3, "lamp": 3, "puddle": 2},
 		"weather": "rain",
 	},
+	{
+		"name": "La Route Brûlée",
+		"place": "Autoroute du désert, au coucher du soleil",
+		"desc": "Sable, carcasses et poteaux tordus. Le vent soulève la poussière, la horde marche sans fin.",
+		"path": [
+			Vector3(0, 0, -58), Vector3(0, 0, -44), Vector3(-28, 0, -44), Vector3(-28, 0, -18),
+			Vector3(16, 0, -18), Vector3(16, 0, 6), Vector3(-10, 0, 6), Vector3(-10, 0, 22), Vector3(0, 0, 30),
+		],
+		"rings": {
+			"avant": {"gate": Vector3(-9, 0, -44), "segment": 1, "hp": 600.0,
+				"sockets": [Vector3(-13, 0, -49.5), Vector3(-5, 0, -38.5), Vector3(-17, 0, -38.5), Vector3(6, 0, -40)]},
+			"muraille": {"gate": Vector3(3, 0, 6), "segment": 5, "hp": 900.0,
+				"sockets": [Vector3(7, 0, 0.5), Vector3(-1, 0, 11.5), Vector3(8, 0, 11.5), Vector3(-4, 0, 0.5), Vector3(-15.5, 0, 14)]},
+		},
+		"env": {
+			"sky_top": Color(0.06, 0.07, 0.13), "sky_horizon": Color(0.62, 0.34, 0.16), "ground_horizon": Color(0.3, 0.2, 0.12),
+			"sun_rot": Vector3(-7, -95, 0), "sun_color": Color(1.0, 0.6, 0.34), "sun_energy": 1.0,
+			"ambient": 0.45, "exposure": 1.05, "saturation": 0.85,
+			"fog_color": Color(0.36, 0.26, 0.18), "fog": 0.009, "vol_albedo": Color(0.8, 0.66, 0.5), "vol_fog": 0.014,
+		},
+		"ground": {"tex": "ground", "scale": 0.12, "tint": Color(0.95, 0.76, 0.55)},
+		"path_mat": {"tex": "concrete", "scale": 0.25, "tint": Color(0.3, 0.29, 0.28), "rough": 0.75},
+		"walls": [[Vector3(-40, 1.5, -30), Vector3(1.2, 3, 16)], [Vector3(30, 1.5, -6), Vector3(1.2, 3, 16)]],
+		"sandbags": [Vector3(-20, 0, -30), Vector3(24, 0, -10)],
+		"spots": [
+			[Vector3(-12, 0, 28), Vector3(-6, 0, 14)], [Vector3(14, 0, 26), Vector3(4, 0, 10)],
+			[Vector3(-34, 0, -50), Vector3(-20, 0, -44)], [Vector3(24, 0, -24), Vector3(16, 0, -12)],
+			[Vector3(-20, 0, 0), Vector3(-10, 0, 6)],
+		],
+		"spot_color": Color(1.0, 0.78, 0.55),
+		"barrels": [Vector3(-4, 0, 31), Vector3(-34, 0, -26), Vector3(24, 0, 12), Vector3(6, 0, -52)],
+		"props": {"count": 55, "dune": 4, "rock": 4, "wreck": 2, "post": 2, "ruin": 1},
+		"weather": "dust",
+	},
 ]
 
 

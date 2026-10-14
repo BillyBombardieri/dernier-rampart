@@ -1,6 +1,6 @@
 class_name LevelPanel
 extends PanelContainer
-## Choix du niveau dans le menu principal : 5 chapitres, chacun sur sa carte et dans son
+## Choix du niveau dans le menu principal : 6 chapitres, chacun sur sa carte et dans son
 ## environnement, avec 5 niveaux de plus en plus durs. Gagner un niveau débloque le suivant,
 ## et gagner le 5e niveau d'un chapitre ouvre le chapitre suivant.
 
