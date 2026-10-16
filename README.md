@@ -207,6 +207,7 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 | `tower.gd`, `socket.gd` | Les 6 tours et leurs ancrages |
 | `zombie.gd` | Types de zombies, déplacement, animations, états (gelé, en feu, chargé, étourdi, enragé, enterré) |
 | `health_bar.gd` | Barre de vie au-dessus des zombies blessés |
+| `ground_cover.gd` | Herbe qui ondule au vent et cailloux semés au sol, réglés par chapitre |
 | `zombie_pose.gd` | Réactions ajoutées à l'animation : recul quand un zombie est touché, vacillement quand il est étourdi |
 | `zombie_models.gd` | Repères des modèles (yeux, vitesse de marche des animations), écrits par `tools/make_models.py` |
 | `barrier.gd` | Barrières du chemin et barricade |
@@ -270,6 +271,12 @@ Des captures d'écran (menu, barrière attaquée, les sept zombies, visée au fu
 
 ```
 godot --path . --fixed-fps 60 res://tests/screenshot.tscn -- <dossier_de_sortie>
+```
+
+Une capture par chapitre, toujours au même endroit, pour comparer le rendu avant et après un changement graphique :
+
+```
+godot --path . --fixed-fps 60 res://tests/chapter_shots.tscn -- <dossier_de_sortie> [préfixe] [chapitres, ex. 1,3]
 ```
 
 Le concept complet du jeu est dans le document de conception du projet.

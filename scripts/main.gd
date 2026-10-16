@@ -41,6 +41,7 @@ func _ready() -> void:
 	_build_workbench()
 	_build_lights()
 	_build_props()
+	_build_ground_cover()
 	_spawn_player()
 	_build_weather()
 	_start_ambience()
@@ -499,6 +500,19 @@ func _build_props() -> void:
 				_dune(pos)
 			"post":
 				_post(pos)
+
+
+## Herbe et cailloux semés sur la carte (voir GroundCover), loin des ancrages, des barrières et
+## de la base.
+func _build_ground_cover() -> void:
+	var avoid := [[CORE_POS, 9.0]]
+	for ring in level["rings"].values():
+		avoid.append([ring["gate"], 3.5])
+		for socket in ring["sockets"]:
+			avoid.append([socket, 2.2])
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 77 + Levels.chapter_index(Game.level)
+	GroundCover.build(self, level.get("cover", {}), path_points, avoid, rng)
 
 
 ## Matériau du sol ou du chemin d'un niveau : {"tex", "scale", "tint", "plain"}.

@@ -42,6 +42,8 @@ const CHAPTERS := [
 		"barrels": [Vector3(-4, 0, 31), Vector3(16, 0, 2), Vector3(-22, 0, -26), Vector3(9.5, 0, -44.5)],
 		"props": {"count": 70, "rock": 5, "tree": 3, "wreck": 2},
 		"weather": "",
+		"cover": {"grass": 10400, "grass_base": Color(0.27, 0.23, 0.12), "grass_tip": Color(0.74, 0.63, 0.36),
+			"grass_h": Vector2(0.25, 0.6), "stones": 1800, "stone_tint": Color(0.46, 0.43, 0.4)},
 	},
 	{
 		"name": "Le Marais",
@@ -75,6 +77,8 @@ const CHAPTERS := [
 		"barrels": [Vector3(-4, 0, 31), Vector3(-22, 0, -22), Vector3(-34, 0, -38), Vector3(-8, 0, 8)],
 		"props": {"count": 95, "tree": 4, "pool": 3, "reeds": 4, "rock": 1},
 		"weather": "fireflies",
+		"cover": {"grass": 12000, "grass_base": Color(0.11, 0.15, 0.08), "grass_tip": Color(0.41, 0.49, 0.27),
+			"grass_h": Vector2(0.4, 0.95), "stones": 700, "stone_tint": Color(0.3, 0.3, 0.27), "sway": 0.16},
 	},
 	{
 		"name": "La Raffinerie",
@@ -109,6 +113,8 @@ const CHAPTERS := [
 		"barrels": [Vector3(-4, 0, 31), Vector3(34, 0, -20), Vector3(0, 0, -30), Vector3(36, 0, -50), Vector3(20, 0, 16)],
 		"props": {"count": 55, "container": 5, "tank": 2, "wreck": 2, "rock": 1},
 		"weather": "ash",
+		"cover": {"grass": 3200, "grass_base": Color(0.23, 0.2, 0.14), "grass_tip": Color(0.57, 0.51, 0.38),
+			"grass_h": Vector2(0.15, 0.4), "stones": 2600, "stone_tint": Color(0.36, 0.34, 0.33), "stone_shape": "box"},
 	},
 	{
 		"name": "Le Col Gelé",
@@ -142,6 +148,8 @@ const CHAPTERS := [
 		"barrels": [Vector3(-4, 0, 31), Vector3(-22, 0, -20), Vector3(24, 0, -14), Vector3(-4, 0, -46)],
 		"props": {"count": 85, "pine": 6, "ruin": 2, "rock": 2, "wreck": 1},
 		"weather": "snow",
+		"cover": {"grass": 2800, "grass_base": Color(0.38, 0.35, 0.27), "grass_tip": Color(0.84, 0.81, 0.7),
+			"grass_h": Vector2(0.15, 0.35), "stones": 1300, "stone_tint": Color(0.42, 0.43, 0.46), "sway": 0.08},
 	},
 	{
 		"name": "La Ville Morte",
@@ -177,6 +185,8 @@ const CHAPTERS := [
 		"barrels": [Vector3(-4, 0, 31), Vector3(26, 0, -44), Vector3(-36, 0, -32), Vector3(-14, 0, -2)],
 		"props": {"count": 60, "building": 5, "wreck": 3, "lamp": 3, "puddle": 2},
 		"weather": "rain",
+		"cover": {"grass": 2400, "grass_base": Color(0.12, 0.16, 0.09), "grass_tip": Color(0.34, 0.41, 0.23),
+			"grass_h": Vector2(0.12, 0.35), "stones": 3200, "stone_tint": Color(0.4, 0.39, 0.38), "stone_shape": "box"},
 	},
 	{
 		"name": "La Route Brûlée",
@@ -211,6 +221,8 @@ const CHAPTERS := [
 		"barrels": [Vector3(-4, 0, 31), Vector3(-34, 0, -26), Vector3(24, 0, 12), Vector3(6, 0, -52)],
 		"props": {"count": 55, "dune": 4, "rock": 4, "wreck": 2, "post": 2, "ruin": 1},
 		"weather": "dust",
+		"cover": {"grass": 3600, "grass_base": Color(0.32, 0.3, 0.2), "grass_tip": Color(0.68, 0.65, 0.49),
+			"grass_h": Vector2(0.2, 0.45), "stones": 2400, "stone_tint": Color(0.62, 0.5, 0.38), "sway": 0.18},
 	},
 ]
 
