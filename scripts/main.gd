@@ -29,6 +29,14 @@ func _ready() -> void:
 	Game.main = self
 	_rng.seed = 2026 + Levels.chapter_index(Game.level)
 	level = Levels.chapter(Game.level)
+	# Traces du climat sur les bâtiments : murs mouillés, neige, sable ou cendre sur le dessus.
+	Buildings.climate = {
+		"fireflies": {"grime": 0.8, "grime_height": 1.5},
+		"ash": {"top_amount": 0.5, "top_color": Color(0.32, 0.31, 0.3)},
+		"snow": {"top_amount": 1.0, "top_color": Color(0.84, 0.86, 0.9)},
+		"rain": {"wet": 0.6},
+		"dust": {"top_amount": 0.7, "top_color": Color(0.74, 0.56, 0.38)},
+	}.get(level["weather"], {})
 	for p in level["path"]:
 		path_points.append(p)
 	_build_environment()
@@ -316,16 +324,16 @@ func _build_rings() -> void:
 
 
 func _build_base_walls() -> void:
-	# Murets en béton et sacs de sable autour du Cœur (couverture).
-	var concrete := Fx.textured("concrete", 0.3)
+	# Murs anti-souffle en béton et sacs de sable autour du Cœur (couverture).
+	var rng := RandomNumberGenerator.new()
+	rng.seed = 404
 	var walls := [
 		[Vector3(-9, 1, 30), Vector3(8, 2, 0.8)], [Vector3(9, 1, 40), Vector3(0.8, 2, 12)],
 		[Vector3(-9, 1, 40), Vector3(0.8, 2, 12)], [Vector3(0, 1, 46), Vector3(18, 2, 0.8)],
 	]
 	walls.append_array(level["walls"])
 	for wall in walls:
-		var w := Fx.box_body(wall[1], Color.WHITE, Fx.LAYER_WORLD)
-		(w.get_child(1) as MeshInstance3D).material_override = concrete
+		var w := Buildings.blast_wall(wall[1], rng)
 		w.position = wall[0]
 		add_child(w)
 		_blocked.append(wall[0])
@@ -658,62 +666,23 @@ func _pine(pos: Vector3) -> void:
 	tree.position = pos
 
 
-## Maison en ruine (Col Gelé) : deux ou trois pans de mur effondrés, de la neige au pied.
+## Maison en ruine (Col Gelé) : murs effondrés en escalier, gravats (voir Buildings.ruin).
 func _ruin(pos: Vector3) -> void:
-	var stone := Fx.textured("concrete", 0.5, Color(0.55, 0.53, 0.52))
-	var ruin := Node3D.new()
-	var w := _rng.randf_range(5.0, 7.0)
-	var walls := [[Vector3(0, 0, -w * 0.5), 0.0], [Vector3(-w * 0.5, 0, 0), PI * 0.5], [Vector3(w * 0.5, 0, 0), PI * 0.5]]
-	for i in _rng.randi_range(2, 3):
-		var h := _rng.randf_range(1.2, 3.5)
-		var len := w * _rng.randf_range(0.5, 1.0)
-		var wall := Fx.box_body(Vector3(len, h, 0.5), Color.WHITE, Fx.LAYER_WORLD)
-		(wall.get_child(1) as MeshInstance3D).material_override = stone
-		wall.position = walls[i][0] + Vector3(0, h * 0.5, 0)
-		wall.rotation.y = walls[i][1]
-		ruin.add_child(wall)
-		if level["weather"] == "snow":
-			var cap := Fx.box_mat(Vector3(len, 0.08, 0.6), Fx.material(Color(0.82, 0.85, 0.9)))
-			cap.position = Vector3(0, h * 0.5 + 0.04, 0)
-			wall.add_child(cap)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = _rng.randi()
+	var ruin := Buildings.ruin(rng, _rng.randf_range(5.0, 7.0))
 	add_child(ruin)
 	ruin.position = pos
 	ruin.rotation.y = _rng.randf() * TAU
 
 
-## Immeuble éventré (Ville Morte) : une carcasse de béton de 2 à 4 étages, fenêtres noires,
-## quelques-unes encore éclairées d'une lueur chaude, le toit arraché.
+## Immeuble éventré (Ville Morte) de 2 à 4 niveaux (voir Buildings.city_building).
 func _building(pos: Vector3) -> void:
-	var w := _rng.randf_range(7.0, 11.0)
-	var d := _rng.randf_range(6.0, 9.0)
-	var floors := _rng.randi_range(2, 4)
-	var h := floors * 3.2
-	var tint: Color = [Color(0.5, 0.48, 0.46), Color(0.42, 0.4, 0.38), Color(0.55, 0.5, 0.44)][_rng.randi() % 3]
-	var concrete := Fx.textured("concrete", 0.35, tint)
-	var body := Fx.box_body(Vector3(w, h, d), Color.WHITE, Fx.LAYER_WORLD)
-	(body.get_child(1) as MeshInstance3D).material_override = concrete
-	var dark := Fx.material(Color(0.02, 0.02, 0.025))
-	dark.roughness = 0.15
-	var lit := Fx.material(Color(1.0, 0.72, 0.4), 1.6)
-	# Fenêtres sur les deux grandes façades, une par travée et par étage.
-	var cols := int(w / 2.4)
-	for side in [-1.0, 1.0]:
-		for f in floors:
-			for c in cols:
-				var x := -w * 0.5 + (c + 0.5) * w / cols
-				var win := Fx.box_mat(Vector3(1.1, 1.4, 0.06), lit if _rng.randf() < 0.06 else dark)
-				win.position = Vector3(x, -h * 0.5 + 1.7 + f * 3.2, side * (d * 0.5 + 0.02))
-				body.add_child(win)
-	# Dalles d'étage qui dépassent un peu, et un bord de toit cassé.
-	for f in range(1, floors):
-		var slab := Fx.box_mat(Vector3(w + 0.3, 0.25, d + 0.3), concrete)
-		slab.position.y = -h * 0.5 + f * 3.2
-		body.add_child(slab)
-	var broken := Fx.box_mat(Vector3(w * _rng.randf_range(0.3, 0.6), _rng.randf_range(0.8, 2.0), 0.4), concrete)
-	broken.position = Vector3(_rng.randf_range(-w, w) * 0.2, h * 0.5 + 0.5, d * 0.5 - 0.2)
-	body.add_child(broken)
+	var rng := RandomNumberGenerator.new()
+	rng.seed = _rng.randi()
+	var body := Buildings.city_building(rng, _rng.randf_range(7.0, 11.0), _rng.randf_range(6.0, 9.0), _rng.randi_range(2, 4))
 	add_child(body)
-	body.position = pos + Vector3(0, h * 0.5, 0)
+	body.position = pos
 	body.rotation.y = _rng.randi_range(0, 3) * PI * 0.5 + _rng.randf_range(-0.15, 0.15)
 
 

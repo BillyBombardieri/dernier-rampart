@@ -216,6 +216,7 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 | `gadgets.gd`, `decoy.gd`, `drone.gd` | Gadgets : barricade, leurre sonore, drone de récolte |
 | `workbench.gd`, `workbench_panel.gd` | L'établi et sa fenêtre |
 | `structure.gd` | Le Cœur (bâtiment avec des PV) |
+| `buildings.gd`, `weathered.gdshader` | Bâtiments détaillés (immeubles, ruines, murs anti-souffle, bunker du Cœur) et leur matériau vieilli : pied des murs sali, coulures, neige, sable ou pluie selon le chapitre |
 | `scrap.gd` | Ferraille à ramasser |
 | `hud.gd` | Interface (panneaux, viseur, barre de construction, notifications, fin de partie) |
 | `minimap.gd` | Minimap ronde |
@@ -228,7 +229,7 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 
 ## Textures et sons
 
-Toutes les textures (`assets/textures`) et tous les sons (`assets/sounds`) sont générés par le script `tools/generate_assets.py`, à partir de bruit mathématique. Aucune ressource externe n'est utilisée, donc il n'y a aucun problème de droits. Pour les régénérer : `python tools/generate_assets.py` (il faut numpy et pillow).
+Toutes les textures (`assets/textures`) et tous les sons (`assets/sounds`) sont générés par le script `tools/generate_assets.py`, à partir de bruit mathématique. Aucune ressource externe n'est utilisée, donc il n'y a aucun problème de droits. Pour les régénérer : `python tools/generate_assets.py` (il faut numpy et pillow) ; `python tools/generate_assets.py batiments` ne refait que l'enduit, les briques et le béton banché des bâtiments.
 
 ## Modèles 3D (zombies et armes)
 
@@ -238,7 +239,7 @@ Les modèles de `assets/models` sont fabriqués par le code avec **Blender 4** (
 - `tools/sculpt.py` : l'anatomie de chaque zombie (muscles, côtes, visage creusé), ses vêtements plissés et déchirés, ses plaies et ses couleurs ;
 - `tools/zombie_anims.py` : le squelette et les animations (marche, course, attaque, crachat, cri, creusage, deux morts) ;
 - `tools/weapon_models.py` : le pistolet et le fusil, pièce par pièce ;
-- `tools/make_models.py` : l'enchaînement complet. Chaque zombie est sculpté en détail, puis allégé pour le jeu (8 000 triangles, 11 000 pour le boss) ; les couleurs, le relief fin et les ombres sont « cuits » dans des textures.
+- `tools/make_models.py` : l'enchaînement complet. Chaque zombie est sculpté en détail, puis allégé pour le jeu (8 000 triangles, 11 000 pour le boss) ; les couleurs, le relief fin et les ombres sont « cuits » dans des textures. Les armes reçoivent aussi leurs textures d'usure : bronzage noir parti sur les arêtes, crasse et poussière dans les creux, rayures, traces de doigts, pointillé des poignées.
 
 Pour tout régénérer, depuis le dossier du dépôt (compter une dizaine de minutes) :
 
@@ -278,6 +279,12 @@ Une capture par chapitre, toujours au même endroit, pour comparer le rendu avan
 
 ```
 godot --path . --fixed-fps 60 res://tests/chapter_shots.tscn -- <dossier_de_sortie> [préfixe] [chapitres, ex. 1,3]
+```
+
+Les armes en main (nuit et coucher de soleil, visée), le Cœur et ses murs, un immeuble de la Ville Morte et une ruine du Col Gelé, pour juger le réalisme avant et après un changement (`armes`, `base`, `ville`, `ruine`) :
+
+```
+godot --path . --fixed-fps 60 res://tests/realism_shots.tscn -- <dossier_de_sortie> [préfixe] [prises, ex. armes,base]
 ```
 
 Le concept complet du jeu est dans le document de conception du projet.

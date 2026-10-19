@@ -170,25 +170,14 @@ func _build_viewmodels() -> void:
 	_show_model()
 
 
-## Matériaux des armes : grain de surface (pointillé des poignées, acier légèrement inégal),
-## vitre teintée du viseur, réticule et points de visée qui brillent dans le noir.
-## Les modèles n'ont pas de coordonnées de texture : les textures sont projetées (triplanaire).
+## Matériaux des armes : les surfaces usées (arêtes, crasse, rayures) viennent des textures cuites
+## par tools/make_models.py ; restent la vitre teintée du viseur, le réticule et les points de
+## visée qui brillent dans le noir.
 func _finish_material(mat: StandardMaterial3D) -> void:
 	if mat == null or mat.has_meta("fini"):
 		return
 	mat.set_meta("fini", true)
 	match mat.resource_name:
-		"polymere", "caoutchouc":
-			mat.normal_enabled = true
-			mat.normal_texture = _grain(0.18 if mat.resource_name == "caoutchouc" else 0.1, 6.0, FastNoiseLite.TYPE_CELLULAR)
-			mat.normal_scale = 0.6
-			mat.uv1_triplanar = true
-			mat.uv1_scale = Vector3.ONE * 25.0
-		"acier_noir", "acier_brut":
-			mat.roughness = 1.0
-			mat.roughness_texture = _grain(0.02, 0.0, FastNoiseLite.TYPE_SIMPLEX_SMOOTH, mat.resource_name == "acier_brut")
-			mat.uv1_triplanar = true
-			mat.uv1_scale = Vector3.ONE * 8.0
 		"verre":
 			mat.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 			mat.albedo_color = Color(0.25, 0.35, 0.4, 0.18)
@@ -197,28 +186,8 @@ func _finish_material(mat: StandardMaterial3D) -> void:
 		"reticule", "tritium":
 			mat.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 			mat.emission_energy_multiplier = 3.0
-
-
-## Texture de bruit : relief en pointillé (normal_strength > 0) ou rugosité qui varie.
-func _grain(frequency: float, normal_strength: float, kind: FastNoiseLite.NoiseType, bright := false) -> NoiseTexture2D:
-	var noise := FastNoiseLite.new()
-	noise.noise_type = kind
-	noise.frequency = frequency
-	noise.seed = 7
-	var tex := NoiseTexture2D.new()
-	tex.width = 256
-	tex.height = 256
-	tex.seamless = true
-	tex.noise = noise
-	if normal_strength > 0.0:
-		tex.as_normal_map = true
-		tex.bump_strength = normal_strength
-	else:
-		var ramp := Gradient.new()
-		ramp.set_color(0, Color.from_hsv(0, 0, 0.22 if bright else 0.32))
-		ramp.set_color(1, Color.from_hsv(0, 0, 0.36 if bright else 0.5))
-		tex.color_ramp = ramp
-	return tex
+		_:
+			mat.texture_filter = BaseMaterial3D.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS_ANISOTROPIC
 
 
 func _show_model() -> void:

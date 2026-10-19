@@ -151,6 +151,111 @@ def make_cloth() -> None:
     Image.fromarray(normal_map(weave * 0.2 + fine * 0.3 - tears * 0.5, 4.0), "RGB").save(TEX / "cloth_normal.png")
 
 
+# ---------------------------------------------------------------- façades et béton (bâtiments)
+
+BIG = 1024  # Textures des bâtiments : plus fines, vues de près.
+
+
+def streaks(size: int, rng) -> np.ndarray:
+    """Coulures verticales : des colonnes plus ou moins sales qui pâlissent en descendant."""
+    cols = fractal_noise(size, 0.9, rng)[0]  # Une ligne de bruit raccordable : une valeur par colonne.
+    cols = np.clip((cols - 0.6) * 5.0, 0, 1) ** 1.5
+    fade = np.clip((fractal_noise(size, 1.5, rng) - 0.3) * 2.0, 0, 1)
+    return cols[None, :] * fade
+
+
+def cracks(size: int, rng, width: float) -> np.ndarray:
+    """Fissures fines : les crêtes d'un bruit fractal."""
+    ridge = np.abs(fractal_noise(size, 1.25, rng) - 0.5)
+    mask = np.clip((fractal_noise(size, 1.1, rng) - 0.55) * 4.0, 0, 1)
+    return np.clip(1.0 - ridge / width, 0, 1) ** 3 * mask
+
+
+def make_plaster() -> None:
+    """Enduit de façade : crépi granuleux, plaques repeintes, fissures, coulures, éclats d'enduit
+    qui laissent voir la brique."""
+    rng = np.random.default_rng(2101)
+    fine = fractal_noise(BIG, 0.15, rng)
+    mid = fractal_noise(BIG, 0.95, rng)
+    big = fractal_noise(BIG, 1.3, rng)
+    patches = np.clip((fractal_noise(BIG, 1.2, rng) - 0.5) * 4.0, 0, 1)
+    spall = np.clip((fractal_noise(BIG, 1.5, rng) - 0.7) * 8.0, 0, 1)  # Enduit tombé.
+    crack = cracks(BIG, rng, 0.012)
+    drip = streaks(BIG, rng)
+    albedo = colorize(mid * 0.6 + fine * 0.4, (150, 142, 128), (196, 188, 172))
+    albedo *= (1 - patches[..., None] * 0.12) * (0.92 + big[..., None] * 0.16)
+    brick = colorize(fine, (92, 52, 38), (138, 82, 60))
+    albedo = albedo * (1 - spall[..., None]) + brick * spall[..., None]
+    albedo *= 1 - drip[..., None] * 0.3
+    albedo *= 1 - crack[..., None] * 0.6
+    height = fine * 0.35 + mid * 0.15 - spall * 0.5 - crack * 0.4
+    rough = 0.88 + fine * 0.1 - drip * 0.08
+    save_set("plaster", albedo, height, rough, 5.0)
+
+
+def make_brick() -> None:
+    """Mur de briques : 16 rangs et 5 briques par rang sur la tuile, joints en creux, chaque brique
+    de sa couleur, arêtes ébréchées, suie et coulures."""
+    rng = np.random.default_rng(2202)
+    rows, per_row = 16, 5
+    yy, xx = np.mgrid[0:BIG, 0:BIG].astype(np.float32)
+    row_h = BIG / rows
+    brick_w = BIG / per_row
+    row = (yy // row_h).astype(int)
+    shift = (row % 2) * brick_w * 0.5
+    col = (((xx + shift) // brick_w).astype(int)) % per_row
+    u = ((xx + shift) % brick_w) / brick_w
+    v = (yy % row_h) / row_h
+    mortar_w = 0.07
+    edge = np.minimum(np.minimum(u, 1 - u) * brick_w / row_h, np.minimum(v, 1 - v))
+    chip = fractal_noise(BIG, 0.6, rng)
+    brick_mask = np.clip((edge - mortar_w * (0.8 + chip * 0.8)) * 14.0, 0, 1)
+    ids = row * per_row + col
+    tones = rng.uniform(0.75, 1.15, rows * per_row)
+    hues = rng.uniform(-1, 1, rows * per_row)
+    tone = tones[ids]
+    hue = hues[ids]
+    fine = fractal_noise(BIG, 0.2, rng)
+    mid = fractal_noise(BIG, 1.0, rng)
+    base = np.stack([128 + hue * 14, 66 + hue * 6, 48 - hue * 4], -1) * tone[..., None]
+    base *= (0.85 + fine[..., None] * 0.3)
+    mortar = colorize(fine, (108, 104, 96), (150, 145, 135))
+    albedo = mortar * (1 - brick_mask[..., None]) + base * brick_mask[..., None]
+    soot = np.clip((mid - 0.55) * 2.5, 0, 1)
+    drip = streaks(BIG, rng)
+    albedo *= (1 - soot[..., None] * 0.4) * (1 - drip[..., None] * 0.3)
+    height = brick_mask * 0.7 + fine * 0.25 - (1 - brick_mask) * 0.2
+    rough = 0.82 + fine * 0.12 - brick_mask * 0.04
+    save_set("brick", albedo, height, rough, 7.0)
+
+
+def make_beton() -> None:
+    """Béton banché : panneaux de coffrage (un joint horizontal et un vertical par tuile), trous des
+    tiges de coffrage, bulles, taches d'humidité et coulures."""
+    rng = np.random.default_rng(2303)
+    fine = fractal_noise(BIG, 0.18, rng)
+    mid = fractal_noise(BIG, 1.0, rng)
+    big = fractal_noise(BIG, 1.35, rng)
+    yy, xx = np.mgrid[0:BIG, 0:BIG].astype(np.float32)
+    seam = np.exp(-((yy % (BIG / 2)) ** 2) / 6.0) + np.exp(-((xx % BIG) ** 2) / 6.0)
+    seam = np.clip(seam, 0, 1)
+    # Trous de tiges de coffrage : grille de 4 x 4 par tuile.
+    step = BIG / 4
+    dx = (xx % step) - step / 2
+    dy = (yy % step) - step / 2
+    ties = np.clip(1.0 - np.sqrt(dx * dx + dy * dy) / 9.0, 0, 1)
+    ties = (ties > 0).astype(np.float32) * np.clip(ties * 3.0, 0, 1)
+    pores = (fine > 0.86).astype(np.float32) * (mid > 0.4)
+    damp = np.clip((big - 0.55) * 3.0, 0, 1)
+    drip = streaks(BIG, rng)
+    albedo = colorize(mid * 0.55 + fine * 0.45, (118, 116, 110), (164, 162, 154))
+    albedo *= (1 - damp[..., None] * 0.3) * (1 - drip[..., None] * 0.35)
+    albedo *= (1 - seam[..., None] * 0.25) * (1 - ties[..., None] * 0.55) * (1 - pores[..., None] * 0.35)
+    height = fine * 0.3 + mid * 0.1 + seam * 0.35 - ties * 0.8 - pores * 0.3
+    rough = 0.86 + fine * 0.1 - damp * 0.1
+    save_set("beton", albedo, height, rough, 5.0)
+
+
 # ---------------------------------------------------------------- sons
 
 RATE = 44100
@@ -429,12 +534,21 @@ def make_ambience_sounds() -> None:
 
 
 if __name__ == "__main__":
+    import sys
+    if "batiments" in sys.argv:  # Seulement les textures des bâtiments.
+        make_plaster()
+        make_brick()
+        make_beton()
+        sys.exit(0)
     make_ground()
     make_mud()
     make_concrete()
     make_metal()
     make_skin()
     make_cloth()
+    make_plaster()
+    make_brick()
+    make_beton()
     make_sounds()
     make_extra_sounds()
     make_ambience_sounds()

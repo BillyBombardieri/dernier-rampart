@@ -4,6 +4,8 @@ extends StaticBody3D
 
 signal destroyed
 
+const CONCRETE := Color(0.95, 0.93, 0.9)
+
 var kind := "core"
 var ring := ""
 var display_name := ""
@@ -13,7 +15,7 @@ var alive := true
 
 var _label: Label3D
 var _mesh: MeshInstance3D
-var _material: StandardMaterial3D
+var _material: ShaderMaterial
 var _glow: MeshInstance3D
 var _light: OmniLight3D
 var _color := Color.WHITE
@@ -34,13 +36,12 @@ func setup(p_kind: String, p_name: String, p_ring: String, p_hp: float, size: Ve
 	shape.shape = bs
 	shape.position.y = size.y * 0.5
 	add_child(shape)
-	_material = Fx.textured("concrete", 0.5)
-	_mesh = Fx.box_mat(size, _material)
-	_mesh.position.y = size.y * 0.5
+	# Bunker en béton (Buildings.core_bunker) ; ses voyants et la lumière montrent qu'il est alimenté.
+	_material = Buildings.weathered("beton", 0.42, CONCRETE).duplicate()
+	var parts := Buildings.core_bunker(size, color, _material)
+	_mesh = parts[0]
 	add_child(_mesh)
-	# Bande lumineuse et lumière qui montrent que le bâtiment est alimenté.
-	_glow = Fx.box(Vector3(size.x + 0.05, 0.25, size.z + 0.05), color, 4.0)
-	_glow.position.y = size.y * 0.75
+	_glow = parts[1]
 	add_child(_glow)
 	_light = OmniLight3D.new()
 	_light.light_color = color
@@ -85,7 +86,7 @@ func repair(amount: float) -> float:
 
 
 func _set_powered(on: bool) -> void:
-	_material.albedo_color = Color.WHITE if on else Color(0.3, 0.28, 0.26)
+	_material.set_shader_parameter("tint", CONCRETE if on else Color(0.3, 0.28, 0.26))
 	_glow.visible = on
 	_light.visible = on
 

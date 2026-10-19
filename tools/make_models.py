@@ -16,6 +16,7 @@ import os
 import sys
 import time
 
+import bmesh
 import bpy
 import numpy as np
 from mathutils import Vector
@@ -703,11 +704,292 @@ def render_views(path, target, height, views, lens=60, res=(420, 630), dist=None
     return files
 
 
+# ---------------------------------------------------------------- finitions des armes
+
+# Matériaux des armes qui reçoivent les textures d'usure, et leur numéro dans la passe des masques.
+# Les autres (verre, tritium, réticule) gardent une couleur unie.
+WEAR_KINDS = {"acier_noir": 1, "acier_brut": 2, "polymere": 3, "caoutchouc": 4}
+
+
+def unwrap_parts(parts, margin=0.004):
+    """Une seule planche de coordonnées de texture pour toutes les pièces, à densité égale.
+    Les booléens laissent des faces plates (aire nulle) : on les dissout avant de déplier."""
+    for p in parts:
+        bm = bmesh.new()
+        bm.from_mesh(p.data)
+        bmesh.ops.dissolve_degenerate(bm, dist=1e-6, edges=bm.edges)
+        bm.to_mesh(p.data)
+        bm.free()
+        if not p.data.uv_layers:
+            p.data.uv_layers.new(name="UVMap")
+    select_only(*parts)
+    bpy.ops.object.mode_set(mode="EDIT")
+    bpy.ops.mesh.select_all(action="SELECT")
+    bpy.ops.uv.smart_project(angle_limit=math.radians(50), island_margin=margin, area_weight=0.0,
+                             correct_aspect=True, scale_to_bounds=False)
+    bpy.ops.uv.select_all(action="SELECT")
+    bpy.ops.uv.pack_islands(margin=margin, rotate=True)
+    bpy.ops.object.mode_set(mode="OBJECT")
+
+
+def wear_bake_material(kind, image):
+    """Matériau de cuisson d'une sorte de surface : des émissions qui donnent les masques (arêtes,
+    creux, taches) et une normale arrondie aux arêtes, avec un grain propre à la matière."""
+    mat = bpy.data.materials.new("cuisson_" + kind)
+    mat.use_nodes = True
+    nt = mat.node_tree
+    for n in list(nt.nodes):
+        nt.nodes.remove(n)
+    N, L = nt.nodes, nt.links
+
+    def node(t, **inputs):
+        n = N.new(t)
+        for k, v in inputs.items():
+            n.inputs[k].default_value = v
+        return n
+
+    def math_op(op, a, b=None):
+        n = N.new("ShaderNodeMath")
+        n.operation = op
+        for i, v in enumerate((a, b)):
+            if v is None:
+                continue
+            if isinstance(v, (int, float)):
+                n.inputs[i].default_value = v
+            else:
+                L.new(v, n.inputs[i])
+        return n.outputs[0]
+
+    def noise(scale, detail, vec):
+        n = node("ShaderNodeTexNoise", Scale=scale, Detail=detail, Roughness=0.55)
+        L.new(vec, n.inputs["Vector"])
+        return n.outputs["Fac"]
+
+    def combine(r, g, b):
+        n = N.new("ShaderNodeCombineColor")
+        for i, v in enumerate((r, g, b)):
+            if isinstance(v, (int, float)):
+                n.inputs[i].default_value = v
+            else:
+                L.new(v, n.inputs[i])
+        return n.outputs["Color"]
+
+    out = N.new("ShaderNodeOutputMaterial")
+    emit = N.new("ShaderNodeEmission")
+    obj = N.new("ShaderNodeTexCoord").outputs["Object"]
+    geo = N.new("ShaderNodeNewGeometry")
+    # Arêtes : écart entre la normale arrondie (rayon 3 mm) et la vraie normale.
+    bev = node("ShaderNodeBevel", Radius=0.003)
+    bev.samples = 16
+    dot = N.new("ShaderNodeVectorMath")
+    dot.operation = "DOT_PRODUCT"
+    L.new(bev.outputs["Normal"], dot.inputs[0])
+    L.new(geo.outputs["Normal"], dot.inputs[1])
+    edge = math_op("MULTIPLY", math_op("SUBTRACT", 1.0, dot.outputs["Value"]), 3.0)
+    # Creux : occlusion à courte portée (les autres pièces comptent aussi).
+    ao = node("ShaderNodeAmbientOcclusion", Distance=0.006)
+    ao.samples = 24
+    pass_a = combine(edge, ao.outputs["AO"], WEAR_KINDS[kind] / 8.0)
+    # Taches (doigts, huile), plaques d'usure et grain fin, dans l'espace de la pièce : sans raccord.
+    pass_b = combine(noise(28.0, 4.0, obj), noise(70.0, 6.0, obj), noise(700.0, 2.0, obj))
+    # Relief : arêtes arrondies, et selon la matière un pointillé (poignées) ou une peau d'orange.
+    grain = {"caoutchouc": (1100.0, 0.5), "polymere": (650.0, 0.18)}.get(kind, (900.0, 0.04))
+    vor = node("ShaderNodeTexVoronoi", Scale=grain[0], Randomness=1.0)
+    L.new(obj, vor.inputs["Vector"])
+    bump = node("ShaderNodeBump", Strength=grain[1], Distance=0.0003)
+    L.new(vor.outputs["Distance"], bump.inputs["Height"])
+    bev_n = node("ShaderNodeBevel", Radius=0.0007)
+    bev_n.samples = 16
+    L.new(bev_n.outputs["Normal"], bump.inputs["Normal"])
+    bsdf = N.new("ShaderNodeBsdfPrincipled")
+    L.new(bump.outputs["Normal"], bsdf.inputs["Normal"])
+    target = N.new("ShaderNodeTexImage")
+    target.image = image
+    N.active = target
+    return mat, {"out": out, "emit": emit, "a": pass_a, "b": pass_b, "bsdf": bsdf, "target": target}
+
+
+def wear_scratches(size, count, rng):
+    """Fines rayures droites ou un peu courbes, tracées dans la planche de texture."""
+    img = np.zeros((size, size), np.float32)
+    for _ in range(count):
+        p = rng.uniform(0, size, 2)
+        ang = rng.uniform(0, math.pi)
+        length = rng.uniform(0.004, 0.03) * size
+        bend = rng.uniform(-0.4, 0.4)
+        steps = max(4, int(length * 2))
+        t = np.linspace(0.0, 1.0, steps)
+        a = ang + bend * (t - 0.5)
+        xs = p[0] + np.cumsum(np.cos(a)) * length / steps
+        ys = p[1] + np.cumsum(np.sin(a)) * length / steps
+        w = rng.uniform(0.35, 1.0) * np.sin(np.pi * t) ** 0.5  # Plus fines aux deux bouts.
+        xi = np.clip(xs.astype(int), 0, size - 1)
+        yi = np.clip(ys.astype(int), 0, size - 1)
+        np.maximum.at(img, (yi, xi), w)
+    return img
+
+
+def smoothstep(a, b, x):
+    t = np.clip((x - a) / (b - a), 0.0, 1.0)
+    return t * t * (3.0 - 2.0 * t)
+
+
+def bake_weapon_textures(name, parts, size, preview=None):
+    """Cuit l'usure de l'arme : bronzage noir usé jusqu'à l'acier sur les arêtes, crasse et
+    poussière dans les creux, rayures, traces de doigts plus brillantes, relief des poignées.
+    Remplace les matériaux texturés par un seul matériau « arme_<nom> » (couleur, ORM, normales)."""
+    scene = bpy.context.scene
+    scene.render.engine = "CYCLES"
+    scene.cycles.device = "CPU"
+    scene.cycles.use_denoising = False
+    unwrap_parts(parts)
+    imgs = {}
+    for label, data in (("a", True), ("b", True), ("normal", True)):
+        im = bpy.data.images.new("arme_%s_%s" % (name, label), size, size, alpha=False, float_buffer=label != "normal")
+        im.colorspace_settings.name = "Non-Color"
+        imgs[label] = im
+    bake_mats = {}
+    for p in parts:
+        for slot in p.material_slots:
+            kind = slot.material.name.split(".")[0] if slot.material else ""
+            if kind not in WEAR_KINDS:
+                continue
+            if kind not in bake_mats:
+                bake_mats[kind] = wear_bake_material(kind, imgs["a"])
+            slot.material = bake_mats[kind][0]
+    baked = [p for p in parts if any(s.material and s.material.name.startswith("cuisson_") for s in p.material_slots)]
+    # Les matériaux unis (verre, tritium...) de ces pièces cuisent dans une image jetable.
+    spare = bpy.data.images.new("arme_rebut", 64, 64)
+    spare_nodes = []
+    for p in baked:
+        for slot in p.material_slots:
+            mat = slot.material
+            if mat and not mat.name.startswith("cuisson_") and mat.name not in [m.id_data.name for m in spare_nodes]:
+                n = mat.node_tree.nodes.new("ShaderNodeTexImage")
+                n.image = spare
+                mat.node_tree.nodes.active = n
+                spare_nodes.append(n)
+
+    def run(label, btype, samples):
+        for mat, n in bake_mats.values():
+            nt = mat.node_tree
+            for l in list(n["out"].inputs["Surface"].links) + list(n["emit"].inputs["Color"].links):
+                nt.links.remove(l)
+            if btype == "EMIT":
+                nt.links.new(n[label], n["emit"].inputs["Color"])
+                nt.links.new(n["emit"].outputs["Emission"], n["out"].inputs["Surface"])
+            else:
+                nt.links.new(n["bsdf"].outputs["BSDF"], n["out"].inputs["Surface"])
+            n["target"].image = imgs[label]
+        scene.cycles.samples = samples
+        select_only(*baked)
+        t = time.time()
+        bpy.ops.object.bake(type=btype, margin=8, normal_space="TANGENT", use_clear=True)
+        print("  cuisson %s : %.0f s" % (label, time.time() - t))
+
+    run("a", "EMIT", 2)
+    run("b", "EMIT", 1)
+    run("normal", "NORMAL", 4)
+    a = image_array(imgs["a"])
+    b = image_array(imgs["b"])
+    edge, ao, kind = a[..., 0], a[..., 1], np.rint(a[..., 2] * 8.0).astype(int)
+    covered = kind > 0
+
+    def spread(x):  # Le bruit de Blender reste autour de 0,5 : on l'étale sur 0..1.
+        lo, hi = np.percentile(x[covered], [4, 96])
+        return np.clip((x - lo) / (hi - lo), 0.0, 1.0)
+
+    smudge, patches, grain = spread(b[..., 0]), spread(b[..., 1]), spread(b[..., 2])
+    if preview:  # Masques bruts, pour régler l'usure (numpy : arêtes, creux, taches, plaques).
+        np.save(os.path.join(preview, "masques_%s.npy" % name), np.stack([edge, ao, smudge, patches], 0)[:, ::4, ::4])
+    rng = np.random.default_rng(17 if name == "pistolet" else 23)
+    scratch = wear_scratches(size, 2600 if size >= 2048 else 1300, rng)
+    cavity = smoothstep(0.85, 0.35, ao)  # 1 au fond des creux.
+    convex = smoothstep(0.75, 0.95, ao)  # Les arêtes saillantes, pas les angles rentrants.
+    breakup = smoothstep(0.3, 0.8, patches)
+    wear = smoothstep(0.3, 0.85, edge * convex * (0.1 + 1.7 * breakup))
+    oily = smoothstep(0.55, 0.9, smudge)  # Traces de doigts et d'huile : plus brillant.
+    g = (grain - 0.5) * 0.12
+
+    col = np.zeros((size, size, 3), np.float32)
+    rough = np.full((size, size), 0.5, np.float32)
+    metal = np.zeros((size, size), np.float32)
+    steel_bare = np.array([0.3, 0.3, 0.31], np.float32)
+    grime = np.array([0.045, 0.04, 0.034], np.float32)
+    dust = np.array([0.11, 0.1, 0.085], np.float32)
+    for k, i in WEAR_KINDS.items():
+        m = kind == i
+        if not m.any():
+            continue
+        if k == "acier_noir":  # Bronzage noir (nitruration) qui part sur les arêtes.
+            tone = np.array([0.032, 0.032, 0.034]) * (1.0 + g[m] * 2.0)[:, None]
+            c = tone * (1 - wear[m, None]) + steel_bare * wear[m, None]
+            s = scratch[m] * 0.22 * (1 - wear[m])
+            c = c * (1 - s[:, None]) + steel_bare * 0.6 * s[:, None]
+            r = 0.52 + 0.1 * patches[m] - 0.16 * oily[m] - 0.25 * wear[m] - 0.5 * s
+            mt = 0.65 + 0.35 * wear[m]
+            gr = grime
+        elif k == "acier_brut":  # Acier nu du canon et de la chambre, noirci de poudre.
+            c = np.array([0.36, 0.36, 0.37]) * (1.0 + g[m])[:, None]
+            soot = smoothstep(0.4, 0.8, patches[m]) * 0.5
+            c = c * (1 - soot[:, None]) + np.array([0.05, 0.048, 0.045]) * soot[:, None]
+            r = 0.26 + 0.18 * soot - 0.08 * oily[m]
+            mt = np.full(m.sum(), 1.0) - 0.3 * soot
+            gr = grime
+        elif k == "polymere":  # Polymère mat, lustré là où les mains frottent.
+            c = np.array([0.017, 0.017, 0.018]) * (1.0 + g[m] * 2.0)[:, None]
+            polish = wear[m] * 0.7
+            c = c + np.array([0.018, 0.018, 0.018]) * polish[:, None] + 0.01 * scratch[m, None]
+            r = 0.68 - 0.22 * polish - 0.16 * oily[m] + 0.06 * patches[m]
+            mt = np.zeros(m.sum())
+            gr = dust
+        else:  # Caoutchouc des plaquettes : très mat, poussière dans le pointillé.
+            c = np.array([0.013, 0.013, 0.013]) * (1.0 + g[m] * 2.0)[:, None]
+            r = 0.86 - 0.12 * oily[m]
+            mt = np.zeros(m.sum())
+            gr = dust
+        cav = cavity[m] * (0.55 + 0.45 * breakup[m])
+        c = c * (1 - cav[:, None]) + gr * cav[:, None]
+        r = r * (1 - cav) + 0.88 * cav
+        mt = mt * (1 - cav * 0.7)
+        col[m] = c
+        rough[m] = r
+        metal[m] = mt
+    base = bpy.data.images.new("arme_%s_couleur" % name, size, size, alpha=False)
+    out = np.ones((size, size, 4), np.float32)
+    # Les armes restent lisibles la nuit : jamais plus sombre que sRGB 0,075.
+    out[..., :3] = np.maximum(to_srgb(col * (0.55 + 0.45 * ao[..., None])), 0.075)
+    set_image(base, out)
+    orm = bpy.data.images.new("arme_%s_orm" % name, size, size, alpha=False)
+    orm.colorspace_settings.name = "Non-Color"
+    o = np.ones((size, size, 4), np.float32)
+    o[..., 0] = 0.4 + 0.6 * ao
+    o[..., 1] = np.clip(rough, 0.08, 1.0)
+    o[..., 2] = np.clip(metal, 0.0, 1.0)
+    set_image(orm, o)
+    game = game_material("arme_" + name, base, orm, imgs["normal"])
+    for p in parts:
+        for slot in p.material_slots:
+            if slot.material and slot.material.name.startswith("cuisson_"):
+                slot.material = game
+    for mat, _ in bake_mats.values():
+        bpy.data.materials.remove(mat)
+    for n in spare_nodes:
+        n.id_data.nodes.remove(n)
+    bpy.data.images.remove(spare)
+    for label in ("a", "b"):
+        bpy.data.images.remove(imgs[label])
+
+
 def build_weapon(name, preview=None):
-    """Pistolet ou fusil : pièces nommées et repères, écrits dans assets/models/arme_<nom>.gltf."""
+    """Pistolet ou fusil : pièces nommées et repères, écrits dans assets/models/arme_<nom>.gltf,
+    avec leurs textures d'usure (assets/models/textures/arme_<nom>_*.jpg)."""
     t0 = time.time()
     reset_scene()
     parts, marks = weapon_models.WEAPONS[name]()
+    if preview:
+        os.makedirs(preview, exist_ok=True)
+    bake_weapon_textures(name, parts, 2048, preview)
     weapon_models.export_weapon(name, parts, marks, OUT_DIR)
     if preview:
         os.makedirs(preview, exist_ok=True)

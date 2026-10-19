@@ -421,9 +421,10 @@ def export_weapon(name, parts, marks, out_dir):
     bpy.context.view_layer.objects.active = parts[0]
     path = os.path.join(out_dir, "arme_%s.gltf" % name)
     bpy.ops.export_scene.gltf(
-        filepath=path, export_format="GLTF_SEPARATE", use_selection=True, export_yup=True,
-        export_apply=True, export_normals=True, export_texcoords=False, export_tangents=False,
-        export_materials="EXPORT", export_skins=False, export_animations=False,
+        filepath=path, export_format="GLTF_SEPARATE", export_texture_dir="textures",
+        use_selection=True, export_yup=True, export_apply=True, export_normals=True,
+        export_texcoords=True, export_tangents=False, export_materials="EXPORT",
+        export_image_format="JPEG", export_jpeg_quality=90, export_skins=False, export_animations=False,
         export_cameras=False, export_lights=False)
     tris = 0
     for p in parts:
