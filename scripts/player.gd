@@ -461,7 +461,7 @@ func _shoot() -> void:
 			exclude.append(z.get_rid())
 			hits += 1
 		else:
-			Fx.burst(Game.main, end_point, hit["normal"], Color(0.4, 0.36, 0.3), 8, 3.0, 0.04)
+			Fx.bullet_impact(Game.main, end_point, hit["normal"], _dust_color(end_point))
 			Fx.burst(Game.main, end_point, hit["normal"], Color(1.0, 0.8, 0.4), 3, 6.0, 0.02)
 			break
 	Fx.tracer(Game.main, muzzle, end_point, _tracer_color(ammo_type))
@@ -470,12 +470,31 @@ func _shoot() -> void:
 	_muzzle_flash.visible = true
 	_muzzle_flash.rotation.z = randf() * TAU
 	get_tree().create_timer(0.04).timeout.connect(func(): _muzzle_flash.visible = false)
+	_eject_casing(muzzle)
 	_action_kick = 1.0
 	_trigger_pull = 1.0
 	_apply_recoil(w)
 	if ammo[weapon] <= 0:
 		_start_reload()
 	Game.changed.emit()
+
+
+## La douille part sur la droite et un peu vers le haut, depuis la fenêtre d'éjection.
+func _eject_casing(muzzle: Vector3) -> void:
+	var b := _camera.global_transform.basis
+	var right := b.x
+	var port := muzzle + b.z * (0.22 if weapon == "rifle" else 0.12) + right * 0.03
+	var vel := right * randf_range(2.2, 3.2) + b.y * randf_range(1.2, 2.0) + b.z * randf_range(0.0, 0.6)
+	Casing.eject(Game.main, port, vel + velocity, weapon == "rifle")
+
+
+## Couleur de la poussière soulevée par une balle, selon ce qui est touché.
+func _dust_color(at: Vector3) -> Color:
+	if at.y < 0.08:
+		# Le sol de la carte : la couleur du sol du chapitre, un peu éclaircie.
+		var tint: Color = Game.main.level["ground"]["tint"]
+		return Color(0.42, 0.37, 0.31).lerp(tint * Color(0.5, 0.45, 0.4), 0.4)
+	return Color(0.5, 0.48, 0.45)
 
 
 func _tracer_color(ammo_type: String) -> Color:

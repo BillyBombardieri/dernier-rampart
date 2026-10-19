@@ -362,6 +362,9 @@ func take_damage(amount: float, from_player := false, heavy := false, hit_pos :=
 		amount += _surcharge()
 	Fx.burst(Game.main, where, hit_normal, Color(0.35, 0.02, 0.02), 10 if from_player else 4, 3.5, 0.05)
 	if from_player:
+		# Brume de sang sombre qui retombe vite.
+		Fx.puff(Game.main, where, Color(0.28, 0.02, 0.02, 0.5), 5, 0.22, 0.6, true)
+	if from_player:
 		Sfx.play_at(Game.main, "hit_flesh", where, -2.0, 0.15)
 	_hit_kick = minf(1.0, _hit_kick + amount / max_hp * 3.0 + 0.2)
 	hp -= amount

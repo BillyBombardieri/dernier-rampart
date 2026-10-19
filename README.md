@@ -208,6 +208,7 @@ Tout est en GDScript dans `scripts/`. La carte est construite par le code, sans 
 | `zombie.gd` | Types de zombies, déplacement, animations, états (gelé, en feu, chargé, étourdi, enragé, enterré) |
 | `health_bar.gd` | Barre de vie au-dessus des zombies blessés |
 | `ground_cover.gd` | Herbe qui ondule au vent et cailloux semés au sol, réglés par chapitre |
+| `casing.gd` | Douilles éjectées par les armes, qui rebondissent et restent un moment au sol |
 | `zombie_pose.gd` | Réactions ajoutées à l'animation : recul quand un zombie est touché, vacillement quand il est étourdi |
 | `zombie_models.gd` | Repères des modèles (yeux, vitesse de marche des animations), écrits par `tools/make_models.py` |
 | `barrier.gd` | Barrières du chemin et barricade |

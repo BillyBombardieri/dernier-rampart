@@ -270,7 +270,8 @@ static func soft_texture() -> GradientTexture2D:
 
 
 ## Nuage de fumée ou de poussière qui se dissipe (explosion, zombie qui sort de terre).
-static func puff(parent: Node, pos: Vector3, color: Color, amount := 16, radius := 1.0, lifetime := 1.6) -> void:
+## "lit" : la fumée prend la lumière de la scène (sinon elle brille d'elle-même dans la nuit).
+static func puff(parent: Node, pos: Vector3, color: Color, amount := 16, radius := 1.0, lifetime := 1.6, lit := false) -> void:
 	var p := CPUParticles3D.new()
 	p.one_shot = true
 	p.explosiveness = 0.9
@@ -290,7 +291,8 @@ static func puff(parent: Node, pos: Vector3, color: Color, amount := 16, radius 
 	var q := QuadMesh.new()
 	q.size = Vector2(1, 1)
 	var m := StandardMaterial3D.new()
-	m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
+	if not lit:
+		m.shading_mode = BaseMaterial3D.SHADING_MODE_UNSHADED
 	m.billboard_mode = BaseMaterial3D.BILLBOARD_PARTICLES
 	m.transparency = BaseMaterial3D.TRANSPARENCY_ALPHA
 	m.vertex_color_use_as_albedo = true
@@ -305,3 +307,82 @@ static func puff(parent: Node, pos: Vector3, color: Color, amount := 16, radius 
 	p.global_position = pos
 	p.emitting = true
 	parent.get_tree().create_timer(lifetime + 0.3).timeout.connect(p.queue_free)
+
+
+# ---------------------------------------------------------------- impacts de balles
+
+const MAX_HOLES := 60
+static var _hole_tex: ImageTexture
+static var _hole_orm: ImageTexture
+static var _holes: Array[Decal] = []
+
+
+## Impact d'une balle sur le décor : petit nuage de poussière qui retombe, éclats, et un trou
+## (décalque) qui reste sur la surface un moment.
+static func bullet_impact(parent: Node, pos: Vector3, normal: Vector3, dust: Color) -> void:
+	var n := normal if normal.length() > 0.1 else Vector3.UP
+	burst(parent, pos, n, dust.darkened(0.3), 6, 3.0, 0.03)
+	puff(parent, pos + n * 0.1, Color(dust.r, dust.g, dust.b, 0.55), 5, 0.22, 1.3, true)
+	bullet_hole(parent, pos, n)
+
+
+static func bullet_hole(parent: Node, pos: Vector3, normal: Vector3) -> void:
+	_holes.assign(_holes.filter(func(d): return is_instance_valid(d)))
+	if _holes.size() >= MAX_HOLES:
+		_holes.pop_front().queue_free()
+	var d := Decal.new()
+	d.texture_albedo = _hole_texture()
+	# Le trou est mat : sans ça, les reflets du sol mouillé ou de la boue le cachent.
+	d.texture_orm = _hole_orm
+	d.size = Vector3(0.26, 0.24, 0.26) * randf_range(0.85, 1.2)
+	d.upper_fade = 0.2
+	d.lower_fade = 0.2
+	d.distance_fade_enabled = true
+	d.distance_fade_begin = 25.0
+	d.distance_fade_length = 10.0
+	var y := normal.normalized()
+	var ref := Vector3.FORWARD if absf(y.dot(Vector3.FORWARD)) < 0.9 else Vector3.RIGHT
+	var x := y.cross(ref).normalized()
+	d.basis = Basis(x, y, x.cross(y)).rotated(y, randf() * TAU)
+	parent.add_child(d)
+	d.global_position = pos
+	_holes.append(d)
+	# Le trou s'efface au bout d'une demi-minute.
+	var t := d.create_tween()
+	t.tween_interval(30.0)
+	t.tween_property(d, "modulate:a", 0.0, 4.0)
+	t.tween_callback(d.queue_free)
+
+
+## Trou noir aux bords irréguliers, entouré d'une auréole de poudre et d'éclats, généré une fois.
+static func _hole_texture() -> ImageTexture:
+	if _hole_tex == null:
+		var size := 64
+		var img := Image.create(size, size, false, Image.FORMAT_RGBA8)
+		var noise := FastNoiseLite.new()
+		noise.seed = 31
+		noise.frequency = 0.18
+		for yy in size:
+			for xx in size:
+				var v := Vector2(xx - size * 0.5 + 0.5, yy - size * 0.5 + 0.5) / (size * 0.5)
+				var r := v.length() + noise.get_noise_2d(xx, yy) * 0.12
+				var c := Color(0, 0, 0, 0)
+				# Éclats en étoile autour du trou : l'auréole est plus marquée dans certaines directions.
+				var streak := 0.75 + 0.25 * sin(atan2(v.y, v.x) * 7.0 + noise.get_noise_2d(xx * 0.3, yy * 0.3) * 4.0)
+				if r < 0.2:
+					c = Color(0.02, 0.018, 0.015, 1.0)
+				elif r < 0.95 * streak:
+					var k := (r - 0.2) / (0.95 * streak - 0.2)
+					c = Color(0.07, 0.06, 0.05, pow(1.0 - k, 1.6) * 0.9)
+				img.set_pixel(xx, yy, c)
+		# Même forme pour l'ORM : occlusion forte et rugosité maximale dans le trou.
+		var orm := Image.create(size, size, false, Image.FORMAT_RGBA8)
+		for yy in size:
+			for xx in size:
+				var a := img.get_pixel(xx, yy).a
+				orm.set_pixel(xx, yy, Color(0.3, 1.0, 0.0, a))
+		img.generate_mipmaps()
+		orm.generate_mipmaps()
+		_hole_tex = ImageTexture.create_from_image(img)
+		_hole_orm = ImageTexture.create_from_image(orm)
+	return _hole_tex
