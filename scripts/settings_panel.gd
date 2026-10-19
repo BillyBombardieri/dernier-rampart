@@ -1,7 +1,7 @@
 class_name SettingsPanel
 extends PanelContainer
 ## Fenêtre des réglages (menu principal et pause) : sensibilité, volume, champ de vision,
-## axe vertical inversé et touches personnalisées. Tout est sauvegardé tout de suite.
+## qualité graphique, axe vertical inversé et touches personnalisées. Tout est sauvegardé tout de suite.
 
 signal closed
 
@@ -10,6 +10,7 @@ var _key_buttons := {}
 var _sens_value: Label
 var _volume_value: Label
 var _fov_value: Label
+var _quality_value: Label
 var _hint: Label
 
 
@@ -55,6 +56,13 @@ func _ready() -> void:
 		_refresh_values()
 	)
 	_fov_value = Ui.label(grid, "", 16, Ui.ACCENT)
+	Ui.label(grid, "Qualité graphique", 16)
+	Ui.slider(grid, Graphics.MEDIUM, Graphics.ULTRA, 1.0, Settings.quality, func(value: float):
+		Settings.quality = int(value)
+		Settings.apply_graphics()
+		_refresh_values()
+	)
+	_quality_value = Ui.label(grid, "", 16, Ui.ACCENT)
 	Ui.label(grid, "Inverser l'axe vertical", 16)
 	var invert := CheckBox.new()
 	invert.button_pressed = Settings.invert_y
@@ -118,6 +126,7 @@ func _refresh_values() -> void:
 	_sens_value.text = "%.2f x" % Settings.sensitivity
 	_volume_value.text = "%d %%" % int(round(Settings.volume * 100.0))
 	_fov_value.text = "%d°" % int(Settings.fov)
+	_quality_value.text = Graphics.NAMES[Settings.quality]
 
 
 func _refresh_keys() -> void:

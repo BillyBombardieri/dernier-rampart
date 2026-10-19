@@ -116,9 +116,12 @@ func _build_environment() -> void:
 	env.adjustment_enabled = true
 	env.adjustment_contrast = 1.08
 	env.adjustment_saturation = e["saturation"]
+	Graphics.apply_environment(env)
 	var we := WorldEnvironment.new()
 	we.environment = env
+	we.add_to_group("world_env")
 	add_child(we)
+	add_child(Graphics.post_layer())
 	# Soleil couchant ou lune, selon le niveau.
 	var sun := DirectionalLight3D.new()
 	sun.rotation_degrees = e["sun_rot"]

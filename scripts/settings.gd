@@ -56,6 +56,7 @@ var sensitivity := 1.0
 var volume := 0.8
 var fov := 78.0
 var invert_y := false
+var quality := Graphics.ULTRA  # Qualité du rendu : Graphics.MEDIUM, HIGH ou ULTRA.
 var tutorial_done := false
 var best_score := 0
 var best_wave := 0
@@ -83,6 +84,7 @@ func load_settings() -> void:
 	volume = clampf(cfg.get_value("reglages", "volume", volume), 0.0, 1.0)
 	fov = clampf(cfg.get_value("reglages", "champ_de_vision", fov), 60.0, 110.0)
 	invert_y = cfg.get_value("reglages", "inverser_y", invert_y)
+	quality = clampi(int(cfg.get_value("reglages", "qualite", quality)), Graphics.MEDIUM, Graphics.ULTRA)
 	tutorial_done = cfg.get_value("tutoriel", "termine", false)
 	best_score = cfg.get_value("record", "score", 0)
 	best_wave = cfg.get_value("record", "vague", 0)
@@ -109,6 +111,7 @@ func save_settings() -> void:
 	cfg.set_value("reglages", "volume", volume)
 	cfg.set_value("reglages", "champ_de_vision", fov)
 	cfg.set_value("reglages", "inverser_y", invert_y)
+	cfg.set_value("reglages", "qualite", quality)
 	cfg.set_value("tutoriel", "termine", tutorial_done)
 	cfg.set_value("record", "score", best_score)
 	cfg.set_value("record", "vague", best_wave)
@@ -137,6 +140,16 @@ func apply() -> void:
 	AudioServer.set_bus_volume_db(0, linear_to_db(maxf(volume, 0.0001)))
 	AudioServer.set_bus_mute(0, volume <= 0.001)
 	apply_bindings()
+	apply_graphics()
+
+
+## Qualité du rendu : la fenêtre, puis l'ambiance et le post-traitement de la partie en cours.
+func apply_graphics() -> void:
+	Graphics.apply_viewport(get_tree().root)
+	for we in get_tree().get_nodes_in_group("world_env"):
+		Graphics.apply_environment((we as WorldEnvironment).environment)
+	for layer in get_tree().get_nodes_in_group("post_camera"):
+		(layer as CanvasLayer).visible = quality >= Graphics.HIGH
 
 
 func apply_bindings() -> void:
