@@ -1,0 +1,13 @@
+# Fichiers créés par Unreal et Visual Studio sur le PC : ils se refont tout seuls.
+Binaries/
+Intermediate/
+Saved/
+DerivedDataCache/
+.vs/
+*.sln
+*.suo
+*.VC.db
+*.opensdf
+*.sdf
+Plugins/*/Binaries/
+Plugins/*/Intermediate/

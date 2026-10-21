@@ -6,6 +6,10 @@ Ce dépôt contient le **prototype jouable**. Il sert à vérifier que le mélan
 
 Côté ambiance, la partie se joue au crépuscule, dans le brouillard, avec des projecteurs et des barils en feu. Les textures sont réalistes (terre, boue, béton, métal rouillé). Les zombies sont de **vrais modèles 3D** sculptés, texturés et animés : vêtements déchirés, plaies, démarche boiteuse, course, coups de griffes, crachat, cri, chute en arrière ou face contre terre. Le pistolet et le fusil sont modélisés pièce par pièce : la glissière et la culasse reculent à chaque tir, l'arme pivote au rechargement et on voit le chargeur sortir puis rentrer. En visée, tu vises avec les vrais organes de visée : les trois points lumineux du pistolet, le réticule rouge du viseur holographique du fusil. Les armes ont du recul, un flash et des sons, et tu as une lampe torche.
 
+## Version Unreal Engine 5 (en cours)
+
+Le jeu est en train d'être refait sous **Unreal Engine 5**, une petite étape à chaque séance programmée, dans le dossier [`unreal/`](unreal/LISEZMOI.md). Le guide [unreal/LISEZMOI.md](unreal/LISEZMOI.md) explique quoi installer, comment ouvrir le projet et quoi tester. La version Godot ci-dessous reste jouable pendant ce temps.
+
 ## Récupérer le jeu sur Windows (et le mettre à jour facilement)
 
 La méthode la plus simple est **GitHub Desktop**. Il suffit d'un clic pour récupérer chaque mise à jour.
