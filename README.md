@@ -8,7 +8,7 @@ Côté ambiance, la partie se joue au crépuscule, dans le brouillard, avec des 
 
 ## Version Unreal Engine 5 (en cours)
 
-Le jeu est en train d'être refait sous **Unreal Engine 5**, une petite étape à chaque séance programmée, dans le dossier [`unreal/`](unreal/LISEZMOI.md). Le guide [unreal/LISEZMOI.md](unreal/LISEZMOI.md) explique quoi installer, comment ouvrir le projet et quoi tester. La version Godot ci-dessous reste jouable pendant ce temps.
+Le jeu est en train d'être refait sous **Unreal Engine 5**, une petite étape à chaque séance programmée, dans le dossier [`unreal/`](unreal/LISEZMOI.md). Le guide [unreal/LISEZMOI.md](unreal/LISEZMOI.md) explique quoi installer, comment ouvrir le projet et quoi tester. La version Godot ci-dessous reste jouable pendant ce temps. Les chiffres du jeu (armes, zombies, tours, vagues, niveaux) et la disposition des cartes sont exportés de la version Godot vers `unreal/DernierRempart/Content/Data/` par `godot --headless --path . res://tools/export_unreal_data.tscn`, pour que les deux versions restent identiques.
 
 ## Récupérer le jeu sur Windows (et le mettre à jour facilement)
 
