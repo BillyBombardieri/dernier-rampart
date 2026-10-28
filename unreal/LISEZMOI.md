@@ -8,7 +8,7 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 
 | Étape | Contenu | État |
 |---|---|---|
-| 1 | Projet de départ : personnage à la première personne, ZQSD, Lumen, ombres virtuelles, terrain d'essai | à tester |
+| 1 | Projet de départ : personnage à la première personne, ZQSD, Lumen, ombres virtuelles, terrain d'essai | en test (28 oct. : le projet ne s'ouvre pas encore, Unreal 5.8 introuvable) |
 | 2 | Import des textures et des modèles (armes, zombies) | à faire |
 | 3 | Carte du chapitre 1 | à faire |
 | 4 | Tir, pistolet et fusil | à faire |
@@ -50,11 +50,13 @@ Dans GitHub Desktop : **Fetch origin**, puis **Pull origin**. Le projet est dans
 
 ## 5. Ouvrir le projet
 
-1. Double-clique sur **DernierRempart.uproject**.
+1. Ouvre l'**Epic Games Launcher**, onglet **Unreal Engine**, puis **Bibliothèque**, et clique sur **Lancer** sous ta version 5.8. Dans la fenêtre des projets qui s'ouvre, clique sur **Parcourir** (Browse) et choisis **DernierRempart.uproject**. (Un double-clic sur le fichier marche aussi quand Windows l'ouvre avec Unreal, mais il l'ouvre parfois avec Visual Studio : voir plus bas.)
 2. Unreal annonce que des modules manquent (« The following modules are missing or built with a different engine version: DernierRempart. Would you like to rebuild them now? ») : clique sur **Oui** (Yes). La compilation prend quelques minutes, sans fenêtre visible.
 3. L'éditeur s'ouvre. **La première fois, il prépare ses shaders** (« Compiling Shaders » en bas à droite) : ça peut durer de 10 à 40 minutes. Laisse-le finir.
 
-Si Windows ne sait pas avec quoi ouvrir le fichier, ou si tu as installé une autre version qu'Unreal 5.8 : clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Switch Unreal Engine version...**, et choisis ta version.
+Si un double-clic sur le fichier ouvre **Visual Studio** avec le message « Unreal Engine Missing : impossible de trouver un moteur Unreal Engine pour l'uproject sélectionné », c'est que la version 5.8 n'est pas installée dans le Launcher, ou que Windows ouvre le fichier avec Visual Studio au lieu d'Unreal. Vérifie la Bibliothèque du Launcher (installe 5.8 si elle n'y est pas), puis ouvre le projet par le bouton **Lancer** comme à l'étape 1.
+
+Si tu as installé une autre version qu'Unreal 5.8, dis-le dans le fil : le projet sera adapté à ta version.
 
 ## 6. Tester l'étape 1
 
