@@ -25,8 +25,9 @@ namespace DRPlayer
 	constexpr float Acceleration = 12.0f;
 	constexpr float AirAcceleration = 3.0f;
 	// Godot tourne de 0,0025 radian par pixel de souris. Unreal multiplie déjà le mouvement de la
-	// souris par 0,07 (réglage d'axe par défaut), d'où ce facteur pour garder la même vitesse.
-	constexpr float DegreesPerMouseUnit = 0.0025f * 57.29578f / 0.07f;
+	// souris par 0,07 (réglage d'axe par défaut), d'où ce facteur pour garder la même vitesse,
+	// baissé de 10 % à la demande de Billy après son premier essai (28 octobre).
+	constexpr float DegreesPerMouseUnit = 0.9f * 0.0025f * 57.29578f / 0.07f;
 }
 
 ADRCharacter::ADRCharacter()
