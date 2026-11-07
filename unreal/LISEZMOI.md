@@ -9,9 +9,9 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | Étape | Contenu | État |
 |---|---|---|
 | 1 | Projet de départ : personnage à la première personne, ZQSD, Lumen, ombres virtuelles, terrain d'essai | testé, ça marche (28 oct.) |
-| 2 | Import des textures et des modèles (armes, zombies) | à tester (8 nov.) |
+| 2 | Import des textures, des modèles (armes, zombies) et des sons | à tester (8 nov.) |
 | 3 | Carte du chapitre 1 | à tester (8 nov.) |
-| 4 | Tir, pistolet et fusil | à faire |
+| 4 | Tir, pistolet et fusil | à tester (8 nov.) |
 | 5 | Zombies sur le chemin, PV et barres de vie | à faire |
 | 6 | Vagues, ferraille, énergie | à faire |
 | 7 | Tours, marquage, combos | à faire |
@@ -72,7 +72,7 @@ Dis-moi aussi si la souris te paraît trop lente ou trop rapide par rapport à l
 
 ## 7. Tester l'étape 2 : importer les textures et les modèles
 
-Les textures et les modèles de la version Godot (dossier `assets` du dépôt) doivent être importés une fois dans Unreal. Un script s'en charge.
+Les textures, les modèles et les sons de la version Godot (dossier `assets` du dépôt) doivent être importés une fois dans Unreal. Un script s'en charge.
 
 1. Après **Fetch origin** et **Pull origin** dans GitHub Desktop, ouvre le projet comme d'habitude. Unreal propose de recompiler (« Would you like to rebuild them now? ») : clique sur **Oui**. Il peut aussi annoncer que de nouveaux plugins sont activés (Python) : accepte et laisse-le redémarrer s'il le demande.
 2. En bas de l'éditeur, il y a une barre de saisie avec le mot **Cmd** à gauche (si c'est écrit **Python**, clique dessus et remets **Cmd**). Clique dans la barre et tape exactement :
@@ -83,7 +83,7 @@ Les textures et les modèles de la version Godot (dossier `assets` du dépôt) d
 
    et appuie sur **Entrée**. (Autre moyen : menu **Outils** (Tools) > **Exécuter un script Python** (Execute Python Script), puis choisis le fichier `unreal\DernierRempart\Content\Python\importer_ressources.py`.)
 3. L'import dure quelques minutes. Ouvre le **Journal de sortie** (Output Log, menu Fenêtre) : la dernière ligne doit être « DernierRempart : import terminé ». S'il y a des lignes rouges, copie-les dans le fil.
-4. Dans le **Navigateur de contenu** (Content Drawer, en bas à gauche, ou Ctrl + Espace), tu dois voir un dossier **Importe** avec trois sous-dossiers : **Textures** (25 textures), **Materiaux** (M_Surface et neuf MI_…) et **Modeles** (un dossier par arme et par zombie). Double-clique sur un zombie (l'icône rose, « Skeletal Mesh ») : il doit apparaître avec sa peau et ses vêtements.
+4. Dans le **Navigateur de contenu** (Content Drawer, en bas à gauche, ou Ctrl + Espace), tu dois voir un dossier **Importe** avec quatre sous-dossiers : **Textures** (25 textures), **Materiaux** (M_Surface et neuf MI_…), **Modeles** (un dossier par arme et par zombie) et **Sons** (42 sons). Double-clique sur un zombie (l'icône rose, « Skeletal Mesh ») : il doit apparaître avec sa peau et ses vêtements.
 
 Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, supprime-le et relance le script.
 
@@ -95,7 +95,16 @@ Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, 
 4. Regarde autour de toi : le sol de terre, le chemin boueux qui serpente jusqu'à la **brèche** au loin (un mur d'enceinte avec une lampe rouge qui vacille), les deux **barrières** sur le chemin (blocs de béton, poteaux, barrière rayée rouge et blanc), les **dalles rondes** des tours avec leurs repères orangés, les **murs anti-souffle** et les **sacs de sable** autour du Cœur, quatre **projecteurs** sur leurs poteaux, quatre **barils** aux braises rougeoyantes qui éclairent en vacillant, et des rochers, des arbres morts et des carcasses de voitures.
 5. Dis-moi ce qui te paraît trop sombre, trop clair ou mal placé : les lumières sont réglées à l'estime (Godot et Unreal ne mesurent pas la lumière de la même façon). Pas encore d'herbe, de flammes ni de grillage : ils viendront plus tard.
 
-## 9. Si ça ne marche pas
+## 9. Tester l'étape 4 : le tir
+
+1. Lance la partie (**▶ Play**). L'arme est en bas à droite de l'image, son nom et ses munitions en bas à droite de l'écran, et un viseur au centre.
+2. **Clic gauche** tire, **clic droit** vise (l'arme vient devant l'œil, la vue zoome un peu), **R** recharge, **&** (ou **1**) prend le pistolet, **é** (ou **2**) le fusil ; la **molette** change aussi d'arme.
+3. Tu dois voir : un éclair au bout du canon, un trait lumineux jusqu'à l'impact, la vue qui monte à chaque tir puis redescend, l'arme qui recule dans la main ; au fusil, garder le bouton enfoncé tire en rafale et la vue monte de plus en plus en dérivant. Tirer la souris vers le bas compense le recul. On entend les coups de feu, le rechargement et ses pas.
+4. Le pistolet tire 10 coups, le fusil 30, puis l'arme se recharge toute seule (« Rechargement... »).
+5. **Vérifie surtout que l'arme est tenue dans le bon sens**, canon vers l'avant, et dis-moi si ce n'est pas le cas (une capture d'écran suffit) : Unreal range les modèles importés sur d'autres axes que Godot, le code devine le sens d'après la forme de l'arme. Sans l'étape 2, l'arme est remplacée par un simple bloc noir.
+6. Il n'y a encore rien sur quoi tirer : les zombies arrivent à l'étape suivante.
+
+## 10. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

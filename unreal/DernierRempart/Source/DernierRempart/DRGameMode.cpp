@@ -2,6 +2,7 @@
 
 #include "DRChapter.h"
 #include "DRCharacter.h"
+#include "DRHUD.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
@@ -10,6 +11,7 @@
 ADRGameMode::ADRGameMode()
 {
 	DefaultPawnClass = ADRCharacter::StaticClass();
+	HUDClass = ADRHUD::StaticClass();
 }
 
 void ADRGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)

@@ -10,10 +10,10 @@
 #include "Components/SkyLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "DRData.h"
+#include "DRLook.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
-#include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 
 // Nommé (et pas anonyme) pour éviter les collisions quand Unreal regroupe les .cpp à la compilation.
@@ -26,20 +26,6 @@ namespace DRChapterLayout
 	constexpr float BarrelCandelas = 200.0f;
 	constexpr float PortalCandelas = 300.0f;
 	constexpr float CoreCandelas = 60.0f;
-
-	// Couleur moyenne de chaque jeu de textures (sRGB), pour les couleurs unies avant l'import.
-	FLinearColor AverageColor(const FString& Set)
-	{
-		if (Set == TEXT("beton")) return FLinearColor(0.53f, 0.53f, 0.50f);
-		if (Set == TEXT("brick")) return FLinearColor(0.46f, 0.31f, 0.25f);
-		if (Set == TEXT("cloth")) return FLinearColor(0.49f, 0.49f, 0.49f);
-		if (Set == TEXT("concrete")) return FLinearColor(0.47f, 0.46f, 0.44f);
-		if (Set == TEXT("ground")) return FLinearColor(0.27f, 0.24f, 0.16f);
-		if (Set == TEXT("metal")) return FLinearColor(0.31f, 0.29f, 0.22f);
-		if (Set == TEXT("mud")) return FLinearColor(0.22f, 0.17f, 0.13f);
-		if (Set == TEXT("plaster")) return FLinearColor(0.65f, 0.62f, 0.56f);
-		return FLinearColor(0.43f, 0.45f, 0.36f);
-	}
 
 	FRotator YawOf(const FVector& Direction)
 	{
@@ -67,11 +53,9 @@ ADRChapter::ADRChapter()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cyl(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
-	static ConstructorHelpers::FObjectFinder<UMaterialInterface> ShapeMaterial(TEXT("/Engine/BasicShapes/BasicShapeMaterial.BasicShapeMaterial"));
 	CubeMesh = Cube.Object;
 	SphereMesh = Sphere.Object;
 	CylinderMesh = Cyl.Object;
-	PlainMaterial = ShapeMaterial.Object;
 }
 
 template <class T>
@@ -142,7 +126,7 @@ void ADRChapter::BeginPlay()
 		if (bMissingTextures)
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 30.0f, FColor::Orange,
-				TEXT("Textures pas encore importées : tape  py importer_ressources.py  dans la barre Cmd (voir LISEZMOI, étape 2)."));
+				TEXT("Textures pas encore import\u00E9es : tape  py importer_ressources.py  dans la barre Cmd (voir LISEZMOI, \u00E9tape 2)."));
 		}
 	}
 }
@@ -169,23 +153,7 @@ UMaterialInterface* ADRChapter::Look(const FString& Set, float Scale, const FLin
 	{
 		return *Found;
 	}
-	const FString AssetPath = FString::Printf(TEXT("/Game/Importe/Materiaux/MI_%s.MI_%s"), *Set, *Set);
-	UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, *AssetPath, nullptr, LOAD_NoWarn);
-	UMaterialInterface* Result = nullptr;
-	if (Parent)
-	{
-		UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(Parent, this);
-		Material->SetScalarParameterValue(TEXT("Echelle"), Scale);
-		Material->SetVectorParameterValue(TEXT("Teinte"), DRData::ToLinear(TintSRGB));
-		Material->SetScalarParameterValue(TEXT("Lumineux"), Glow);
-		Result = Material;
-	}
-	else
-	{
-		bMissingTextures = true;
-		const FLinearColor Average = DRChapterLayout::AverageColor(Set);
-		Result = Plain(FLinearColor(Average.R * TintSRGB.R, Average.G * TintSRGB.G, Average.B * TintSRGB.B));
-	}
+	UMaterialInterface* Result = DRLook::Textured(this, Set, Scale, TintSRGB, Glow, &bMissingTextures);
 	Materials.Add(Key, Result);
 	return Result;
 }
@@ -207,8 +175,7 @@ UMaterialInterface* ADRChapter::Plain(const FLinearColor& ColorSRGB)
 	{
 		return *Found;
 	}
-	UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(PlainMaterial, this);
-	Material->SetVectorParameterValue(TEXT("Color"), DRData::ToLinear(ColorSRGB));
+	UMaterialInterface* Material = DRLook::Plain(this, ColorSRGB);
 	Materials.Add(Key, Material);
 	return Material;
 }

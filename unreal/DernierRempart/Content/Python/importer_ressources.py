@@ -15,7 +15,8 @@ Ce que fait le script :
   2. crée le matériau M_Surface, qui plaque ces textures selon la position dans le monde (comme le
      « triplanar » de Godot), et un matériau MI_<nom> par jeu de textures (béton, brique, métal...) ;
   3. importe les armes et les zombies (assets/models/*.gltf, avec leurs squelettes et leurs
-     animations) dans /Game/Importe/Modeles/<nom>.
+     animations) dans /Game/Importe/Modeles/<nom> ;
+  4. importe les sons (assets/sounds/*.wav) dans /Game/Importe/Sons.
 """
 
 import os
@@ -26,6 +27,7 @@ DOSSIER = "/Game/Importe"
 DOSSIER_TEXTURES = DOSSIER + "/Textures"
 DOSSIER_MATERIAUX = DOSSIER + "/Materiaux"
 DOSSIER_MODELES = DOSSIER + "/Modeles"
+DOSSIER_SONS = DOSSIER + "/Sons"
 
 # Jeux de textures de assets/textures : <nom>_albedo.png, <nom>_normal.png, et <nom>_roughness.png
 # quand il existe (sinon la rugosité vaut 1, comme dans Godot).
@@ -223,6 +225,14 @@ def importer_modeles(racine):
         unreal.log("DernierRempart : modèle « " + nom + " » importé")
 
 
+def importer_sons(racine):
+    dossier = os.path.join(racine, "sounds")
+    for fichier in sorted(os.listdir(dossier)):
+        if fichier.endswith(".wav"):
+            importer(os.path.join(dossier, fichier), DOSSIER_SONS, fichier[:-len(".wav")])
+    unreal.log("DernierRempart : sons importés")
+
+
 def main():
     racine = dossier_assets()
     unreal.log("DernierRempart : import depuis " + racine)
@@ -235,6 +245,7 @@ def main():
     materiau = creer_materiau(defauts)
     creer_instances(materiau, textures, defauts)
     importer_modeles(racine)
+    importer_sons(racine)
     bibli.save_directory(DOSSIER, only_if_is_dirty=True, recursive=True)
     unreal.log("DernierRempart : import terminé. Relance la partie (Play) pour voir le résultat.")
 

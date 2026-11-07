@@ -90,9 +90,6 @@ private:
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> CylinderMesh;
 
-	UPROPERTY()
-	TObjectPtr<UMaterialInterface> PlainMaterial;
-
 	/** Pièces regroupées par maillage, matériau et collision. */
 	UPROPERTY()
 	TMap<FString, TObjectPtr<UInstancedStaticMeshComponent>> Groups;
