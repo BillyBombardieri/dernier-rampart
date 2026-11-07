@@ -156,6 +156,15 @@ def creer_materiau(defauts):
     mat_lib.connect_material_expressions(teinte, "", multiplier, "B")
     mat_lib.connect_material_property(multiplier, "", unreal.MaterialProperty.MP_BASE_COLOR)
 
+    # Pièces qui brillent (lampe de projecteur, braises) : la couleur fois Lumineux (0 = éteint).
+    lumineux = noeud(materiau, unreal.MaterialExpressionScalarParameter, -350, -650)
+    lumineux.set_editor_property("parameter_name", "Lumineux")
+    lumineux.set_editor_property("default_value", 0.0)
+    emission = noeud(materiau, unreal.MaterialExpressionMultiply, -150, -500)
+    mat_lib.connect_material_expressions(multiplier, "", emission, "A")
+    mat_lib.connect_material_expressions(lumineux, "", emission, "B")
+    mat_lib.connect_material_property(emission, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+
     mat_lib.connect_material_property(relief, "RGB", unreal.MaterialProperty.MP_NORMAL)
 
     # Jeux sans texture de rugosité (tissu, peau) : RugositeFixe remplace la texture quand

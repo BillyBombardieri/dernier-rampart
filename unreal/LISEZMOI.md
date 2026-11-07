@@ -10,7 +10,7 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 |---|---|---|
 | 1 | Projet de départ : personnage à la première personne, ZQSD, Lumen, ombres virtuelles, terrain d'essai | testé, ça marche (28 oct.) |
 | 2 | Import des textures et des modèles (armes, zombies) | à tester (8 nov.) |
-| 3 | Carte du chapitre 1 | à faire |
+| 3 | Carte du chapitre 1 | à tester (8 nov.) |
 | 4 | Tir, pistolet et fusil | à faire |
 | 5 | Zombies sur le chemin, PV et barres de vie | à faire |
 | 6 | Vagues, ferraille, énergie | à faire |
@@ -60,6 +60,8 @@ Si tu as installé une autre version qu'Unreal 5.8, dis-le dans le fil : le proj
 
 ## 6. Tester l'étape 1
 
+(Depuis l'étape 3, le terrain d'essai est remplacé par la carte du chapitre 1 : passe directement à l'étape 3.)
+
 1. Au milieu de l'éditeur, la scène est vide ou noire : c'est normal. Le terrain d'essai se construit quand on lance la partie.
 2. Clique sur le bouton vert **▶ Play** en haut (ou appuie sur **Alt + P**), puis clique dans l'image pour que le jeu prenne la souris.
 3. Tu dois voir : un grand sol brun sous un ciel bleu avec le soleil, un mur de béton devant toi, un mur rouge sur la gauche, trois caisses, un petit toit sur quatre piliers, des ombres douces, et un léger voile au loin. Près du mur rouge, le sol prend une teinte rosée : c'est la lumière qui rebondit (Lumen). Un message en haut à gauche rappelle les touches.
@@ -85,7 +87,15 @@ Les textures et les modèles de la version Godot (dossier `assets` du dépôt) d
 
 Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, supprime-le et relance le script.
 
-## 8. Si ça ne marche pas
+## 8. Tester l'étape 3 : la carte du chapitre 1
+
+1. Fais d'abord l'étape 2 (l'import). Sans elle, la carte s'affiche quand même, mais en couleurs unies, avec un message orange en haut à gauche.
+2. Clique sur **▶ Play** (ou **Alt + P**), puis clique dans l'image.
+3. Tu dois te retrouver dans « La Brèche », au crépuscule, juste devant le **Cœur**, qui est dans ton dos (le bunker de béton avec sa porte blindée et deux voyants bleus), comme au début d'une partie Godot. En haut à gauche, un message rappelle le nom du chapitre.
+4. Regarde autour de toi : le sol de terre, le chemin boueux qui serpente jusqu'à la **brèche** au loin (un mur d'enceinte avec une lampe rouge qui vacille), les deux **barrières** sur le chemin (blocs de béton, poteaux, barrière rayée rouge et blanc), les **dalles rondes** des tours avec leurs repères orangés, les **murs anti-souffle** et les **sacs de sable** autour du Cœur, quatre **projecteurs** sur leurs poteaux, quatre **barils** aux braises rougeoyantes qui éclairent en vacillant, et des rochers, des arbres morts et des carcasses de voitures.
+5. Dis-moi ce qui te paraît trop sombre, trop clair ou mal placé : les lumières sont réglées à l'estime (Godot et Unreal ne mesurent pas la lumière de la même façon). Pas encore d'herbe, de flammes ni de grillage : ils viendront plus tard.
+
+## 9. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

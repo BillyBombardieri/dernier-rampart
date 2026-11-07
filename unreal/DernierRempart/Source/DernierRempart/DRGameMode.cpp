@@ -1,10 +1,11 @@
 #include "DRGameMode.h"
 
+#include "DRChapter.h"
 #include "DRCharacter.h"
-#include "DRTestArena.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
+#include "Kismet/GameplayStatics.h"
 
 ADRGameMode::ADRGameMode()
 {
@@ -14,21 +15,26 @@ ADRGameMode::ADRGameMode()
 void ADRGameMode::InitGame(const FString& MapName, const FString& Options, FString& ErrorMessage)
 {
 	Super::InitGame(MapName, Options, ErrorMessage);
-	// Construit le terrain d'essai avant l'arrivée du joueur, pour qu'il ait un sol sous les pieds.
+	// Construit la carte avant l'arrivée du joueur, pour qu'il ait un sol sous les pieds.
+	// « ?Chapitre=2 » dans les options de lancement choisit un autre chapitre (1 par défaut).
 	UWorld* World = GetWorld();
-	if (World && !TActorIterator<ADRTestArena>(World))
+	if (World && !TActorIterator<ADRChapter>(World))
 	{
-		bBuiltTestArena = World->SpawnActor<ADRTestArena>(FVector::ZeroVector, FRotator::ZeroRotator) != nullptr;
+		Chapter = World->SpawnActor<ADRChapter>(FVector::ZeroVector, FRotator::ZeroRotator);
+		if (Chapter)
+		{
+			Chapter->Build(UGameplayStatics::GetIntOption(Options, TEXT("Chapitre"), 1) - 1);
+		}
 	}
 }
 
 void ADRGameMode::RestartPlayer(AController* NewPlayer)
 {
-	// Sur le terrain d'essai (ou sans point de départ dans la carte), Unreal placerait le joueur au
-	// centre du monde, dans le mur : on le pose au bord du terrain, tourné vers les blocs.
-	if (NewPlayer && (bBuiltTestArena || !Cast<APlayerStart>(FindPlayerStart(NewPlayer))))
+	// Sans point de départ posé dans la carte, Unreal placerait le joueur au centre du monde :
+	// on le pose devant le Cœur, comme dans la version Godot.
+	if (NewPlayer && (Chapter || !Cast<APlayerStart>(FindPlayerStart(NewPlayer))))
 	{
-		RestartPlayerAtTransform(NewPlayer, FTransform(FRotator(0.0, 90.0, 0.0), FVector(0.0, -1500.0, 120.0)));
+		RestartPlayerAtTransform(NewPlayer, ADRChapter::PlayerStart());
 		return;
 	}
 	Super::RestartPlayer(NewPlayer);
