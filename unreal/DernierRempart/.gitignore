@@ -11,3 +11,6 @@ DerivedDataCache/
 *.sdf
 Plugins/*/Binaries/
 Plugins/*/Intermediate/
+
+# Textures et modèles importés par Content/Python/importer_ressources.py : ils se refont en relançant le script.
+Content/Importe/
