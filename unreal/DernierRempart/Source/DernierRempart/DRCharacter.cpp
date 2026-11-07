@@ -4,6 +4,7 @@
 #include "Components/CapsuleComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DRChapter.h"
 #include "DRData.h"
 #include "DRLook.h"
 #include "Engine/LocalPlayer.h"
@@ -249,7 +250,7 @@ void ADRCharacter::BuildWeaponModel(int32 Index, const FString& Model)
 
 void ADRCharacter::SelectWeapon(int32 Index)
 {
-	if (!Weapons.IsValidIndex(Index))
+	if (!Weapons.IsValidIndex(Index) || !bAlive)
 	{
 		return;
 	}
@@ -286,6 +287,10 @@ void ADRCharacter::NextWeapon()
 
 void ADRCharacter::StartFire()
 {
+	if (!bAlive)
+	{
+		return;
+	}
 	bFireHeld = true;
 	// Le pistolet tire un coup par clic ; le fusil tire tant qu'on garde le bouton enfoncé (voir Tick).
 	TryFire();
@@ -298,7 +303,7 @@ void ADRCharacter::StopFire()
 
 void ADRCharacter::StartAim()
 {
-	bAimHeld = true;
+	bAimHeld = bAlive;
 }
 
 void ADRCharacter::StopAim()
@@ -308,7 +313,7 @@ void ADRCharacter::StopAim()
 
 void ADRCharacter::ReloadPressed()
 {
-	if (Weapons.IsValidIndex(CurrentWeapon) && ReloadLeft <= 0.0f && Ammo[CurrentWeapon] < Weapons[CurrentWeapon].Mag)
+	if (bAlive && Weapons.IsValidIndex(CurrentWeapon) && ReloadLeft <= 0.0f && Ammo[CurrentWeapon] < Weapons[CurrentWeapon].Mag)
 	{
 		StartReload();
 	}
@@ -445,6 +450,16 @@ void ADRCharacter::PlaySfx(const FString& Name, float Decibels, float PitchJitte
 void ADRCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	Hurt = DRPlayer::MoveToward(Hurt, 0.0f, DeltaSeconds * 0.8f);
+	if (!bAlive)
+	{
+		RespawnLeft -= DeltaSeconds;
+		if (RespawnLeft <= 0.0f)
+		{
+			Respawn();
+		}
+		return;
+	}
 	if (!Weapons.IsValidIndex(CurrentWeapon))
 	{
 		return;
@@ -554,6 +569,85 @@ void ADRCharacter::AnimateView(float DeltaSeconds)
 		GunBaseRotation + FRotator(FMath::RadiansToDegrees(VmKick * 0.35f), 0.0, 0.0));
 }
 
+// ---------------------------------------------------------------- santé
+
+float ADRCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
+{
+	if (!bAlive)
+	{
+		return 0.0f;
+	}
+	const float Amount = Super::TakeDamage(DamageAmount, DamageEvent, EventInstigator, DamageCauser);
+	if (Amount <= 0.0f)
+	{
+		return 0.0f;
+	}
+	Hp -= Amount;
+	Hurt = FMath::Min(1.0f, Hurt + Amount / 25.0f);
+	Shake = FMath::Min(1.0f, Shake + Amount / 30.0f);
+	PlaySfx(TEXT("hurt"), -4.0f, 0.15f);
+	if (Hp <= 0.0f)
+	{
+		Die();
+	}
+	return Amount;
+}
+
+void ADRCharacter::HealFull()
+{
+	if (bAlive)
+	{
+		Hp = MaxHp;
+	}
+}
+
+void ADRCharacter::Die()
+{
+	bAlive = false;
+	Hp = 0.0f;
+	++Deaths;
+	RespawnLeft = 5.0f + 3.0f * (Deaths - 1);
+	bFireHeld = false;
+	bAimHeld = false;
+	bAiming = false;
+	ReloadLeft = 0.0f;
+	// On reste où l'on est tombé, sans arme ; les zombies ne nous voient plus et passent au travers.
+	GunRoot->SetVisibility(false, true);
+	Tracer->SetVisibility(false);
+	GetCharacterMovement()->StopMovementImmediately();
+	GetCharacterMovement()->DisableMovement();
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
+	Camera->ClearAdditiveOffset();
+	Camera->SetFieldOfView(DRPlayer::Fov);
+}
+
+void ADRCharacter::Respawn()
+{
+	bAlive = true;
+	Hp = MaxHp;
+	RespawnLeft = 0.0f;
+	const FTransform Start = ADRChapter::PlayerStart();
+	SetActorLocationAndRotation(Start.GetLocation(), Start.Rotator(), false, nullptr, ETeleportType::TeleportPhysics);
+	if (Controller)
+	{
+		Controller->SetControlRotation(Start.Rotator());
+	}
+	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Block);
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	// L'arme revient en main (seulement celle choisie) ; recul et visée repartent de zéro.
+	GunRoot->SetVisibility(true, false);
+	MuzzleLight->SetVisibility(true);
+	MuzzleLight->SetIntensity(0.0f);
+	for (int32 Index = 0; Index < WeaponModels.Num(); ++Index)
+	{
+		WeaponModels[Index]->SetVisibility(Index == CurrentWeapon, true);
+	}
+	Kick = KickTarget = FVector2D::ZeroVector;
+	Recoil = VmKick = VmKickVel = FovPunch = Shake = AimBlend = 0.0f;
+	SwitchAnim = 0.3f;
+	FireCooldown = 0.3f;
+}
+
 void ADRCharacter::Landed(const FHitResult& Hit)
 {
 	Super::Landed(Hit);
@@ -660,6 +754,10 @@ void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 
 void ADRCharacter::Move(const FInputActionValue& Value)
 {
+	if (!bAlive)
+	{
+		return;
+	}
 	const FVector2D Axis = Value.Get<FVector2D>();
 	// Comme dans Godot, on ne court qu'en avançant et sans viser ; on avance moins vite en visant.
 	SetSpeed(bAiming ? DRPlayer::AimSpeed : (bSprintHeld && Axis.Y > 0.0 ? DRPlayer::SprintSpeed : DRPlayer::WalkSpeed));

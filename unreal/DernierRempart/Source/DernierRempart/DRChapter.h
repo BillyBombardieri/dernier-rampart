@@ -4,6 +4,8 @@
 #include "GameFramework/Actor.h"
 #include "DRChapter.generated.h"
 
+class ADRBarrier;
+class ADRCore;
 class FJsonObject;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
@@ -34,6 +36,9 @@ public:
 
 	/** Chemin des zombies, du portail au Cœur (centimètres). */
 	const TArray<FVector>& GetPath() const { return Path; }
+
+	const TArray<TObjectPtr<ADRBarrier>>& GetBarriers() const { return Barriers; }
+	ADRCore* GetCore() const;
 
 	/** Le Cœur, au milieu de la base (Godot : CORE_POS). */
 	static FVector CorePosition() { return FVector(-3500.0, 0.0, 0.0); }
@@ -69,7 +74,6 @@ private:
 	void BuildPortal();
 	void BuildCore();
 	void BuildRings(const TSharedPtr<FJsonObject>& Data);
-	void BuildGate(const FVector& Gate, const FVector& Direction, double Width);
 	void BuildSocket(const FVector& Position);
 	void BuildWalls(const TSharedPtr<FJsonObject>& Data);
 	void BuildBlastWall(const FVector& Center, const FVector& Size, FRandomStream& Rng);
@@ -89,6 +93,12 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> CylinderMesh;
+
+	UPROPERTY()
+	TArray<TObjectPtr<ADRBarrier>> Barriers;
+
+	UPROPERTY()
+	TObjectPtr<ADRCore> Core;
 
 	/** Pièces regroupées par maillage, matériau et collision. */
 	UPROPERTY()

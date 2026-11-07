@@ -41,6 +41,7 @@ struct FDRWeapon
  * marche 5,5 m/s, course 8,5 m/s (seulement en avançant), 3,2 m/s en visant, saut à 5,5 m/s,
  * gravité 20 m/s², capsule de 1,8 m, yeux à 1,6 m. Deux armes (pistolet lourd, fusil d'assaut)
  * avec dispersion, recul de la vue, visée, rechargement, flash, traçante et sons.
+ * 100 PV : à terre, on revient au Cœur après quelques secondes pendant que les tours défendent.
  * Touches par défaut en AZERTY : ZQSD, Espace, Maj, clic gauche, clic droit, R, & et é (ou molette).
  */
 UCLASS()
@@ -52,8 +53,18 @@ public:
 	ADRCharacter();
 
 	virtual void Tick(float DeltaSeconds) override;
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
 
-	// Pour l'interface.
+	/** Santé au maximum (quand une vague est repoussée). */
+	void HealFull();
+
+	// Pour l'interface et les zombies.
+	bool IsAlive() const { return bAlive; }
+	float GetHp() const { return Hp; }
+	float GetMaxHp() const { return MaxHp; }
+	float GetRespawnLeft() const { return RespawnLeft; }
+	/** Rougeur des bords de l'écran après un coup (0 à 1). */
+	float GetHurt() const { return Hurt; }
 	bool HasWeapon() const { return Weapons.IsValidIndex(CurrentWeapon); }
 	const FDRWeapon& GetWeapon() const { return Weapons[CurrentWeapon]; }
 	int32 GetAmmo() const { return Ammo[CurrentWeapon]; }
@@ -92,6 +103,8 @@ private:
 	void PlaySfx(const FString& Name, float Decibels, float PitchJitter);
 	void SetSpeed(float Speed);
 	FRotator ViewRotation() const;
+	void Die();
+	void Respawn();
 
 	UPROPERTY(VisibleAnywhere, Category = "Joueur")
 	TObjectPtr<UCameraComponent> Camera;
@@ -151,6 +164,14 @@ private:
 	/** Multiplicateur de sensibilité de la souris (1 = comme le réglage par défaut de Godot). */
 	UPROPERTY(EditAnywhere, Category = "Joueur")
 	float Sensitivity = 1.0f;
+
+	// Santé (Godot : 100 PV ; retour au Cœur après 5 s, 3 s de plus à chaque nouvelle chute).
+	float MaxHp = 100.0f;
+	float Hp = 100.0f;
+	bool bAlive = true;
+	float RespawnLeft = 0.0f;
+	int32 Deaths = 0;
+	float Hurt = 0.0f;
 
 	TArray<FDRWeapon> Weapons;
 	TArray<int32> Ammo;

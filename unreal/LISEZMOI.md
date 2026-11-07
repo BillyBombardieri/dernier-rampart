@@ -12,7 +12,7 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 2 | Import des textures, des modèles (armes, zombies) et des sons | à tester (8 nov.) |
 | 3 | Carte du chapitre 1 | à tester (8 nov.) |
 | 4 | Tir, pistolet et fusil | à tester (8 nov.) |
-| 5 | Zombies sur le chemin, PV et barres de vie | à faire |
+| 5 | Zombies sur le chemin, barrières et Cœur avec PV, vie du joueur, barres de vie | à tester (8 nov.) |
 | 6 | Vagues, ferraille, énergie | à faire |
 | 7 | Tours, marquage, combos | à faire |
 | 8 | Interface, menu, réglages et touches modifiables | à faire |
@@ -102,9 +102,19 @@ Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, 
 3. Tu dois voir : un éclair au bout du canon, un trait lumineux jusqu'à l'impact, la vue qui monte à chaque tir puis redescend, l'arme qui recule dans la main ; au fusil, garder le bouton enfoncé tire en rafale et la vue monte de plus en plus en dérivant. Tirer la souris vers le bas compense le recul. On entend les coups de feu, le rechargement et ses pas.
 4. Le pistolet tire 10 coups, le fusil 30, puis l'arme se recharge toute seule (« Rechargement... »).
 5. **Vérifie surtout que l'arme est tenue dans le bon sens**, canon vers l'avant, et dis-moi si ce n'est pas le cas (une capture d'écran suffit) : Unreal range les modèles importés sur d'autres axes que Godot, le code devine le sens d'après la forme de l'arme. Sans l'étape 2, l'arme est remplacée par un simple bloc noir.
-6. Il n'y a encore rien sur quoi tirer : les zombies arrivent à l'étape suivante.
+6. Les zombies arrivent à l'étape 5, juste en dessous.
 
-## 10. Si ça ne marche pas
+## 10. Tester l'étape 5 : les zombies, les barrières et le Cœur
+
+1. Lance la partie. En attendant les vagues (étape 6), un zombie sort du portail toutes les 4 secondes, au plus 10 à la fois : surtout des rôdeurs, parfois un coureur ou une brute.
+2. Ils suivent le chemin, s'arrêtent devant la barrière de l'avant-poste et la frappent jusqu'à la casser (elle s'effondre), puis font pareil avec la muraille, puis frappent le Cœur. Ils ne s'en prennent jamais aux tours.
+3. En haut au milieu : les PV du Cœur et de chaque barrière. En bas à gauche : ta vie (100 PV).
+4. Un zombie touché affiche une fine barre de vie au-dessus de la tête, qui s'efface s'il n'est plus touché pendant 6 s. Un tir dans la tête fait deux fois plus de dégâts.
+5. S'ils passent près de toi, ils te poursuivent et te frappent : les bords de l'écran rougissent. À 0 PV, « Tu es tombé ! » s'affiche et tu reviens devant le Cœur après 5 s (3 s de plus à chaque nouvelle chute).
+6. **Vérifie surtout que les zombies marchent dans le bon sens et sont bien animés** (marche, course, coups, chute en mourant), et envoie une capture si l'un d'eux glisse, flotte, marche en crabe ou de dos. Sans l'étape 2, ce sont de simples cylindres gris.
+7. Il n'y a pas encore de fin de partie : si le Cœur tombe, les zombies restent simplement autour (les vagues et la défaite arrivent à l'étape 6).
+
+## 11. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

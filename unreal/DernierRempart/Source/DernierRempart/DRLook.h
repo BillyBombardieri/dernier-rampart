@@ -2,7 +2,9 @@
 
 #include "CoreMinimal.h"
 
+class UAnimSequence;
 class UMaterialInterface;
+class USkeletalMesh;
 class USoundBase;
 class UStaticMesh;
 
@@ -29,6 +31,18 @@ namespace DRLook
 	/** Maillages fixes importés d'un modèle de assets/models (« arme_pistolet »...), ou liste vide. */
 	TArray<UStaticMesh*> StaticMeshes(const FString& Model);
 
+	/** Maillage animé importé d'un modèle (« zombie_rodeur »...), ou nul. */
+	USkeletalMesh* SkeletalMesh(const FString& Model);
+
+	/**
+	 * Animations importées d'un modèle, rangées par leur nom dans Godot (« walk », « attack »,
+	 * « die_front »...), quel que soit le préfixe ajouté par Unreal à l'import.
+	 */
+	TMap<FString, UAnimSequence*> Animations(const FString& Model);
+
 	/** Volume en décibels (comme dans Godot) -> multiplicateur de volume d'Unreal. */
 	float Volume(float Decibels);
+
+	/** Joue un son dans le monde, plus faible avec la distance (Godot : Sfx.play_at). Distances en cm. */
+	void PlayAt(const UObject* WorldContext, const FString& Name, const FVector& Location, float Decibels, float PitchJitter, float MaxDistance = 8000.0f);
 }

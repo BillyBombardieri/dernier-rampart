@@ -1,0 +1,99 @@
+#pragma once
+
+#include "CoreMinimal.h"
+#include "GameFramework/Character.h"
+#include "DRZombie.generated.h"
+
+class ADRBarrier;
+class ADRChapter;
+class UAnimSequence;
+class UStaticMeshComponent;
+
+/**
+ * Zombie qui suit le chemin jusqu'au Cœur (Godot : scripts/zombie.gd). Son corps est le modèle
+ * sculpté, texturé et animé de la version Godot (marche, course, coups, morts). Il s'arrête devant
+ * les barrières pour les casser, chasse le joueur s'il passe trop près, et frappe le Cœur au bout
+ * du chemin. Il ne s'en prend jamais aux tours. Un tir à la tête fait deux fois plus de dégâts.
+ * (Les talents du Cracheur, du Hurleur, du Fouisseur et du boss viendront ensuite.)
+ */
+UCLASS()
+class DERNIERREMPART_API ADRZombie : public ACharacter
+{
+	GENERATED_BODY()
+
+public:
+	ADRZombie();
+
+	/** Type de jeu.json (« rodeur », « coureur », « brute »...) et montée en puissance de la vague. */
+	void Setup(const FString& InType, float HpScale, float SpeedScale, float DamageScale);
+
+	virtual void Tick(float DeltaSeconds) override;
+	virtual float TakeDamage(float DamageAmount, struct FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser) override;
+
+	bool IsDead() const { return bDead; }
+	float GetHp() const { return Hp; }
+	float GetMaxHp() const { return MaxHp; }
+	const FString& GetZombieType() const { return Type; }
+	/** Point au-dessus de la tête, où se dessine la barre de vie. */
+	FVector GetBarAnchor() const;
+	/** Largeur de la barre de vie (cm) et son opacité : visible 6 s après le dernier coup, puis s'estompe. */
+	float GetBarWidth() const { return 62.0f * FMath::Sqrt(Size); }
+	float GetBarAlpha() const { return BarAlpha; }
+	/** Avancée sur le chemin (même échelle que dans Godot : 1000 par tronçon). */
+	double Progress() const;
+
+private:
+	void Think();
+	ADRBarrier* FindBlocker() const;
+	bool IsReachable(const FVector& Point) const;
+	FVector LanePoint(int32 Index) const;
+	double FlatDistance(const FVector& Point) const;
+	float HeadHeight() const;
+	void Swing(AActor* Target);
+	void Strike();
+	void Die();
+	void PlayLoop(const FString& Name, float Rate);
+	void PlayAction(const FString& Name, float Duration);
+	void UpdateAnimation(float DeltaSeconds);
+
+	UPROPERTY()
+	TObjectPtr<ADRChapter> Chapter;
+
+	UPROPERTY()
+	TObjectPtr<ADRBarrier> Blocker;
+
+	UPROPERTY()
+	TObjectPtr<AActor> StrikeTarget;
+
+	UPROPERTY()
+	TMap<FString, TObjectPtr<UAnimSequence>> Animations;
+
+	/** Silhouette provisoire quand les modèles ne sont pas encore importés. */
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> Placeholder;
+
+	FString Type = TEXT("rodeur");
+	FString ModelName = TEXT("rodeur");
+	FString CurrentAnimation;
+	float MaxHp = 60.0f;
+	float Hp = 60.0f;
+	float Speed = 1.8f;   // m/s, comme dans Godot
+	float Damage = 8.0f;
+	float Size = 1.0f;
+	float ModelScale = 1.0f;
+	float WalkCycle = 1.585f; // vitesse au sol d'un cycle de marche à l'échelle 1 (m/s)
+	float RunCycle = 0.0f;
+	int32 PathIndex = 1;
+	float Lane = 0.0f;    // décalage sur la largeur du chemin (m) : la horde ne marche pas en file
+	float ThinkCooldown = 0.0f;
+	float AttackCooldown = 0.0f;
+	float StrikeTime = 0.0f;
+	float GroanCooldown = 5.0f;
+	float ActionTime = 0.0f;
+	float DeadTime = 0.0f;
+	float DeathLength = 1.5f;
+	float BarShown = 0.0f;
+	float BarAlpha = 0.0f;
+	FVector LastHitDirection = FVector::ZeroVector;
+	bool bDead = false;
+};

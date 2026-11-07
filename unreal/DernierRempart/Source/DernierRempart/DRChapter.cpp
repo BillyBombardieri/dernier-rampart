@@ -11,6 +11,7 @@
 #include "Components/SpotLightComponent.h"
 #include "DRData.h"
 #include "DRLook.h"
+#include "DRStructures.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
@@ -25,7 +26,6 @@ namespace DRChapterLayout
 	constexpr float SpotCandelas = 2000.0f;
 	constexpr float BarrelCandelas = 200.0f;
 	constexpr float PortalCandelas = 300.0f;
-	constexpr float CoreCandelas = 60.0f;
 
 	FRotator YawOf(const FVector& Direction)
 	{
@@ -114,6 +114,11 @@ void ADRChapter::Build(int32 InChapter)
 	BuildWalls(Data);
 	BuildLights(Data);
 	BuildProps(Data);
+}
+
+ADRCore* ADRChapter::GetCore() const
+{
+	return Core;
 }
 
 void ADRChapter::BeginPlay()
@@ -323,7 +328,7 @@ void ADRChapter::BuildPortal()
 void ADRChapter::BuildCore()
 {
 	// Bunker du Cœur (4 m de côté) : socle, bloc de béton, toit, porte blindée côté champ de bataille
-	// (+X) et voyants bleus. Ses points de vie arriveront avec les vagues.
+	// (+X) et voyants bleus.
 	const FVector C = CorePosition();
 	UMaterialInterface* Concrete = Look(TEXT("beton"), 0.42f, FLinearColor(0.92f, 0.9f, 0.86f));
 	UMaterialInterface* Steel = Look(TEXT("metal"), 0.9f, FLinearColor(0.5f, 0.52f, 0.5f));
@@ -337,7 +342,8 @@ void ADRChapter::BuildCore()
 	{
 		Box(Blue, C + FVector(212.0, Y, 260.0), FVector(4.0, 18.0, 6.0), FRotator::ZeroRotator, false);
 	}
-	Flicker(C + FVector(300.0, 0.0, 260.0), FLinearColor(0.3f, 0.6f, 1.0f), DRChapterLayout::CoreCandelas, 700.0f, 0.0f, 0.0f, false);
+	// Ses points de vie et sa lumière bleue sont portés par ADRCore.
+	Core = GetWorld()->SpawnActor<ADRCore>(C + FVector(0.0, 0.0, 175.0), FRotator::ZeroRotator);
 	Blocked.Add(C);
 }
 
@@ -367,7 +373,14 @@ void ADRChapter::BuildRings(const TSharedPtr<FJsonObject>& Data)
 		const int32 Segment = FMath::Clamp((int32)DRData::Number(RingData, TEXT("segment")), 0, FMath::Max(0, Path.Num() - 2));
 		if (Path.Num() >= 2)
 		{
-			BuildGate(Gate, (Path[Segment + 1] - Path[Segment]).GetSafeNormal2D(), 720.0);
+			// Porte d'avant-poste qui coupe le chemin (Godot : main.gd, _build_rings).
+			const FString GateName = Ring.Key == TEXT("avant") ? TEXT("Barri\u00E8re de l'Avant-poste") : TEXT("Barri\u00E8re de la Muraille");
+			const double GateProgress = 1000.0 * (Segment + 1) - FVector::Dist2D(Gate, Path[Segment + 1]) / 100.0;
+			if (ADRBarrier* Barrier = GetWorld()->SpawnActor<ADRBarrier>(Gate, FRotator::ZeroRotator))
+			{
+				Barrier->Build(GateName, (float)DRData::Number(RingData, TEXT("hp"), 600.0), Path[Segment + 1] - Path[Segment], 720.0, GateProgress);
+				Barriers.Add(Barrier);
+			}
 		}
 		Blocked.Add(Gate);
 	}
@@ -385,62 +398,6 @@ void ADRChapter::BuildSocket(const FVector& Position)
 		Box(Mark, Position + Offset, FVector(12.0, 40.0, 4.0), FRotator(0.0, Angle, 0.0), false);
 	}
 	Blocked.Add(Position);
-}
-
-void ADRChapter::BuildGate(const FVector& Gate, const FVector& Direction, double Width)
-{
-	// Porte d'avant-poste (Godot : barrier.gd, _build_gate) : blocs de béton, grillage et barrière
-	// levante rayée rouge et blanc. Coordonnées locales de Godot en mètres : X = largeur,
-	// Y = hauteur, Z = vers la base.
-	const FVector Forward = Direction;
-	const FVector Side(Direction.Y, -Direction.X, 0.0);
-	const FRotator Yaw = DRChapterLayout::YawOf(Forward);
-	auto At = [&](double X, double Y, double Z)
-	{
-		return Gate + (Side * X + Forward * Z) * 100.0 + FVector(0.0, 0.0, Y * 100.0);
-	};
-	auto GodotBox = [&](UMaterialInterface* Material, double X, double Y, double Z, double SizeX, double SizeY, double SizeZ, bool bCollision)
-	{
-		Box(Material, At(X, Y, Z), FVector(SizeZ, SizeX, SizeY) * 100.0, Yaw, bCollision);
-	};
-	UMaterialInterface* Concrete = Look(TEXT("concrete"), 0.6f, FLinearColor(0.86f, 0.84f, 0.8f));
-	UMaterialInterface* Metal = Look(TEXT("metal"), 1.5f, FLinearColor(0.55f, 0.55f, 0.55f));
-	UMaterialInterface* Reflector = Look(TEXT("metal"), 1.0f, FLinearColor(0.9f, 0.12f, 0.08f), 0.6f);
-	const double W = Width / 100.0;
-
-	const int32 Count = FMath::CeilToInt(W / 2.2);
-	const double BlockLength = W / Count;
-	for (int32 Index = 0; Index < Count; ++Index)
-	{
-		const double X = -W * 0.5 + BlockLength * (Index + 0.5);
-		GodotBox(Concrete, X, 0.225, -0.05, BlockLength - 0.06, 0.45, 0.72, true);
-		GodotBox(Concrete, X, 0.72, -0.05, BlockLength - 0.06, 0.55, 0.32, true);
-		GodotBox(Reflector, X, 0.85, -0.22, BlockLength * 0.5, 0.08, 0.02, false);
-	}
-
-	// Poteaux du grillage, et deux fils tendus en attendant le vrai grillage.
-	const int32 Posts = FMath::CeilToInt(W / 1.8) + 1;
-	for (int32 Index = 0; Index < Posts; ++Index)
-	{
-		Cylinder(Metal, At(-W * 0.5 + W * Index / (Posts - 1), 1.25, 0.28), 5.0, 250.0, FRotator::ZeroRotator, false);
-	}
-	for (const double Y : { 0.95, 2.3 })
-	{
-		GodotBox(Metal, 0.0, Y, 0.28, W, 0.03, 0.03, false);
-	}
-
-	// Barrière levante rayée, devant les blocs.
-	const int32 Stripes = 10;
-	const double StripeLength = (W + 0.4) / Stripes;
-	const FRotator Lying = FRotationMatrix::MakeFromZ(Side).Rotator();
-	UMaterialInterface* Red = Plain(FLinearColor(0.75f, 0.08f, 0.06f));
-	UMaterialInterface* White = Plain(FLinearColor(0.9f, 0.9f, 0.88f));
-	for (int32 Index = 0; Index < Stripes; ++Index)
-	{
-		const double X = -W * 0.5 - 0.2 + StripeLength * (Index + 0.5);
-		Cylinder(Index % 2 == 0 ? Red : White, At(X, 1.15, -0.55), 6.0, StripeLength * 100.0, Lying, false);
-	}
-	GodotBox(Metal, -W * 0.5 - 0.35, 0.575, -0.55, 0.3, 1.15, 0.3, true);
 }
 
 void ADRChapter::BuildWalls(const TSharedPtr<FJsonObject>& Data)
