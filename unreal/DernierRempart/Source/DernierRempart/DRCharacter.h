@@ -42,7 +42,7 @@ struct FDRWeapon
  * gravité 20 m/s², capsule de 1,8 m, yeux à 1,6 m. Deux armes (pistolet lourd, fusil d'assaut)
  * avec dispersion, recul de la vue, visée, rechargement, flash, traçante et sons.
  * 100 PV : à terre, on revient au Cœur après quelques secondes pendant que les tours défendent.
- * Touches par défaut en AZERTY : ZQSD, Espace, Maj, clic gauche, clic droit, R, & et é (ou molette).
+ * Touches par défaut en AZERTY : ZQSD, Espace, Maj, clic gauche, clic droit, R, & et é (ou molette), Entrée pour lancer la vague.
  */
 UCLASS()
 class DERNIERREMPART_API ADRCharacter : public ACharacter
@@ -105,6 +105,9 @@ private:
 	FRotator ViewRotation() const;
 	void Die();
 	void Respawn();
+	void SkipPressed();
+	/** Vivant et partie pas finie : on peut bouger, tirer, recharger. */
+	bool CanAct() const;
 
 	UPROPERTY(VisibleAnywhere, Category = "Joueur")
 	TObjectPtr<UCameraComponent> Camera;
@@ -160,6 +163,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInputAction> NextWeaponAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> SkipAction;
 
 	/** Multiplicateur de sensibilité de la souris (1 = comme le réglage par défaut de Godot). */
 	UPROPERTY(EditAnywhere, Category = "Joueur")

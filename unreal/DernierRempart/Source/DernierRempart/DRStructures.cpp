@@ -3,7 +3,9 @@
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DRGameMode.h"
 #include "DRLook.h"
+#include "Engine/World.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
 #include "Kismet/GameplayStatics.h"
@@ -11,6 +13,14 @@
 
 namespace DRStructureMeshes
 {
+	// Partie finie : les structures ne prennent plus de dégâts (Godot : structure.gd).
+	bool GameOver(const AActor* Actor)
+	{
+		const UWorld* World = Actor->GetWorld();
+		const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+		return Mode && Mode->IsOver();
+	}
+
 	UStaticMesh* Cube()
 	{
 		return LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Cube.Cube"));
@@ -150,7 +160,7 @@ FVector ADRBarrier::ContactPoint(const FVector& Point) const
 
 float ADRBarrier::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
-	if (!bAlive || DamageAmount <= 0.0f)
+	if (!bAlive || DamageAmount <= 0.0f || DRStructureMeshes::GameOver(this))
 	{
 		return 0.0f;
 	}
@@ -228,7 +238,7 @@ ADRCore::ADRCore()
 
 float ADRCore::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
-	if (!bAlive || DamageAmount <= 0.0f)
+	if (!bAlive || DamageAmount <= 0.0f || DRStructureMeshes::GameOver(this))
 	{
 		return 0.0f;
 	}
@@ -242,6 +252,10 @@ float ADRCore::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, A
 		bAlive = false;
 		Light->SetVisibility(false);
 		DRLook::PlayAt(this, TEXT("structure_hit"), GetActorLocation(), 6.0f, 0.0f);
+		if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+		{
+			Mode->CoreDestroyed();
+		}
 	}
 	return DamageAmount;
 }

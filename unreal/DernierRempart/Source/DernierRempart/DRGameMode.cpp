@@ -4,12 +4,16 @@
 #include "DRCharacter.h"
 #include "DRData.h"
 #include "DRHUD.h"
+#include "DRLook.h"
+#include "DRScrap.h"
+#include "DRStructures.h"
 #include "DRZombie.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
 #include "Sound/SoundAttenuation.h"
+#include "Sound/SoundBase.h"
 
 namespace DRGameModeSounds
 {
@@ -42,17 +46,67 @@ void ADRGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 {
 	Super::InitGame(MapName, Options, ErrorMessage);
 	GameData = DRData::Load(TEXT("jeu.json"));
+	LoadLevel(Options);
+	LastWave = (int32)Rule(TEXT("partie"), TEXT("last_wave"), 10.0);
+	SiegeEvery = (int32)Rule(TEXT("vagues"), TEXT("siege_every"), 5.0);
+	Scrap = (int32)Rule(TEXT("partie"), TEXT("start_scrap"), 55.0);
 	// Construit la carte avant l'arrivée du joueur, pour qu'il ait un sol sous les pieds.
-	// « ?Chapitre=2 » dans les options de lancement choisit un autre chapitre (1 par défaut).
 	UWorld* World = GetWorld();
 	if (World && !TActorIterator<ADRChapter>(World))
 	{
 		Chapter = World->SpawnActor<ADRChapter>(FVector::ZeroVector, FRotator::ZeroRotator);
 		if (Chapter)
 		{
-			Chapter->Build(UGameplayStatics::GetIntOption(Options, TEXT("Chapitre"), 1) - 1);
+			Chapter->Build(ChapterIndex);
 		}
 	}
+}
+
+void ADRGameMode::LoadLevel(const FString& Options)
+{
+	// « ?Niveau=N » (1 à 30) ; « ?Chapitre=N » reste accepté et prend le premier niveau du chapitre.
+	const TArray<TSharedPtr<FJsonValue>>* Levels = nullptr;
+	if (GameData.IsValid() && GameData->TryGetArrayField(TEXT("niveaux"), Levels) && Levels->Num() > 0)
+	{
+		LevelCount = Levels->Num();
+	}
+	const int32 AskedLevel = UGameplayStatics::GetIntOption(Options, TEXT("Niveau"), 0);
+	const int32 AskedChapter = UGameplayStatics::GetIntOption(Options, TEXT("Chapitre"), 0);
+	Level = AskedLevel > 0 ? AskedLevel - 1 : (AskedChapter > 0 ? (AskedChapter - 1) * 5 : 0);
+	Level = FMath::Clamp(Level, 0, LevelCount - 1);
+	ChapterIndex = Level / 5;
+	LevelShort = FString::Printf(TEXT("%d-%d"), ChapterIndex + 1, Level % 5 + 1);
+	LevelTitle = LevelShort;
+	if (Levels && Levels->IsValidIndex(Level))
+	{
+		const TSharedPtr<FJsonObject> Entry = (*Levels)[Level]->AsObject();
+		if (Entry.IsValid())
+		{
+			ChapterIndex = (int32)DRData::Number(Entry, TEXT("chapitre"), ChapterIndex);
+			Entry->TryGetStringField(TEXT("titre"), LevelTitle);
+			Entry->TryGetStringField(TEXT("court"), LevelShort);
+			const TSharedPtr<FJsonObject>* Diff = nullptr;
+			if (Entry->TryGetObjectField(TEXT("difficulte"), Diff))
+			{
+				Difficulty.Hp = (float)DRData::Number(*Diff, TEXT("hp"), 1.0);
+				Difficulty.Damage = (float)DRData::Number(*Diff, TEXT("damage"), 1.0);
+				Difficulty.Count = (float)DRData::Number(*Diff, TEXT("count"), 1.0);
+				Difficulty.Spawn = (float)DRData::Number(*Diff, TEXT("spawn"), 1.0);
+				Difficulty.Early = (int32)DRData::Number(*Diff, TEXT("early"), 0.0);
+				Difficulty.Bosses = (int32)DRData::Number(*Diff, TEXT("bosses"), 1.0);
+			}
+		}
+	}
+}
+
+double ADRGameMode::Rule(const TCHAR* Group, const TCHAR* Field, double Default) const
+{
+	const TSharedPtr<FJsonObject>* Values = nullptr;
+	if (GameData.IsValid() && GameData->TryGetObjectField(Group, Values))
+	{
+		return DRData::Number(*Values, Field, Default);
+	}
+	return Default;
 }
 
 ADRChapter* ADRGameMode::GetChapter() const
@@ -63,6 +117,16 @@ ADRChapter* ADRGameMode::GetChapter() const
 USoundAttenuation* ADRGameMode::GetAttenuation(float MaxDistance) const
 {
 	return MaxDistance <= 5000.0f ? NearAttenuation : FarAttenuation;
+}
+
+UMaterialInterface* ADRGameMode::GetScrapMaterial(bool bGlint)
+{
+	if (!ScrapMetal)
+	{
+		ScrapMetal = DRLook::Textured(this, TEXT("metal"), 3.0f, FLinearColor(0.9f, 0.85f, 0.8f));
+		ScrapGlint = DRLook::Textured(this, TEXT("metal"), 3.0f, FLinearColor(1.0f, 0.7f, 0.3f), 0.8f);
+	}
+	return bGlint ? ScrapGlint : ScrapMetal;
 }
 
 void ADRGameMode::RestartPlayer(AController* NewPlayer)
@@ -77,11 +141,136 @@ void ADRGameMode::RestartPlayer(AController* NewPlayer)
 	Super::RestartPlayer(NewPlayer);
 }
 
-ADRZombie* ADRGameMode::SpawnZombie(const FString& Type, float HpScale, float SpeedScale, float DamageScale)
+// ---------------------------------------------------------------- messages, ressources
+
+void ADRGameMode::Say(const FString& Text)
+{
+	FDRMessage Message;
+	Message.Text = Text;
+	Message.Time = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	Messages.Add(Message);
+	// Trois messages au plus à l'écran, comme dans Godot.
+	while (Messages.Num() > 3)
+	{
+		Messages.RemoveAt(0);
+	}
+}
+
+void ADRGameMode::AddScrap(int32 Amount)
+{
+	Scrap += Amount;
+}
+
+void ADRGameMode::AddScore(int32 Points)
+{
+	if (!bOver)
+	{
+		Score += Points;
+	}
+}
+
+void ADRGameMode::PlaySfx2D(const FString& Name, float Decibels)
+{
+	if (USoundBase* Sound = DRLook::Sound(Name))
+	{
+		UGameplayStatics::PlaySound2D(this, Sound, DRLook::Volume(Decibels));
+	}
+}
+
+// ---------------------------------------------------------------- vagues
+
+void ADRGameMode::EnterPhase(EDRPhase NewPhase, float Duration)
+{
+	Phase = NewPhase;
+	PhaseTime = Duration;
+	PhaseDuration = FMath::Max(1.0f, Duration);
+	switch (NewPhase)
+	{
+	case EDRPhase::Prep:
+	{
+		const FString Label = IsSiege(Wave) ? FString(TEXT("NUIT DE SI\u00C8GE")) : FString::Printf(TEXT("Vague %d"), Wave);
+		Say(FString::Printf(TEXT("%s dans %d s. Construis tes d\u00E9fenses (Entr\u00E9e pour lancer)."), *Label, FMath::RoundToInt(Duration)));
+		break;
+	}
+	case EDRPhase::Assault:
+		PlaySfx2D(TEXT("siren"), -8.0f);
+		BuildQueue();
+		WaveTotal = FMath::Max(1, Queue.Num());
+		SpawnCooldown = 0.0f;
+		Say(IsSiege(Wave) ? FString(TEXT("NUIT DE SI\u00C8GE : un boss arrive !")) : FString::Printf(TEXT("Vague %d : ils arrivent !"), Wave));
+		break;
+	case EDRPhase::Harvest:
+		Say(FString::Printf(TEXT("Vague repouss\u00E9e : sant\u00E9 restaur\u00E9e et +%d ferraille de prime. Ramasse le reste avant qu'il disparaisse."), Bonus));
+		break;
+	}
+}
+
+void ADRGameMode::BuildQueue()
+{
+	// Même composition que _build_queue dans wave_manager.gd.
+	Queue.Reset();
+	const int32 Count = FMath::RoundToInt((8 + Wave * 4) * Difficulty.Count);
+	// Dans les niveaux plus durs, les zombies spéciaux arrivent quelques vagues plus tôt.
+	const int32 W = Wave + Difficulty.Early;
+	const float RunnerChance = FMath::Min(0.15f + 0.03f * W, 0.4f);
+	const float BruteChance = W < 2 ? 0.0f : FMath::Min(0.06f + 0.02f * W, 0.22f);
+	const float SpitterChance = W < 3 ? 0.0f : FMath::Min(0.06f + 0.015f * (W - 3), 0.14f);
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const float Roll = FMath::FRand();
+		FString Type = TEXT("rodeur");
+		if (Roll < RunnerChance)
+		{
+			Type = TEXT("coureur");
+		}
+		else if (Roll < RunnerChance + SpitterChance)
+		{
+			Type = TEXT("cracheur");
+		}
+		else if (Roll > 1.0f - BruteChance)
+		{
+			Type = TEXT("brute");
+		}
+		Queue.Add(Type);
+	}
+	// Hurleurs (dès la vague 4) au milieu de la horde ; fouisseurs (dès la vague 5).
+	if (W >= 4)
+	{
+		for (int32 Index = 0; Index < 1 + (W - 4) / 3; ++Index)
+		{
+			Queue.Insert(FString(TEXT("hurleur")), FMath::RandRange(Count / 4, Count * 3 / 4));
+		}
+	}
+	if (W >= 5)
+	{
+		for (int32 Index = 0; Index < 1 + (W - 5) / 2; ++Index)
+		{
+			Queue.Insert(FString(TEXT("fouisseur")), FMath::RandRange(Count / 5, Count * 4 / 5));
+		}
+	}
+	// Fin de vague : une ruée de coureurs pour mettre la pression.
+	if (W >= 4)
+	{
+		for (int32 Index = 0; Index < W - 2; ++Index)
+		{
+			Queue.Add(TEXT("coureur"));
+		}
+	}
+	if (IsSiege(Wave))
+	{
+		const int32 Bosses = Wave >= LastWave ? Difficulty.Bosses : 1;
+		for (int32 Index = 0; Index < Bosses; ++Index)
+		{
+			Queue.Insert(FString(TEXT("boss")), FMath::Min(Queue.Num(), Count / 2 + Index * Count / 4));
+		}
+	}
+}
+
+void ADRGameMode::SpawnZombie(const FString& Type)
 {
 	if (!Chapter || Chapter->GetPath().Num() < 2)
 	{
-		return nullptr;
+		return;
 	}
 	// Au portail, un peu dispersés (Godot : ±2,5 m sur la largeur, ±1,5 m en profondeur).
 	const FVector Portal = Chapter->GetPath()[0];
@@ -90,38 +279,169 @@ ADRZombie* ADRGameMode::SpawnZombie(const FString& Type, float HpScale, float Sp
 	const FVector Spot = Portal + FVector(FMath::FRandRange(-150.0, 150.0), FMath::FRandRange(-250.0, 250.0), 300.0);
 	const FRotator Facing(0.0, (Chapter->GetPath()[1] - Portal).Rotation().Yaw, 0.0);
 	ADRZombie* Zombie = GetWorld()->SpawnActor<ADRZombie>(ADRZombie::StaticClass(), Spot, Facing, Params);
-	if (Zombie)
+	if (!Zombie)
 	{
-		Zombie->Setup(Type, HpScale, SpeedScale, DamageScale);
-		Zombie->SetActorLocation(FVector(Spot.X, Spot.Y, Portal.Z + Zombie->GetSimpleCollisionHalfHeight() + 5.0));
+		return;
 	}
-	return Zombie;
+	// Montée en puissance de vague en vague, multipliée par la difficulté du niveau.
+	const float Step = (float)(Wave - 1);
+	Zombie->Setup(Type,
+		(1.0f + (float)Rule(TEXT("vagues"), TEXT("hp_per_wave"), 0.2) * Step) * Difficulty.Hp,
+		1.0f + (float)Rule(TEXT("vagues"), TEXT("speed_per_wave"), 0.02) * Step,
+		(1.0f + (float)Rule(TEXT("vagues"), TEXT("damage_per_wave"), 0.08) * Step) * Difficulty.Damage);
+	Zombie->SetActorLocation(FVector(Spot.X, Spot.Y, Portal.Z + Zombie->GetSimpleCollisionHalfHeight() + 5.0));
+	++Alive;
+	// Premier zombie d'un nouveau type : un message explique ce qu'il fait.
+	const TSharedPtr<FJsonObject>* Waves = nullptr;
+	const TSharedPtr<FJsonObject>* Intro = nullptr;
+	FString Text;
+	if (!Seen.Contains(Type) && GameData.IsValid() && GameData->TryGetObjectField(TEXT("vagues"), Waves)
+		&& (*Waves)->TryGetObjectField(TEXT("intro"), Intro) && (*Intro)->TryGetStringField(Type, Text))
+	{
+		Seen.Add(Type);
+		Say(Text);
+	}
 }
 
 void ADRGameMode::ZombieDied(ADRZombie* Zombie)
 {
+	Alive = FMath::Max(0, Alive - 1);
 	++Kills;
+	if (!Zombie)
+	{
+		return;
+	}
+	// Points et ferraille du type de zombie (jeu.json, « zombies »).
+	const TSharedPtr<FJsonObject>* Types = nullptr;
+	const TSharedPtr<FJsonObject>* Stats = nullptr;
+	int32 Value = 3;
+	if (GameData.IsValid() && GameData->TryGetObjectField(TEXT("zombies"), Types) && (*Types)->TryGetObjectField(Zombie->GetZombieType(), Stats))
+	{
+		AddScore((int32)DRData::Number(*Stats, TEXT("points"), 10.0));
+		Value = (int32)DRData::Number(*Stats, TEXT("scrap"), 3.0);
+	}
+	// La ferraille tombe en quelques tas autour du corps.
+	const int32 Pieces = FMath::Clamp(Value / 3, 1, 8);
+	const int32 PerPiece = FMath::CeilToInt((float)Value / Pieces);
+	for (int32 Index = 0; Index < Pieces; ++Index)
+	{
+		const FVector Spot = Zombie->GetActorLocation() + FVector(FMath::FRandRange(-100.0, 100.0), FMath::FRandRange(-100.0, 100.0), 0.0);
+		FActorSpawnParameters Params;
+		Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+		if (ADRScrap* Pile = GetWorld()->SpawnActor<ADRScrap>(ADRScrap::StaticClass(), Spot, FRotator::ZeroRotator, Params))
+		{
+			Pile->Setup(PerPiece);
+		}
+	}
+}
+
+void ADRGameMode::WaveCleared()
+{
+	AddScore((int32)Rule(TEXT("partie"), TEXT("wave_points"), 50.0) * Wave);
+	if (Wave >= LastWave)
+	{
+		EndGame(true);
+		return;
+	}
+	Bonus = FMath::RoundToInt((float)(Rule(TEXT("partie"), TEXT("wave_scrap_base"), 10.0) + Rule(TEXT("partie"), TEXT("wave_scrap_per_wave"), 5.0) * Wave));
+	AddScrap(Bonus);
+	// Entre deux vagues, le joueur récupère toute sa santé. (Le choix d'implant après un siège
+	// viendra avec les implants.)
+	if (ADRCharacter* Player = Cast<ADRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0)))
+	{
+		Player->HealFull();
+	}
+	EnterPhase(EDRPhase::Harvest, (float)Rule(TEXT("vagues"), TEXT("harvest_time"), 12.0));
+}
+
+void ADRGameMode::SkipPhase()
+{
+	if (bOver)
+	{
+		// Victoire : niveau suivant ; défaite : on recommence le même niveau.
+		const int32 Next = bVictory && HasNextLevel() ? Level + 1 : Level;
+		UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)), true, FString::Printf(TEXT("Niveau=%d"), Next + 1));
+		return;
+	}
+	if (Phase == EDRPhase::Prep || Phase == EDRPhase::Harvest)
+	{
+		PhaseTime = 0.0f;
+	}
+}
+
+void ADRGameMode::CoreDestroyed()
+{
+	EndGame(false);
+}
+
+void ADRGameMode::EndGame(bool bWon)
+{
+	if (bOver)
+	{
+		return;
+	}
+	if (bWon)
+	{
+		const ADRCore* Core = Chapter ? Chapter->GetCore() : nullptr;
+		Score += (int32)Rule(TEXT("partie"), TEXT("victory_points"), 1000.0) + (Core ? (int32)Core->GetHp() : 0);
+	}
+	bOver = true;
+	bVictory = bWon;
 }
 
 void ADRGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
-	// Étape 5 du portage : en attendant les vagues, un zombie toutes les 4 secondes (au plus 10
-	// en même temps) pour tester le tir, les barrières et le Cœur.
-	TestSpawnCooldown -= DeltaSeconds;
-	if (TestSpawnCooldown > 0.0f)
+	if (!bStarted)
+	{
+		bStarted = true;
+		Wave = 1;
+		EnterPhase(EDRPhase::Prep, (float)Rule(TEXT("vagues"), TEXT("first_prep_time"), 40.0));
+	}
+	if (bOver)
 	{
 		return;
 	}
-	TestSpawnCooldown = 4.0f;
-	int32 Alive = 0;
-	for (TActorIterator<ADRZombie> It(GetWorld()); It; ++It)
+	switch (Phase)
 	{
-		Alive += It->IsDead() ? 0 : 1;
-	}
-	if (Alive < 10)
-	{
-		const float Roll = FMath::FRand();
-		SpawnZombie(Roll < 0.6f ? TEXT("rodeur") : (Roll < 0.85f ? TEXT("coureur") : TEXT("brute")), 1.0f, 1.0f, 1.0f);
+	case EDRPhase::Prep:
+		PhaseTime -= DeltaSeconds;
+		if (PhaseTime <= 0.0f)
+		{
+			EnterPhase(EDRPhase::Assault, 0.0f);
+		}
+		break;
+	case EDRPhase::Assault:
+		SpawnCooldown -= DeltaSeconds;
+		if (Queue.Num() > 0 && SpawnCooldown <= 0.0f)
+		{
+			const FString Type = Queue[0];
+			Queue.RemoveAt(0);
+			SpawnZombie(Type);
+			SpawnCooldown = FMath::Max(0.3f, 1.3f - 0.11f * Wave) * Difficulty.Spawn;
+			// À partir de la vague 3, les zombies arrivent parfois en meute serrée.
+			if (Wave >= 3 && FMath::FRand() < 0.15f + 0.03f * Wave)
+			{
+				SpawnCooldown = 0.15f;
+			}
+		}
+		if (Queue.Num() == 0 && Alive <= 0)
+		{
+			WaveCleared();
+		}
+		break;
+	case EDRPhase::Harvest:
+		PhaseTime -= DeltaSeconds;
+		if (PhaseTime <= 0.0f)
+		{
+			// La ferraille pas ramassée disparaît.
+			for (TActorIterator<ADRScrap> It(GetWorld()); It; ++It)
+			{
+				It->Destroy();
+			}
+			++Wave;
+			EnterPhase(EDRPhase::Prep, (float)Rule(TEXT("vagues"), TEXT("prep_time"), 25.0));
+		}
+		break;
 	}
 }

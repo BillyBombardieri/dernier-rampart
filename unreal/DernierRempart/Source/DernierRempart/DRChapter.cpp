@@ -10,6 +10,7 @@
 #include "Components/SkyLightComponent.h"
 #include "Components/SpotLightComponent.h"
 #include "DRData.h"
+#include "DRGameMode.h"
 #include "DRLook.h"
 #include "DRStructures.h"
 #include "Engine/CollisionProfile.h"
@@ -124,10 +125,12 @@ ADRCore* ADRChapter::GetCore() const
 void ADRChapter::BeginPlay()
 {
 	Super::BeginPlay();
+	if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+	{
+		Mode->Say(FString::Printf(TEXT("Chapitre %d : %s. %s"), Chapter + 1, *ChapterName, *ChapterPlace));
+	}
 	if (GEngine)
 	{
-		GEngine->AddOnScreenDebugMessage(-1, 12.0f, FColor::White,
-			FString::Printf(TEXT("Chapitre %d : %s. %s"), Chapter + 1, *ChapterName, *ChapterPlace));
 		if (bMissingTextures)
 		{
 			GEngine->AddOnScreenDebugMessage(-1, 30.0f, FColor::Orange,

@@ -8,10 +8,10 @@ class ADRCharacter;
 class UFont;
 
 /**
- * Interface en jeu, dessinée directement à l'écran en attendant la vraie interface : viseur qui
- * s'écarte avec la dispersion, marque de touche, arme et munitions, vie du joueur, PV du Cœur et
- * des barrières, barres de vie au-dessus des zombies blessés, écran rougi quand on est touché,
- * message quand on tombe, rappel des touches.
+ * Interface en jeu, dessinée directement à l'écran en attendant la vraie interface : vague et
+ * phase, PV du Cœur et des barrières, ferraille et points, messages, viseur qui s'écarte avec la
+ * dispersion, marque de touche, arme et munitions, vie du joueur, barres de vie au-dessus des
+ * zombies blessés, écran rougi quand on est touché, message quand on tombe, fin de partie.
  */
 UCLASS()
 class DERNIERREMPART_API ADRHUD : public AHUD
@@ -31,9 +31,15 @@ private:
 	void DrawWeapon(const ADRCharacter* Player);
 	void DrawHealth(const ADRCharacter* Player);
 	void DrawFallen(const ADRCharacter* Player);
+	void DrawResources();
+	void DrawMessages(float Top);
+	void DrawEnd();
+	/** Coupe un texte en lignes d'au plus MaxWidth pixels. */
+	TArray<FString> Wrap(const FString& Text, float Size, float MaxWidth) const;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UFont> Font;
 
 	float Scale = 1.0f;
+	float PanelBottom = 0.0f; // bas du panneau du haut, où commencent les messages
 };

@@ -13,7 +13,7 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 3 | Carte du chapitre 1 | à tester (8 nov.) |
 | 4 | Tir, pistolet et fusil | à tester (8 nov.) |
 | 5 | Zombies sur le chemin, barrières et Cœur avec PV, vie du joueur, barres de vie | à tester (8 nov.) |
-| 6 | Vagues, ferraille, énergie | à faire |
+| 6 | Vagues, ferraille, points, victoire et défaite | à tester (8 nov.) |
 | 7 | Tours, marquage, combos | à faire |
 | 8 | Interface, menu, réglages et touches modifiables | à faire |
 | ensuite | Autres chapitres, gadgets, établi, implants, améliorations, sauvegarde, tutoriel, sons, export Windows | à faire |
@@ -89,9 +89,9 @@ Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, 
 
 ## 8. Tester l'étape 3 : la carte du chapitre 1
 
-1. Fais d'abord l'étape 2 (l'import). Sans elle, la carte s'affiche quand même, mais en couleurs unies, avec un message orange en haut à gauche.
+1. Fais d'abord l'étape 2 (l'import). Sans elle, la carte s'affiche quand même, mais en couleurs unies, avec un message orange en haut à gauche (sous le panneau de la ferraille).
 2. Clique sur **▶ Play** (ou **Alt + P**), puis clique dans l'image.
-3. Tu dois te retrouver dans « La Brèche », au crépuscule, juste devant le **Cœur**, qui est dans ton dos (le bunker de béton avec sa porte blindée et deux voyants bleus), comme au début d'une partie Godot. En haut à gauche, un message rappelle le nom du chapitre.
+3. Tu dois te retrouver dans « La Brèche », au crépuscule, juste devant le **Cœur**, qui est dans ton dos (le bunker de béton avec sa porte blindée et deux voyants bleus), comme au début d'une partie Godot. En haut, un message rappelle le nom du chapitre.
 4. Regarde autour de toi : le sol de terre, le chemin boueux qui serpente jusqu'à la **brèche** au loin (un mur d'enceinte avec une lampe rouge qui vacille), les deux **barrières** sur le chemin (blocs de béton, poteaux, barrière rayée rouge et blanc), les **dalles rondes** des tours avec leurs repères orangés, les **murs anti-souffle** et les **sacs de sable** autour du Cœur, quatre **projecteurs** sur leurs poteaux, quatre **barils** aux braises rougeoyantes qui éclairent en vacillant, et des rochers, des arbres morts et des carcasses de voitures.
 5. Dis-moi ce qui te paraît trop sombre, trop clair ou mal placé : les lumières sont réglées à l'estime (Godot et Unreal ne mesurent pas la lumière de la même façon). Pas encore d'herbe, de flammes ni de grillage : ils viendront plus tard.
 
@@ -106,15 +106,24 @@ Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, 
 
 ## 10. Tester l'étape 5 : les zombies, les barrières et le Cœur
 
-1. Lance la partie. En attendant les vagues (étape 6), un zombie sort du portail toutes les 4 secondes, au plus 10 à la fois : surtout des rôdeurs, parfois un coureur ou une brute.
+1. Lance la partie et appuie sur **Entrée** pour faire venir la première vague tout de suite (voir l'étape 6 juste en dessous).
 2. Ils suivent le chemin, s'arrêtent devant la barrière de l'avant-poste et la frappent jusqu'à la casser (elle s'effondre), puis font pareil avec la muraille, puis frappent le Cœur. Ils ne s'en prennent jamais aux tours.
 3. En haut au milieu : les PV du Cœur et de chaque barrière. En bas à gauche : ta vie (100 PV).
 4. Un zombie touché affiche une fine barre de vie au-dessus de la tête, qui s'efface s'il n'est plus touché pendant 6 s. Un tir dans la tête fait deux fois plus de dégâts.
 5. S'ils passent près de toi, ils te poursuivent et te frappent : les bords de l'écran rougissent. À 0 PV, « Tu es tombé ! » s'affiche et tu reviens devant le Cœur après 5 s (3 s de plus à chaque nouvelle chute).
 6. **Vérifie surtout que les zombies marchent dans le bon sens et sont bien animés** (marche, course, coups, chute en mourant), et envoie une capture si l'un d'eux glisse, flotte, marche en crabe ou de dos. Sans l'étape 2, ce sont de simples cylindres gris.
-7. Il n'y a pas encore de fin de partie : si le Cœur tombe, les zombies restent simplement autour (les vagues et la défaite arrivent à l'étape 6).
 
-## 11. Si ça ne marche pas
+## 11. Tester l'étape 6 : les vagues
+
+1. En haut au milieu : le niveau, la vague (sur 10) et la phase. La partie commence par 40 s de **préparation** (25 s ensuite) ; **Entrée** lance la vague sans attendre.
+2. Pendant l'**assaut**, le compteur montre les zombies qui restent. La composition des vagues est celle de Godot : plus de coureurs et de brutes au fil des vagues, des cracheurs dès la vague 3, des hurleurs dès la 4, des fouisseurs dès la 5, et un boss aux nuits de siège (vagues 5 et 10, en rouge). Pour l'instant, ces zombies spéciaux se battent tous au corps à corps : leurs talents (crachat, cri, terrier) viendront plus tard.
+3. Chaque zombie abattu rapporte des points et laisse un petit tas de **ferraille** doré : passe dessus (elle vient à toi à moins de 2,5 m). La ferraille et les points sont en haut à gauche. Elle disparaît au bout de 30 s.
+4. Vague repoussée : ta santé revient au maximum, tu reçois une prime de ferraille, puis 12 s de **récolte** pour ramasser le reste (Entrée pour passer).
+5. Les messages de la partie (vague qui arrive, nouveau type de zombie...) s'affichent quelques secondes sous le panneau du haut.
+6. **Défaite** si le Cœur tombe, **victoire** après la vague 10. Entrée recommence le niveau, ou passe au suivant après une victoire (c'est pour l'instant la seule façon de changer de niveau ; le menu arrive à l'étape 8).
+7. Le choix d'implant après les nuits de siège n'est pas encore là, ni les tours : la ferraille s'accumule en attendant l'étape 7.
+
+## 12. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

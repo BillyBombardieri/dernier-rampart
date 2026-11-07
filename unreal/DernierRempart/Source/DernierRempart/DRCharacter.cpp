@@ -6,6 +6,7 @@
 #include "Components/StaticMeshComponent.h"
 #include "DRChapter.h"
 #include "DRData.h"
+#include "DRGameMode.h"
 #include "DRLook.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/StaticMesh.h"
@@ -287,7 +288,7 @@ void ADRCharacter::NextWeapon()
 
 void ADRCharacter::StartFire()
 {
-	if (!bAlive)
+	if (!CanAct())
 	{
 		return;
 	}
@@ -303,7 +304,7 @@ void ADRCharacter::StopFire()
 
 void ADRCharacter::StartAim()
 {
-	bAimHeld = bAlive;
+	bAimHeld = CanAct();
 }
 
 void ADRCharacter::StopAim()
@@ -313,7 +314,7 @@ void ADRCharacter::StopAim()
 
 void ADRCharacter::ReloadPressed()
 {
-	if (bAlive && Weapons.IsValidIndex(CurrentWeapon) && ReloadLeft <= 0.0f && Ammo[CurrentWeapon] < Weapons[CurrentWeapon].Mag)
+	if (CanAct() && Weapons.IsValidIndex(CurrentWeapon) && ReloadLeft <= 0.0f && Ammo[CurrentWeapon] < Weapons[CurrentWeapon].Mag)
 	{
 		StartReload();
 	}
@@ -451,7 +452,18 @@ void ADRCharacter::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
 	Hurt = DRPlayer::MoveToward(Hurt, 0.0f, DeltaSeconds * 0.8f);
-	if (!bAlive)
+	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	if (Mode && Mode->IsOver())
+	{
+		// Partie finie : on ne tire plus, on ne revient plus au Cœur.
+		bFireHeld = false;
+		bAimHeld = false;
+		if (!bAlive)
+		{
+			return;
+		}
+	}
+	else if (!bAlive)
 	{
 		RespawnLeft -= DeltaSeconds;
 		if (RespawnLeft <= 0.0f)
@@ -573,7 +585,7 @@ void ADRCharacter::AnimateView(float DeltaSeconds)
 
 float ADRCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
-	if (!bAlive)
+	if (!CanAct())
 	{
 		return 0.0f;
 	}
@@ -591,6 +603,21 @@ float ADRCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEve
 		Die();
 	}
 	return Amount;
+}
+
+bool ADRCharacter::CanAct() const
+{
+	const UWorld* World = GetWorld();
+	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+	return bAlive && !(Mode && Mode->IsOver());
+}
+
+void ADRCharacter::SkipPressed()
+{
+	if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+	{
+		Mode->SkipPhase();
+	}
 }
 
 void ADRCharacter::HealFull()
@@ -679,6 +706,7 @@ void ADRCharacter::CreateInput()
 	Weapon1Action = NewAction(TEXT("Pistolet"), EInputActionValueType::Boolean);
 	Weapon2Action = NewAction(TEXT("Fusil"), EInputActionValueType::Boolean);
 	NextWeaponAction = NewAction(TEXT("ArmeSuivante"), EInputActionValueType::Boolean);
+	SkipAction = NewAction(TEXT("LancerVague"), EInputActionValueType::Boolean);
 
 	Mapping = NewObject<UInputMappingContext>(this, TEXT("CommandesJoueur"));
 	// ZQSD en AZERTY. L'action donne (droite, avant) : Z et S passent sur l'axe avant, S et Q sont inversés.
@@ -714,6 +742,8 @@ void ADRCharacter::CreateInput()
 	Mapping->MapKey(Weapon2Action, EKeys::Two);
 	Mapping->MapKey(NextWeaponAction, EKeys::MouseScrollUp);
 	Mapping->MapKey(NextWeaponAction, EKeys::MouseScrollDown);
+	// Entrée : lancer la vague sans attendre, passer la récolte, recommencer en fin de partie.
+	Mapping->MapKey(SkipAction, EKeys::Enter);
 }
 
 void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
@@ -750,11 +780,12 @@ void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	EnhancedInput->BindAction(Weapon1Action, ETriggerEvent::Started, this, &ADRCharacter::SelectPistol);
 	EnhancedInput->BindAction(Weapon2Action, ETriggerEvent::Started, this, &ADRCharacter::SelectRifle);
 	EnhancedInput->BindAction(NextWeaponAction, ETriggerEvent::Started, this, &ADRCharacter::NextWeapon);
+	EnhancedInput->BindAction(SkipAction, ETriggerEvent::Started, this, &ADRCharacter::SkipPressed);
 }
 
 void ADRCharacter::Move(const FInputActionValue& Value)
 {
-	if (!bAlive)
+	if (!CanAct())
 	{
 		return;
 	}

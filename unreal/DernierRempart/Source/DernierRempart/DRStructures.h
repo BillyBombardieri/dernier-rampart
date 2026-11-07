@@ -64,7 +64,7 @@ private:
 };
 
 /**
- * Le Cœur (Godot : scripts/structure.gd) : 1200 PV. S'il tombe, la partie est perdue.
+ * Le Cœur (Godot : scripts/structure.gd) : 1200 PV. S'il tombe, la partie est perdue (ADRGameMode).
  * Son bunker est dessiné par la carte (ADRChapter) ; cet acteur porte ses PV et ses voyants.
  */
 UCLASS()
