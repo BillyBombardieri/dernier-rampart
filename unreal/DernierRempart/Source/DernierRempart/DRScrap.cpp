@@ -90,7 +90,10 @@ void ADRScrap::Tick(float DeltaSeconds)
 		Destroy();
 		return;
 	}
-	if (Distance < DRScrapRules::Magnet)
+	// Implant Charognard : la ferraille vient à toi de 12 m au lieu de 2,5 m.
+	const ADRGameMode* Game = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	const double Reach = Game && Game->HasImplant(TEXT("charognard")) ? 1200.0 : DRScrapRules::Magnet;
+	if (Distance < Reach)
 	{
 		AddActorWorldOffset(Offset.GetSafeNormal() * FMath::Min(Distance, DRScrapRules::PullSpeed * DeltaSeconds));
 	}

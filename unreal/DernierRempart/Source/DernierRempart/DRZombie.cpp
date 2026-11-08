@@ -491,11 +491,12 @@ float ADRZombie::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 			DRLook::PlayAt(this, TEXT("hit_flesh"), Where, -2.0f, 0.15f);
 		}
 	}
-	// Combo BRISÉ : un tir d'arme lourde sur un zombie gelé fait trois fois plus de dégâts.
+	// Combo BRISÉ : un tir d'arme lourde sur un zombie gelé fait trois fois plus de dégâts (cinq
+	// avec l'implant Sang froid).
 	const bool bHeavy = DamageEvent.DamageTypeClass && DamageEvent.DamageTypeClass->IsChildOf(UDRHeavyDamage::StaticClass());
 	if (bFromPlayer && bHeavy && FrozenTime > 0.0f)
 	{
-		Amount *= 3.0f;
+		Amount *= (Mode && Mode->HasImplant(TEXT("sang_froid"))) ? 5.0f : 3.0f;
 		FrozenTime = 0.0f;
 		if (Mode)
 		{

@@ -141,7 +141,7 @@ public:
 	/** Menu principal (pas de partie en cours) ou menu de pause ouvert : le joueur ne bouge pas. */
 	bool IsMainMenu() const { return bMenu; }
 	bool IsPauseMenu() const { return bPauseMenu; }
-	bool IsMenuOpen() const { return bMenu || bPauseMenu; }
+	bool IsMenuOpen() const { return bMenu || bPauseMenu || bImplantChoice; }
 	UDRSave* GetProgress() const { return Progress; }
 	/** Nouveau record, ou niveau suivant débloqué, à la fin de la partie. */
 	bool IsNewRecord() const { return bNewRecord; }
@@ -172,6 +172,20 @@ public:
 	void RefundUpgrades();
 	/** Insignes gagnés à la fin de cette partie. */
 	int32 GetEarnedInsignes() const { return EarnedInsignes; }
+
+	/**
+	 * Implants (Godot : game.gd, IMPLANTS, chiffres de jeu.json « implants ») : après une Nuit de
+	 * siège repoussée, on en choisit un parmi trois, avec un bonus et un malus, pour toute la partie.
+	 */
+	static const TArray<FName>& GetImplantIds();
+	bool HasImplant(FName Id) const { return Implants.Contains(Id); }
+	const TArray<FName>& GetImplants() const { return Implants; }
+	/** Choix d'implant en cours : la partie est figée jusqu'au choix. */
+	bool IsChoosingImplant() const { return bImplantChoice; }
+	const TArray<FName>& GetImplantOptions() const { return ImplantOptions; }
+	/** « name », « plus » ou « minus » d'un implant. */
+	FString GetImplantText(FName Id, const TCHAR* Field) const;
+	void ChooseImplant(FName Id);
 
 private:
 	TSharedPtr<FJsonObject> GetUpgradeData(FName Id) const;
@@ -238,6 +252,9 @@ private:
 	bool bNewRecord = false;
 	bool bUnlockedNext = false;
 	int32 EarnedInsignes = 0;
+	bool bImplantChoice = false;
+	TArray<FName> Implants;
+	TArray<FName> ImplantOptions;
 	int32 EnergyUsed = 0;
 	TArray<FString> BuildOrder;
 	TArray<FDRMessage> Messages;

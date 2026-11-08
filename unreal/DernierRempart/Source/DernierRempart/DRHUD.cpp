@@ -131,6 +131,11 @@ void ADRHUD::DrawHUD()
 		DrawLabel(Hint, DRHUDStyle::Accent, Canvas->ClipX * 0.5f, Canvas->ClipY - 110.0f * Scale, 0.7f, 0.5f);
 	}
 
+	if (Mode && Mode->IsChoosingImplant())
+	{
+		DrawImplants(Mode);
+		return;
+	}
 	if (Mode && Mode->IsPauseMenu())
 	{
 		DrawPause(Mode);
@@ -467,6 +472,17 @@ void ADRHUD::DrawHealth(const ADRCharacter* Player)
 	DrawLabel(TEXT("VIE"), DRHUDStyle::Light, Left + Pad, Top + Pad * 0.6f, 0.55f);
 	DrawLabel(FString::FromInt(FMath::CeilToInt(FMath::Max(0.0f, Player->GetHp()))), FLinearColor::White, Left + Width - Pad, Top + Pad * 0.3f, 0.9f, 1.0f);
 	DrawBar(Left + Pad, Top + Height - Pad - 10.0f * Scale, Width - 2.0f * Pad, 10.0f * Scale, Ratio, Color);
+	// Implants installés pendant cette partie, juste au-dessus.
+	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	if (Mode && Mode->GetImplants().Num() > 0)
+	{
+		TArray<FString> Names;
+		for (const FName& Id : Mode->GetImplants())
+		{
+			Names.Add(Mode->GetImplantText(Id, TEXT("name")));
+		}
+		DrawLabel(TEXT("Implants : ") + FString::Join(Names, TEXT(", ")), FLinearColor(0.8f, 0.8f, 0.8f), Left, Top - 26.0f * Scale, 0.5f);
+	}
 }
 
 void ADRHUD::DrawFallen(const ADRCharacter* Player)
@@ -1032,6 +1048,43 @@ void ADRHUD::DrawPause(ADRGameMode* Mode)
 		Mode->QuitGame();
 	}
 	DrawLabel(FString::Printf(TEXT("\u00C9chap ou %s : reprendre"), *DRHUDStyle::KeyOf(Mode, TEXT("pause"))), FLinearColor(1.0f, 1.0f, 1.0f, 0.5f), CenterX, Top + Height - 40.0f * Scale, 0.5f, 0.5f);
+}
+
+void ADRHUD::DrawImplants(ADRGameMode* Mode)
+{
+	// Siège repoussé : la partie est figée jusqu'à ce qu'on clique sur un des implants proposés.
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
+	const TArray<FName>& Options = Mode->GetImplantOptions();
+	const float Width = 580.0f * Scale;
+	const float Pad = 24.0f * Scale;
+	const float CardHeight = 94.0f * Scale;
+	const float CardGap = 12.0f * Scale;
+	const float Height = Pad * 2.0f + 90.0f * Scale + Options.Num() * (CardHeight + CardGap) - CardGap;
+	const float Left = (Canvas->ClipX - Width) * 0.5f;
+	const float Top = (Canvas->ClipY - Height) * 0.5f;
+	const float CenterX = Canvas->ClipX * 0.5f;
+	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Height);
+	DrawLabel(TEXT("SI\u00C8GE REPOUSS\u00C9"), DRHUDStyle::Accent, CenterX, Top + Pad, 1.2f, 0.5f);
+	DrawLabel(TEXT("Choisis un implant : chacun a un bonus ET un malus"), FLinearColor(0.85f, 0.85f, 0.85f), CenterX, Top + Pad + 52.0f * Scale, 0.55f, 0.5f);
+	float Y = Top + Pad + 90.0f * Scale;
+	FName Picked;
+	for (const FName& Id : Options)
+	{
+		if (Button(FString(), Left + Pad, Y, Width - 2.0f * Pad, CardHeight, 0.5f))
+		{
+			Picked = Id;
+		}
+		const float TextLeft = Left + Pad + 16.0f * Scale;
+		DrawLabel(Mode->GetImplantText(Id, TEXT("name")), FLinearColor::White, TextLeft, Y + 10.0f * Scale, 0.72f);
+		DrawLabel(TEXT("+ ") + Mode->GetImplantText(Id, TEXT("plus")), FLinearColor(0.45f, 0.9f, 0.5f), TextLeft, Y + 42.0f * Scale, 0.52f);
+		DrawLabel(TEXT("- ") + Mode->GetImplantText(Id, TEXT("minus")), FLinearColor(1.0f, 0.5f, 0.45f), TextLeft, Y + 66.0f * Scale, 0.52f);
+		Y += CardHeight + CardGap;
+	}
+	// Après la boucle : le choix vide la liste qu'on parcourt.
+	if (!Picked.IsNone())
+	{
+		Mode->ChooseImplant(Picked);
+	}
 }
 
 bool ADRHUD::Back()

@@ -68,6 +68,8 @@ public:
 	void ApplyBindings();
 	/** Sensibilité, champ de vision, axe vertical inversé et volume choisis dans les réglages. */
 	void ApplySettings();
+	/** Effets des implants et de l'amélioration Vitalité sur la vitesse et les PV. */
+	void ApplyImplants();
 
 	// Pour l'interface et les zombies.
 	bool IsAlive() const { return bAlive; }
@@ -119,6 +121,9 @@ private:
 	void PlaySfx(const FString& Name, float Decibels, float PitchJitter);
 	void SetSpeed(float Speed);
 	FRotator ViewRotation() const;
+	/** Dégâts et durée de rechargement d'une arme, implants et améliorations compris. */
+	float WeaponDamage(int32 Index) const;
+	float ReloadTime(int32 Index) const;
 	void Die();
 	void Respawn();
 	void SkipPressed();
@@ -226,6 +231,8 @@ private:
 	/** Champ de vision sans viser (réglage, 78° par défaut) et axe vertical inversé. */
 	float BaseFov = 78.0f;
 	bool bInvertY = false;
+	/** Implant Cœur de batterie : on court 15 % moins vite. */
+	float SpeedMult = 1.0f;
 
 	// Santé (Godot : 100 PV ; retour au Cœur après 5 s, 3 s de plus à chaque nouvelle chute).
 	float MaxHp = 100.0f;

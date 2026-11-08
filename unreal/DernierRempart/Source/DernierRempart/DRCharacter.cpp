@@ -135,16 +135,8 @@ void ADRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	LoadWeapons();
-	// Améliorations permanentes : « Vitalité » (PV du joueur) et « Armurier » (dégâts des armes).
-	if (const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
-	{
-		MaxHp = 100.0f * Mode->UpgradeMult(TEXT("vitalite"));
-		Hp = MaxHp;
-		for (FDRWeapon& Weapon : Weapons)
-		{
-			Weapon.Damage *= Mode->UpgradeMult(TEXT("armurier"));
-		}
-	}
+	ApplyImplants();
+	Hp = MaxHp;
 	MuzzleFlash->SetMaterial(0, DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.75f, 0.35f), 60.0f));
 	Tracer->SetMaterial(0, DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.85f, 0.6f), 40.0f));
 	SelectWeapon(0);
@@ -171,6 +163,48 @@ void ADRCharacter::ApplySettings()
 	}
 }
 
+void ADRCharacter::ApplyImplants()
+{
+	// Godot : player.gd, apply_implants. Charognard : 80 PV au lieu de 100 ; Vitalité : +6 % par rang.
+	const UWorld* World = GetWorld();
+	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+	SpeedMult = Mode && Mode->HasImplant(TEXT("batterie")) ? 0.85f : 1.0f;
+	MaxHp = (Mode && Mode->HasImplant(TEXT("charognard")) ? 80.0f : 100.0f) * (Mode ? Mode->UpgradeMult(TEXT("vitalite")) : 1.0f);
+	Hp = FMath::Min(Hp, MaxHp);
+	SetSpeed(DRPlayer::WalkSpeed);
+}
+
+float ADRCharacter::WeaponDamage(int32 Index) const
+{
+	// Godot : player.gd, weapon_damage. Main lourde : pistolet +50 % ; Sang froid : fusil -20 % ;
+	// Armurier : +5 % par rang. (L'établi viendra plus tard.)
+	const FDRWeapon& Weapon = Weapons[Index];
+	const UWorld* World = GetWorld();
+	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+	float Amount = Weapon.Damage;
+	if (Mode)
+	{
+		if (Weapon.Id == TEXT("pistol") && Mode->HasImplant(TEXT("main_lourde")))
+		{
+			Amount *= 1.5f;
+		}
+		if (Weapon.Id == TEXT("rifle") && Mode->HasImplant(TEXT("sang_froid")))
+		{
+			Amount *= 0.8f;
+		}
+		Amount *= Mode->UpgradeMult(TEXT("armurier"));
+	}
+	return Amount;
+}
+
+float ADRCharacter::ReloadTime(int32 Index) const
+{
+	// Main lourde : rechargements 50 % plus lents.
+	const UWorld* World = GetWorld();
+	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+	return Weapons[Index].Reload * (Mode && Mode->HasImplant(TEXT("main_lourde")) ? 1.5f : 1.0f);
+}
+
 FString ADRCharacter::KeyName(const TCHAR* Id) const
 {
 	const UWorld* World = GetWorld();
@@ -188,7 +222,7 @@ ADRHUD* ADRCharacter::GetScreen() const
 void ADRCharacter::SetSpeed(float Speed)
 {
 	UCharacterMovementComponent* Movement = GetCharacterMovement();
-	Movement->MaxWalkSpeed = Speed;
+	Movement->MaxWalkSpeed = Speed * SpeedMult;
 	// On accélère et on freine progressivement : on ne s'arrête pas net.
 	Movement->MaxAcceleration = DRPlayer::Acceleration * Speed;
 	Movement->BrakingDecelerationWalking = DRPlayer::Acceleration * Speed;
@@ -395,7 +429,7 @@ void ADRCharacter::ReloadPressed()
 
 void ADRCharacter::StartReload()
 {
-	ReloadLeft = Weapons[CurrentWeapon].Reload;
+	ReloadLeft = ReloadTime(CurrentWeapon);
 	PlaySfx(TEXT("reload"), -6.0f, 0.0f);
 }
 
@@ -449,7 +483,7 @@ void ADRCharacter::Shoot()
 		if (Target && Target->CanBeDamaged() && Target->IsA<APawn>())
 		{
 			// Le pistolet lourd brise les zombies gelés (combo BRISÉ).
-			UGameplayStatics::ApplyPointDamage(Target, Weapon.Damage, Direction, Hit, GetController(), this,
+			UGameplayStatics::ApplyPointDamage(Target, WeaponDamage(CurrentWeapon), Direction, Hit, GetController(), this,
 				Weapon.bHeavy ? UDRHeavyDamage::StaticClass() : UDamageType::StaticClass());
 			HitMarkerAge = 0.0f;
 		}
@@ -652,7 +686,7 @@ void ADRCharacter::AnimateView(float DeltaSeconds)
 	if (ReloadLeft > 0.0f)
 	{
 		// L'arme remonte et pivote vers la main gauche, puis le chargeur claque en place.
-		const float T = FMath::Clamp(1.0f - ReloadLeft / Weapon.Reload, 0.0f, 1.0f);
+		const float T = FMath::Clamp(1.0f - ReloadLeft / ReloadTime(CurrentWeapon), 0.0f, 1.0f);
 		const float K = FMath::SmoothStep(0.0f, 0.14f, T) * (1.0f - FMath::SmoothStep(0.86f, 1.0f, T));
 		const float Seat = FMath::Max(0.0f, 1.0f - FMath::Abs(T - 0.8f) / 0.04f);
 		Position += Weapon.ReloadOffset * K + FVector(0.0, 0.0, 1.2 * Seat);

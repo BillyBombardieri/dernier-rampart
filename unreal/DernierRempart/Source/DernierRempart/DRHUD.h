@@ -16,7 +16,7 @@ class UFont;
  * tours, choix de la tour à construire, ce qu'on peut faire avec ce qu'on vise, textes des combos,
  * écran rougi quand on est touché, message quand on tombe, fin de partie. Menus à la souris :
  * menu principal, choix du niveau et améliorations permanentes, pause, réglages et touches,
- * boutons de fin de partie.
+ * choix d'implant après un siège, boutons de fin de partie.
  */
 UCLASS()
 class DERNIERREMPART_API ADRHUD : public AHUD
@@ -57,6 +57,8 @@ private:
 	/** Améliorations permanentes (Godot : upgrade_panel.gd), achetées avec les insignes. */
 	void DrawUpgrades(ADRGameMode* Mode);
 	void DrawPause(ADRGameMode* Mode);
+	/** Choix d'implant après une Nuit de siège (Godot : hud.gd, show_implants). */
+	void DrawImplants(ADRGameMode* Mode);
 	/** Réglages (Godot : settings_panel.gd) : souris, volume, champ de vision, qualité, touches. */
 	void DrawSettings(ADRGameMode* Mode);
 	/** Prend la touche ou le bouton de souris qu'on vient d'appuyer pour l'action choisie. */

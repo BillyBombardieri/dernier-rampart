@@ -197,8 +197,8 @@ bool ADRGameMode::TrySpend(int32 Amount)
 
 int32 ADRGameMode::GetEnergyCap() const
 {
-	// Le générateur de l'établi et l'implant Cœur de batterie viendront plus tard. « Dynamo » : +1 par rang.
-	return (int32)Rule(TEXT("partie"), TEXT("energy_base"), 6.0) + (int32)UpgradeBonus(TEXT("dynamo"));
+	// Le générateur de l'établi viendra plus tard. Implant Cœur de batterie : +2 ; « Dynamo » : +1 par rang.
+	return (int32)Rule(TEXT("partie"), TEXT("energy_base"), 6.0) + (HasImplant(TEXT("batterie")) ? 2 : 0) + (int32)UpgradeBonus(TEXT("dynamo"));
 }
 
 bool ADRGameMode::RequestEnergy(int32 Amount)
@@ -447,12 +447,73 @@ void ADRGameMode::WaveCleared()
 	Bonus = FMath::RoundToInt((float)(Rule(TEXT("partie"), TEXT("wave_scrap_base"), 10.0) + Rule(TEXT("partie"), TEXT("wave_scrap_per_wave"), 5.0) * Wave)
 		* UpgradeMult(TEXT("recuperation")));
 	AddScrap(Bonus);
-	// Entre deux vagues, le joueur récupère toute sa santé. (Le choix d'implant après un siège
-	// viendra avec les implants.)
+	// Entre deux vagues, le joueur récupère toute sa santé.
 	if (ADRCharacter* Player = Cast<ADRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0)))
 	{
 		Player->HealFull();
 	}
+	// Après une Nuit de siège : choix d'un implant parmi trois pas encore pris, partie figée.
+	if (IsSiege(Wave))
+	{
+		ImplantOptions.Reset();
+		for (const FName& Id : GetImplantIds())
+		{
+			if (!Implants.Contains(Id))
+			{
+				ImplantOptions.Add(Id);
+			}
+		}
+		for (int32 Index = ImplantOptions.Num() - 1; Index > 0; --Index)
+		{
+			ImplantOptions.Swap(Index, FMath::RandRange(0, Index));
+		}
+		if (ImplantOptions.Num() > 3)
+		{
+			ImplantOptions.SetNum(3);
+		}
+		if (ImplantOptions.Num() > 0)
+		{
+			bImplantChoice = true;
+			UGameplayStatics::SetGamePaused(this, true);
+			return;
+		}
+	}
+	EnterPhase(EDRPhase::Harvest, (float)Rule(TEXT("vagues"), TEXT("harvest_time"), 12.0));
+}
+
+const TArray<FName>& ADRGameMode::GetImplantIds()
+{
+	static const TArray<FName> Ids = { TEXT("batterie"), TEXT("sang_froid"), TEXT("charognard"), TEXT("main_lourde") };
+	return Ids;
+}
+
+FString ADRGameMode::GetImplantText(FName Id, const TCHAR* Field) const
+{
+	FString Text = Id.ToString();
+	const TSharedPtr<FJsonObject>* List = nullptr;
+	const TSharedPtr<FJsonObject>* Entry = nullptr;
+	if (GameData.IsValid() && GameData->TryGetObjectField(TEXT("implants"), List) && (*List)->TryGetObjectField(Id.ToString(), Entry))
+	{
+		(*Entry)->TryGetStringField(Field, Text);
+	}
+	return Text;
+}
+
+void ADRGameMode::ChooseImplant(FName Id)
+{
+	if (!bImplantChoice || !ImplantOptions.Contains(Id))
+	{
+		return;
+	}
+	bImplantChoice = false;
+	ImplantOptions.Reset();
+	Implants.AddUnique(Id);
+	UGameplayStatics::SetGamePaused(this, false);
+	if (ADRCharacter* Player = Cast<ADRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0)))
+	{
+		Player->ApplyImplants();
+	}
+	Say(FString::Printf(TEXT("Implant install\u00E9 : %s"), *GetImplantText(Id, TEXT("name"))));
 	EnterPhase(EDRPhase::Harvest, (float)Rule(TEXT("vagues"), TEXT("harvest_time"), 12.0));
 }
 
@@ -482,7 +543,7 @@ void ADRGameMode::SkipPhase()
 
 void ADRGameMode::TogglePause()
 {
-	if (bMenu || bOver)
+	if (bMenu || bOver || bImplantChoice)
 	{
 		return;
 	}

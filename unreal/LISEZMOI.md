@@ -19,6 +19,7 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 9 | Menu principal, choix du niveau, pause, sauvegarde de la progression | à tester (8 nov.) |
 | 10 | Réglages (souris, son, champ de vision, qualité) et touches modifiables | à tester (8 nov.) |
 | 11 | Insignes et améliorations permanentes | à tester (8 nov.) |
+| 12 | Implants après les Nuits de siège | à tester (8 nov.) |
 | ensuite | Autres chapitres, gadgets, établi, implants, améliorations, sauvegarde, tutoriel, sons, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
@@ -173,7 +174,18 @@ Ils arrivent à partir de la vague 3 : **Entrée** lance chaque vague sans atten
 4. Les achats comptent dès la partie suivante : par exemple Réserves donne 65 ferraille au départ au lieu de 55, Vitalité monte la barre de vie au-dessus de 100, Dynamo ajoute 1 à l'énergie.
 5. Insignes et améliorations sont gardés dans le même fichier `Progression.sav`.
 
-## 17. Si ça ne marche pas
+## 17. Tester l'étape 12 : les implants
+
+1. Repousse la **Nuit de siège** de la vague 5 : la partie se fige et la fenêtre « SIÈGE REPOUSSÉ » propose trois implants, chacun avec un bonus (en vert) et un malus (en rouge). Clique sur l'un d'eux.
+2. La partie reprend avec la récolte, et « Implant installé : ... » s'affiche. Tes implants sont rappelés au-dessus de ta barre de vie.
+3. Les quatre implants de la version Godot :
+   - **Cœur de batterie** : +2 énergie pour les tours, mais tu cours 15 % moins vite.
+   - **Sang froid** : BRISÉ (pistolet sur un zombie gelé) fait x5 au lieu de x3, mais le fusil fait 20 % de dégâts en moins.
+   - **Charognard** : la ferraille vient à toi de 12 m, mais tu n'as que 80 PV au lieu de 100.
+   - **Main lourde** : pistolet +50 % de dégâts, mais rechargements 50 % plus lents.
+4. Les implants ne valent que pour la partie en cours.
+
+## 18. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.
