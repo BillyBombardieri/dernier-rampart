@@ -14,8 +14,8 @@ Ce que fait le script :
   1. importe les textures de assets/textures (couleur, relief, rugosité) dans /Game/Importe/Textures ;
   2. crée le matériau M_Surface, qui plaque ces textures selon la position dans le monde (comme le
      « triplanar » de Godot), et un matériau MI_<nom> par jeu de textures (béton, brique, métal...),
-     puis le matériau M_Herbe des touffes d'herbe qui ondulent au vent et M_Meteo des flocons, gouttes,
-     cendres et lucioles ;
+     puis le matériau M_Herbe des touffes d'herbe qui ondulent au vent, M_Meteo des flocons, gouttes,
+     cendres et lucioles, et M_Feu des flammes ;
   3. importe les armes et les zombies (assets/models/*.gltf, avec leurs squelettes et leurs
      animations) dans /Game/Importe/Modeles/<nom> ;
   4. importe les sons (assets/sounds/*.wav) dans /Game/Importe/Sons (le vent et la pluie en boucle).
@@ -277,6 +277,7 @@ def creer_materiau_meteo():
     materiau = charger_ou_creer("M_Meteo", DOSSIER_MATERIAUX, unreal.Material, unreal.MaterialFactoryNew())
     mat_lib.delete_all_material_expressions(materiau)
     materiau.set_editor_property("used_with_instanced_static_meshes", True)
+    materiau.set_editor_property("used_with_skeletal_mesh", True)  # teinte posée sur les zombies gelés ou chargés
     materiau.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
     materiau.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
 
@@ -300,6 +301,44 @@ def creer_materiau_meteo():
     mat_lib.recompile_material(materiau)
     bibli.save_loaded_asset(materiau)
     unreal.log("DernierRempart : matériau M_Meteo créé")
+    return materiau
+
+
+# Flamme : boule lumineuse au centre et douce sur les bords (le centre fait face à la caméra), comme
+# la petite texture ronde et floue des flammes de Godot.
+CODE_FEU = """float f = pow(saturate(dot(normalize(N), normalize(V))), 2.0);
+return C.rgb * E * O * f;"""
+
+
+def creer_materiau_feu():
+    """Flammes des zombies en feu, des barils et du lance-flammes : additives et sans ombrage."""
+    materiau = charger_ou_creer("M_Feu", DOSSIER_MATERIAUX, unreal.Material, unreal.MaterialFactoryNew())
+    mat_lib.delete_all_material_expressions(materiau)
+    materiau.set_editor_property("used_with_instanced_static_meshes", True)
+    materiau.set_editor_property("blend_mode", unreal.BlendMode.BLEND_ADDITIVE)
+    materiau.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+
+    couleur = noeud(materiau, unreal.MaterialExpressionVectorParameter, -900, -200)
+    couleur.set_editor_property("parameter_name", "Couleur")
+    couleur.set_editor_property("default_value", unreal.LinearColor(1.0, 0.4, 0.04, 1.0))
+    eclat = noeud(materiau, unreal.MaterialExpressionScalarParameter, -900, -50)
+    eclat.set_editor_property("parameter_name", "Eclat")
+    eclat.set_editor_property("default_value", 1.0)
+    opacite = noeud(materiau, unreal.MaterialExpressionScalarParameter, -900, 100)
+    opacite.set_editor_property("parameter_name", "Opacite")
+    opacite.set_editor_property("default_value", 1.0)
+    normale = noeud(materiau, unreal.MaterialExpressionVertexNormalWS, -900, 250)
+    vers_camera = noeud(materiau, unreal.MaterialExpressionCameraVectorWS, -900, 400)
+
+    flamme = noeud_code(materiau, "Flamme douce", CODE_FEU, unreal.CustomMaterialOutputType.CMOT_FLOAT3,
+                        [("N", normale, ""), ("V", vers_camera, ""), ("C", couleur, ""), ("E", eclat, ""),
+                         ("O", opacite, "")], -400, 0)
+    mat_lib.connect_material_property(flamme, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+
+    mat_lib.layout_material_expressions(materiau)
+    mat_lib.recompile_material(materiau)
+    bibli.save_loaded_asset(materiau)
+    unreal.log("DernierRempart : matériau M_Feu créé")
     return materiau
 
 
@@ -361,6 +400,7 @@ def main():
     creer_instances(materiau, textures, defauts)
     creer_materiau_herbe()
     creer_materiau_meteo()
+    creer_materiau_feu()
     importer_modeles(racine)
     importer_sons(racine)
     bibli.save_directory(DOSSIER, only_if_is_dirty=True, recursive=True)

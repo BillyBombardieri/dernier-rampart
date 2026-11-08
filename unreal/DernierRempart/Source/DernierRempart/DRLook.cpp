@@ -124,6 +124,74 @@ UStaticMesh* DRLook::BuildMesh(UObject* Outer, const FMeshParts& Parts)
 	return Result;
 }
 
+UStaticMesh* DRLook::BuildSphere(UObject* Outer, int32 Sides, int32 Rows)
+{
+	FMeshParts Ball;
+	TArray<int32> Grid;
+	for (int32 Row = 0; Row <= Rows; ++Row)
+	{
+		const double Polar = PI * Row / Rows;
+		for (int32 Side = 0; Side < Sides; ++Side)
+		{
+			const double Around = 2.0 * PI * Side / Sides;
+			const FVector3f Facing((float)(FMath::Sin(Polar) * FMath::Cos(Around)), (float)(FMath::Sin(Polar) * FMath::Sin(Around)), (float)FMath::Cos(Polar));
+			Grid.Add(Ball.Corner(Facing * 50.0f, Facing, FVector2f((float)Side / Sides, (float)Row / Rows)));
+		}
+	}
+	for (int32 Row = 0; Row < Rows; ++Row)
+	{
+		for (int32 Side = 0; Side < Sides; ++Side)
+		{
+			const int32 Next = (Side + 1) % Sides;
+			const int32 A = Grid[Row * Sides + Side];
+			const int32 B = Grid[Row * Sides + Next];
+			const int32 C = Grid[(Row + 1) * Sides + Side];
+			const int32 D = Grid[(Row + 1) * Sides + Next];
+			if (Row > 0)
+			{
+				Ball.Face(A, B, C); // au pôle du haut, A et B sont au même endroit
+			}
+			if (Row < Rows - 1)
+			{
+				Ball.Face(B, D, C); // au pôle du bas, C et D sont au même endroit
+			}
+		}
+	}
+	return BuildMesh(Outer, Ball);
+}
+
+UStaticMesh* DRLook::BuildTorus(UObject* Outer, float RingRadius, float TubeRadius, int32 Segments, int32 Sides)
+{
+	FMeshParts Ring;
+	TArray<int32> Grid;
+	for (int32 Segment = 0; Segment < Segments; ++Segment)
+	{
+		const double Around = 2.0 * PI * Segment / Segments;
+		const FVector3f Out((float)FMath::Cos(Around), (float)FMath::Sin(Around), 0.0f);
+		for (int32 Side = 0; Side < Sides; ++Side)
+		{
+			const double Turn = 2.0 * PI * Side / Sides;
+			const FVector3f Facing = Out * (float)FMath::Cos(Turn) + FVector3f(0.0f, 0.0f, (float)FMath::Sin(Turn));
+			Grid.Add(Ring.Corner(Out * RingRadius + Facing * TubeRadius, Facing, FVector2f((float)Segment / Segments, (float)Side / Sides)));
+		}
+	}
+	for (int32 Segment = 0; Segment < Segments; ++Segment)
+	{
+		const int32 NextSegment = (Segment + 1) % Segments;
+		for (int32 Side = 0; Side < Sides; ++Side)
+		{
+			const int32 NextSide = (Side + 1) % Sides;
+			const int32 A = Grid[Segment * Sides + Side];
+			const int32 B = Grid[Segment * Sides + NextSide];
+			const int32 C = Grid[NextSegment * Sides + Side];
+			const int32 D = Grid[NextSegment * Sides + NextSide];
+			Ring.Face(A, B, C);
+			Ring.Face(B, D, C);
+		}
+	}
+	return BuildMesh(Outer, Ring);
+}
+
 USoundBase* DRLook::Sound(const FString& Name)
 {
 	const FString AssetPath = FString::Printf(TEXT("/Game/Importe/Sons/%s.%s"), *Name, *Name);

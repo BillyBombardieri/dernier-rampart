@@ -12,6 +12,7 @@
 #include "DRGadgets.h"
 #include "DRGameMode.h"
 #include "DRLook.h"
+#include "DRParticles.h"
 #include "DRStructures.h"
 #include "Engine/DamageEvents.h"
 #include "Engine/SkeletalMesh.h"
@@ -21,6 +22,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/DamageType.h"
 #include "Kismet/GameplayStatics.h"
+#include "Materials/MaterialInstanceDynamic.h"
 #include "UObject/ConstructorHelpers.h"
 
 namespace DRZombieRules
@@ -302,6 +304,7 @@ void ADRZombie::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	if (bDead)
 	{
+		UpdateStatusLook(DeltaSeconds); // plus de flammes ni de teinte sur le corps
 		// Le corps reste au sol un moment puis s'enfonce et disparaît.
 		DeadTime += DeltaSeconds;
 		if (DeadTime > DeathLength + 2.5f)
@@ -732,6 +735,98 @@ void ADRZombie::UpdateStatus(float DeltaSeconds)
 	else
 	{
 		BurnDps = 0.0f;
+	}
+	UpdateStatusLook(DeltaSeconds);
+}
+
+void ADRZombie::UpdateStatusLook(float DeltaSeconds)
+{
+	const bool bShowing = !bDead && !bBurrowed;
+	const FVector Feet = GetActorLocation() - FVector(0.0, 0.0, 95.0 * Size);
+	// En feu : flammes sur le corps (Godot : Fx.fire_particles(26, 0,35 x taille, 0,6 s)).
+	// Chargé par l'Arc électrique : étincelles violettes.
+	if (bShowing && (BurnTime > 0.0f || ChargedTime > 0.0f))
+	{
+		if (ADRParticles* Effects = ADRParticles::Get(this))
+		{
+			if (BurnTime > 0.0f)
+			{
+				FDRFlameStyle Style;
+				Style.Radius = 30.0f * Size;
+				Style.Size = 35.0f * Size;
+				Style.Lifetime = 0.6f;
+				Effects->Flames(Feet + FVector(0.0, 0.0, 110.0 * Size), Style, 26.0f / 0.6f, DeltaSeconds);
+			}
+			if (ChargedTime > 0.0f)
+			{
+				Effects->Sparks(Feet + FVector(0.0, 0.0, 120.0 * Size), 45.0f * Size, 12.0f / 0.25f, DeltaSeconds);
+			}
+		}
+	}
+
+	// Teinte par-dessus le modèle : bleu glacé, violet qui clignote, ou noir calciné (une seule à la fois).
+	uint8 Wanted = 0;
+	if (bShowing)
+	{
+		Wanted = FrozenTime > 0.0f ? 1 : (ChargedTime > 0.0f ? 2 : (BurnTime > 0.0f ? 3 : 0));
+	}
+	UMeshComponent* Visual = GetMesh();
+	if (Placeholder)
+	{
+		Visual = Placeholder.Get();
+	}
+	if (Wanted != StatusShown && Visual)
+	{
+		StatusShown = Wanted;
+		if (Wanted != 0 && !StatusLook && !bStatusLookMissing)
+		{
+			if (UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Importe/Materiaux/M_Meteo.M_Meteo"), nullptr, LOAD_NoWarn))
+			{
+				StatusLook = UMaterialInstanceDynamic::Create(Parent, this);
+			}
+			bStatusLookMissing = StatusLook == nullptr;
+		}
+		if (Wanted == 0 || !StatusLook)
+		{
+			Visual->SetOverlayMaterial(nullptr);
+		}
+		else
+		{
+			const FLinearColor Tone = Wanted == 1 ? FLinearColor(0.7f, 0.9f, 1.0f) : (Wanted == 2 ? FLinearColor(0.65f, 0.6f, 1.0f) : FLinearColor(0.15f, 0.08f, 0.05f));
+			StatusLook->SetVectorParameterValue(TEXT("Couleur"), DRData::ToLinear(Tone));
+			StatusLook->SetScalarParameterValue(TEXT("Opacite"), Wanted == 3 ? 0.45f : 0.35f);
+			StatusLook->SetScalarParameterValue(TEXT("Eclat"), Wanted == 1 ? 0.5f : 1.0f);
+			Visual->SetOverlayMaterial(StatusLook);
+		}
+	}
+	if (StatusShown == 2 && StatusLook)
+	{
+		StatusLook->SetScalarParameterValue(TEXT("Opacite"), 0.25f + 0.15f * FMath::Sin((float)GetWorld()->GetTimeSeconds() * 25.0f));
+	}
+
+	// Étourdi : anneau doré qui tourne au-dessus de la tête.
+	const bool bStunned = bShowing && StunTime > 0.0f;
+	if (bStunned && !StunRing)
+	{
+		if (ADRParticles* Effects = ADRParticles::Get(this))
+		{
+			StunRing = NewObject<UStaticMeshComponent>(this);
+			StunRing->SetupAttachment(GetCapsuleComponent());
+			StunRing->SetStaticMesh(Effects->GetRingMesh());
+			StunRing->SetMaterial(0, DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.9f, 0.3f), 3.0f));
+			StunRing->SetRelativeLocation(FVector(0.0, 0.0, 110.0 * Size));
+			StunRing->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			StunRing->SetCastShadow(false);
+			StunRing->RegisterComponent();
+		}
+	}
+	if (StunRing)
+	{
+		StunRing->SetVisibility(bStunned);
+		if (bStunned)
+		{
+			StunRing->AddRelativeRotation(FRotator(0.0, DeltaSeconds * 344.0f, 0.0));
+		}
 	}
 }
 

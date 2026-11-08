@@ -26,7 +26,8 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 16 | Herbe qui ondule au vent et cailloux au sol | à tester (8 nov.) |
 | 17 | Météo (neige, pluie, cendres, poussière, lucioles) et vent | à tester (8 nov.) |
 | 18 | Tutoriel de la première partie | à tester (8 nov.) |
-| ensuite | Effets de feu et de glace, export Windows | à faire |
+| 19 | Feu et glace : zombies en feu, gelés, chargés ou étourdis, barils en feu, jet du lance-flammes | à tester (8 nov.) |
+| ensuite | Export Windows (le jeu lancé sans l'éditeur) | à faire |
 
 ## 1. Ce qu'il faut sur le PC
 
@@ -247,7 +248,17 @@ Pour voir un chapitre sans avoir gagné les précédents : pendant la partie, ap
 3. **T** passe le tutoriel (touche modifiable dans les réglages : « Passer le tutoriel »). Fini ou passé, il ne revient plus.
 4. Pour le revoir : bouton **TUTORIEL** du menu principal ; il relance le niveau 1-1 avec le tutoriel.
 
-## 24. Si ça ne marche pas
+## 24. Tester l'étape 19 : le feu et la glace
+
+1. Relance d'abord le script d'import (section 7) : il crée le matériau **M_Feu** des flammes et permet de poser la teinte des états sur les zombies. Sans lui, les flammes ne s'affichent pas (le lance-flammes garde alors son ancien cône lumineux).
+2. **Barils en feu** (chapitre 1, près des barrières) : des flammes jaunes qui rougissent en montant, avec la lumière qui vacille.
+3. **Lance-flammes** : un vrai jet de flammes qui sort de la buse, s'élargit et ralentit au bout. Les zombies touchés prennent feu : flammes sur le corps et peau assombrie tant qu'ils brûlent.
+4. **Cryo** : le zombie touché prend une teinte bleu glacé tant qu'il est gelé.
+5. **Arc électrique** ou munitions électriques : le zombie chargé clignote en violet avec des étincelles autour de lui.
+6. **Étourdi** (obus du Mortier ou SURCHARGE) : un anneau doré tourne au-dessus de sa tête.
+7. Dis-moi si les flammes sont trop grosses, trop claires ou pas assez nombreuses : ce sont des réglages simples.
+
+## 25. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

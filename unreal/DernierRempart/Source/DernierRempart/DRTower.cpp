@@ -7,6 +7,7 @@
 #include "DRData.h"
 #include "DRGameMode.h"
 #include "DRLook.h"
+#include "DRParticles.h"
 #include "DRZombie.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/StaticMesh.h"
@@ -451,8 +452,27 @@ void ADRTower::Tick(float DeltaSeconds)
 	{
 		FlameOn -= DeltaSeconds;
 		const bool bOn = FlameOn > 0.0f;
-		FlameJet->SetVisibility(bOn);
-		if (bOn)
+		ADRParticles* Effects = ADRParticles::Get(this);
+		const bool bRealFire = Effects && Effects->CanDrawFire();
+		if (bOn && Effects)
+		{
+			// Vraies flammes (Godot : 120 particules de 0,55 s qui s'élargissent et ralentissent).
+			FDRFlameStyle Jet;
+			Jet.Direction = Muzzle->GetForwardVector();
+			Jet.Spread = 11.0f;
+			Jet.SpeedMin = 900.0f;
+			Jet.SpeedMax = 1300.0f;
+			Jet.Gravity = FVector(0.0, 0.0, 250.0);
+			Jet.Damping = 750.0f;
+			Jet.Radius = 8.0f;
+			Jet.Size = 40.0f;
+			Jet.Lifetime = 0.55f;
+			Jet.bWidening = true;
+			Effects->Flames(Muzzle->GetComponentLocation(), Jet, 120.0f / 0.55f, DeltaSeconds);
+		}
+		// Le cône lumineux ne sert plus que si le matériau des flammes n'est pas importé.
+		FlameJet->SetVisibility(bOn && !bRealFire);
+		if (bOn && !bRealFire)
 		{
 			// Le jet vacille : longueur et largeur bougent un peu à chaque image.
 			const float Length = GetRange() / DRTowerParts::ModelScale / 100.0f * FMath::FRandRange(0.85f, 1.0f);

@@ -12,6 +12,7 @@
 #include "DRData.h"
 #include "DRGameMode.h"
 #include "DRLook.h"
+#include "DRParticles.h"
 #include "DRStructures.h"
 #include "DRTower.h"
 #include "DRWeather.h"
@@ -84,40 +85,7 @@ namespace DRCoverMesh
 	// du moteur (on la réduit en la posant).
 	UStaticMesh* Pebble(UObject* Outer)
 	{
-		DRLook::FMeshParts Stone;
-		constexpr int32 Sides = 7;
-		constexpr int32 Rows = 4; // du pôle du haut (0) au pôle du bas (4)
-		TArray<int32> Grid;
-		for (int32 Row = 0; Row <= Rows; ++Row)
-		{
-			const double Polar = PI * Row / Rows;
-			for (int32 Side = 0; Side < Sides; ++Side)
-			{
-				const double Around = 2.0 * PI * Side / Sides;
-				const FVector3f Facing((float)(FMath::Sin(Polar) * FMath::Cos(Around)), (float)(FMath::Sin(Polar) * FMath::Sin(Around)), (float)FMath::Cos(Polar));
-				Grid.Add(Stone.Corner(Facing * 50.0f, Facing, FVector2f((float)Side / Sides, (float)Row / Rows)));
-			}
-		}
-		for (int32 Row = 0; Row < Rows; ++Row)
-		{
-			for (int32 Side = 0; Side < Sides; ++Side)
-			{
-				const int32 Next = (Side + 1) % Sides;
-				const int32 A = Grid[Row * Sides + Side];
-				const int32 B = Grid[Row * Sides + Next];
-				const int32 C = Grid[(Row + 1) * Sides + Side];
-				const int32 D = Grid[(Row + 1) * Sides + Next];
-				if (Row > 0)
-				{
-					Stone.Face(A, B, C); // au pôle du haut, A et B sont au même endroit
-				}
-				if (Row < Rows - 1)
-				{
-					Stone.Face(B, D, C); // au pôle du bas, C et D sont au même endroit
-				}
-			}
-		}
-		return DRLook::BuildMesh(Outer, Stone);
+		return DRLook::BuildSphere(Outer, 7, 4);
 	}
 
 	double Gauss(FRandomStream& Rng, double Sigma)
@@ -694,6 +662,16 @@ void ADRChapter::BuildLights(const TSharedPtr<FJsonObject>& Data)
 	// Barils en feu : braises rougeoyantes et lumière qui vacille.
 	UMaterialInterface* Embers = Look(TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.45f, 0.12f), 15.0f);
 	const TArray<TSharedPtr<FJsonValue>>* Barrels = nullptr;
+	ADRParticles* Effects = ADRParticles::Get(this);
+	// Godot : 24 flammes de 0,8 s qui montent doucement au-dessus du baril.
+	FDRFlameStyle BarrelFire;
+	BarrelFire.Spread = 15.0f;
+	BarrelFire.SpeedMin = 80.0f;
+	BarrelFire.SpeedMax = 180.0f;
+	BarrelFire.Gravity = FVector(0.0, 0.0, 100.0);
+	BarrelFire.Radius = 25.0f;
+	BarrelFire.Size = 30.0f;
+	BarrelFire.Lifetime = 0.8f;
 	if (Data->TryGetArrayField(TEXT("barrels"), Barrels))
 	{
 		for (const TSharedPtr<FJsonValue>& BarrelValue : *Barrels)
@@ -702,6 +680,10 @@ void ADRChapter::BuildLights(const TSharedPtr<FJsonObject>& Data)
 			Cylinder(Metal, Position + FVector(0.0, 0.0, 50.0), 35.0, 100.0);
 			Add(SphereMesh, Embers, FTransform(FRotator::ZeroRotator, Position + FVector(0.0, 0.0, 100.0), FVector(0.55, 0.55, 0.12)), false);
 			Flicker(Position + FVector(0.0, 0.0, 160.0), FLinearColor(1.0f, 0.55f, 0.2f), DRChapterLayout::BarrelCandelas, 900.0f, 8.0f, 0.35f, true);
+			if (Effects)
+			{
+				Effects->AddFireSource(Position + FVector(0.0, 0.0, 100.0), BarrelFire, 24.0f / 0.8f);
+			}
 			Blocked.Add(Position);
 		}
 	}

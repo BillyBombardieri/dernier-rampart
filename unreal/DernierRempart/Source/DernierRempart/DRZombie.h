@@ -9,6 +9,7 @@ class ADRBarrier;
 class ADRDecoy;
 class ADRChapter;
 class UAnimSequence;
+class UMaterialInstanceDynamic;
 class UPointLightComponent;
 class UStaticMeshComponent;
 
@@ -102,6 +103,8 @@ private:
 	void PlayAction(const FString& Name, float Duration);
 	void UpdateAnimation(float DeltaSeconds);
 	void UpdateStatus(float DeltaSeconds);
+	/** Ce qui montre ses états : flammes, étincelles, teinte gelée ou calcinée, anneau d'étourdi. */
+	void UpdateStatusLook(float DeltaSeconds);
 	void ApplyDot(float Amount);
 	float Surcharge();
 	float CurrentSpeed() const;
@@ -142,6 +145,17 @@ private:
 	/** Butte de terre qui avance quand le Fouisseur creuse. */
 	UPROPERTY()
 	TObjectPtr<UStaticMeshComponent> Mound;
+
+	/** Teinte des états (gelé, chargé, en feu), posée par-dessus le modèle (matériau M_Meteo). */
+	UPROPERTY()
+	TObjectPtr<UMaterialInstanceDynamic> StatusLook;
+
+	/** Anneau doré au-dessus de la tête quand il est étourdi (Godot : _stun_ring). */
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> StunRing;
+
+	uint8 StatusShown = 0; // 0 : rien, 1 : gelé, 2 : chargé, 3 : en feu
+	bool bStatusLookMissing = false;
 
 	/** Cracheur : ce qu'il vise (barrière ou joueur), et la cible du crachat en préparation. */
 	UPROPERTY()

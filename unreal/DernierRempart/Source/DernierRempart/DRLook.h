@@ -60,6 +60,12 @@ namespace DRLook
 	/** Fait un maillage fixe (sans collision) à partir de ces pièces. */
 	UStaticMesh* BuildMesh(UObject* Outer, const FMeshParts& Parts);
 
+	/** Sphère de 1 m de diamètre, avec peu de faces (Sides côtés, Rows tranches du haut en bas). */
+	UStaticMesh* BuildSphere(UObject* Outer, int32 Sides, int32 Rows);
+
+	/** Anneau couché (tore) : rayon de l'anneau et rayon du tube en cm. */
+	UStaticMesh* BuildTorus(UObject* Outer, float RingRadius, float TubeRadius, int32 Segments, int32 Sides);
+
 	/** Son importé de assets/sounds (nom sans extension : « pistol », « reload »...), ou nul. */
 	USoundBase* Sound(const FString& Name);
 
