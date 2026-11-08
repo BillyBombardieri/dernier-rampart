@@ -19,7 +19,8 @@ class UStaticMesh;
  * zombies, brèche du portail, Cœur, barrières et ancrages des tours, murs anti-souffle, sacs de sable,
  * projecteurs, barils en feu et décor : rochers, arbres morts, carcasses de voitures, et selon le
  * chapitre mares et roseaux, conteneurs et cuves, sapins enneigés, ruines, immeubles éventrés,
- * réverbères, flaques, dunes et poteaux télégraphiques ; enfin l'herbe qui ondule et les cailloux.
+ * réverbères, flaques, dunes et poteaux télégraphiques ; enfin l'herbe qui ondule, les cailloux et
+ * la météo (ADRWeather).
  *
  * Les textures viennent de /Game/Importe (script Content/Python/importer_ressources.py). Tant qu'elles
  * ne sont pas importées, la carte s'affiche quand même, en couleurs unies.

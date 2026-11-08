@@ -14,11 +14,10 @@
 #include "DRLook.h"
 #include "DRStructures.h"
 #include "DRTower.h"
+#include "DRWeather.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
-#include "MeshDescription.h"
-#include "StaticMeshAttributes.h"
 #include "UObject/ConstructorHelpers.h"
 
 // Nommé (et pas anonyme) pour éviter les collisions quand Unreal regroupe les .cpp à la compilation.
@@ -56,85 +55,11 @@ namespace DRCoverMesh
 	constexpr int32 CullStart = 7500;     // l'herbe et les cailloux disparaissent entre 75 et 85 m
 	constexpr int32 CullEnd = 8500;
 
-	// Sommets, normales, UV et triangles (trois indices chacun) d'un petit maillage.
-	struct FParts
-	{
-		TArray<FVector3f> Corners;
-		TArray<FVector3f> Normals;
-		TArray<FVector2f> Coords;
-		TArray<int32> Triangles;
-
-		int32 Corner(const FVector3f& At, const FVector3f& Facing, const FVector2f& Coord)
-		{
-			Corners.Add(At);
-			Normals.Add(Facing);
-			Coords.Add(Coord);
-			return Corners.Num() - 1;
-		}
-
-		// Chaque triangle est mis dans les deux sens : visible des deux côtés, sans dépendre du sens
-		// de rotation des sommets, et avec la même normale des deux côtés (comme dans Godot).
-		void Face(int32 A, int32 B, int32 C)
-		{
-			Triangles.Append({ A, B, C, A, C, B });
-		}
-	};
-
-	UStaticMesh* Build(UObject* Outer, const FParts& Parts)
-	{
-		FMeshDescription Description;
-		FStaticMeshAttributes Attributes(Description);
-		Attributes.Register();
-		auto Positions = Attributes.GetVertexPositions();
-		auto InstanceNormals = Attributes.GetVertexInstanceNormals();
-		auto InstanceTangents = Attributes.GetVertexInstanceTangents();
-		auto InstanceSigns = Attributes.GetVertexInstanceBinormalSigns();
-		auto InstanceCoords = Attributes.GetVertexInstanceUVs();
-		const FPolygonGroupID Group = Description.CreatePolygonGroup();
-
-		TArray<FVertexInstanceID> Instances;
-		Instances.Reserve(Parts.Corners.Num());
-		for (int32 Index = 0; Index < Parts.Corners.Num(); ++Index)
-		{
-			const FVertexID Vertex = Description.CreateVertex();
-			Positions[Vertex] = Parts.Corners[Index];
-			const FVertexInstanceID Instance = Description.CreateVertexInstance(Vertex);
-			const FVector3f Facing = Parts.Normals[Index];
-			// Tangente quelconque perpendiculaire à la normale (pas de texture de relief sur ces pièces).
-			const FVector3f Helper = FMath::Abs(Facing.Z) < 0.9f ? FVector3f(0.0f, 0.0f, 1.0f) : FVector3f(1.0f, 0.0f, 0.0f);
-			InstanceNormals[Instance] = Facing;
-			InstanceTangents[Instance] = FVector3f::CrossProduct(Helper, Facing).GetSafeNormal();
-			InstanceSigns[Instance] = 1.0f;
-			InstanceCoords.Set(Instance, 0, Parts.Coords[Index]);
-			Instances.Add(Instance);
-		}
-		for (int32 Index = 0; Index + 2 < Parts.Triangles.Num(); Index += 3)
-		{
-			TArray<FVertexInstanceID> Three;
-			Three.Add(Instances[Parts.Triangles[Index]]);
-			Three.Add(Instances[Parts.Triangles[Index + 1]]);
-			Three.Add(Instances[Parts.Triangles[Index + 2]]);
-			Description.CreateTriangle(Group, Three);
-		}
-
-		UStaticMesh* Result = NewObject<UStaticMesh>(Outer);
-		Result->GetStaticMaterials().Add(FStaticMaterial());
-		UStaticMesh::FBuildMeshDescriptionsParams Params;
-		Params.bMarkPackageDirty = false;
-		Params.bBuildSimpleCollision = false;
-		Params.bCommitMeshDescription = false;
-		Params.bFastBuild = true;
-		TArray<const FMeshDescription*> Descriptions;
-		Descriptions.Add(&Description);
-		Result->BuildFromMeshDescriptions(Descriptions, Params);
-		return Result;
-	}
-
 	// Une touffe : 12 brins (triangles fins) de hauteur prise dans Heights (cm). UV : X = part de la
 	// couleur du pied dans la pointe (chaque brin un peu différent), Y = 0 au pied, 1 à la pointe.
 	UStaticMesh* Tuft(UObject* Outer, const FVector2D& Heights, FRandomStream& Rng)
 	{
-		FParts Leaves;
+		DRLook::FMeshParts Leaves;
 		const FVector3f Up(0.0f, 0.0f, 1.0f); // normales vers le haut : l'herbe prend la lumière comme le sol
 		constexpr int32 BladeCount = 12;
 		for (int32 Blade = 0; Blade < BladeCount; ++Blade)
@@ -152,14 +77,14 @@ namespace DRCoverMesh
 			const int32 C = Leaves.Corner(FVector3f(Foot + Lean + FVector(0.0, 0.0, Tall)), Up, FVector2f(Fade, 1.0f));
 			Leaves.Face(A, B, C);
 		}
-		return Build(Outer, Leaves);
+		return DRLook::BuildMesh(Outer, Leaves);
 	}
 
 	// Un caillou : sphère de 7 côtés et 3 anneaux comme dans Godot, 1 m de diamètre comme la sphère
 	// du moteur (on la réduit en la posant).
 	UStaticMesh* Pebble(UObject* Outer)
 	{
-		FParts Stone;
+		DRLook::FMeshParts Stone;
 		constexpr int32 Sides = 7;
 		constexpr int32 Rows = 4; // du pôle du haut (0) au pôle du bas (4)
 		TArray<int32> Grid;
@@ -192,7 +117,7 @@ namespace DRCoverMesh
 				}
 			}
 		}
-		return Build(Outer, Stone);
+		return DRLook::BuildMesh(Outer, Stone);
 	}
 
 	double Gauss(FRandomStream& Rng, double Sigma)
@@ -297,6 +222,11 @@ void ADRChapter::Build(int32 InChapter)
 	BuildLights(Data);
 	BuildProps(Data);
 	BuildCover(Data);
+	// Neige, pluie, cendres, poussière ou lucioles autour du joueur, et le vent.
+	if (ADRWeather* Sky = GetWorld()->SpawnActor<ADRWeather>(FVector::ZeroVector, FRotator::ZeroRotator))
+	{
+		Sky->Setup(Weather);
+	}
 }
 
 void ADRChapter::AddBarrier(ADRBarrier* Barrier)

@@ -14,10 +14,11 @@ Ce que fait le script :
   1. importe les textures de assets/textures (couleur, relief, rugosité) dans /Game/Importe/Textures ;
   2. crée le matériau M_Surface, qui plaque ces textures selon la position dans le monde (comme le
      « triplanar » de Godot), et un matériau MI_<nom> par jeu de textures (béton, brique, métal...),
-     puis le matériau M_Herbe des touffes d'herbe qui ondulent au vent ;
+     puis le matériau M_Herbe des touffes d'herbe qui ondulent au vent et M_Meteo des flocons, gouttes,
+     cendres et lucioles ;
   3. importe les armes et les zombies (assets/models/*.gltf, avec leurs squelettes et leurs
      animations) dans /Game/Importe/Modeles/<nom> ;
-  4. importe les sons (assets/sounds/*.wav) dans /Game/Importe/Sons.
+  4. importe les sons (assets/sounds/*.wav) dans /Game/Importe/Sons (le vent et la pluie en boucle).
 """
 
 import os
@@ -271,6 +272,37 @@ def creer_materiau_herbe():
     return materiau
 
 
+def creer_materiau_meteo():
+    """Flocons, gouttes, cendres, poussière et lucioles : sans ombrage et transparents, comme dans Godot."""
+    materiau = charger_ou_creer("M_Meteo", DOSSIER_MATERIAUX, unreal.Material, unreal.MaterialFactoryNew())
+    mat_lib.delete_all_material_expressions(materiau)
+    materiau.set_editor_property("used_with_instanced_static_meshes", True)
+    materiau.set_editor_property("blend_mode", unreal.BlendMode.BLEND_TRANSLUCENT)
+    materiau.set_editor_property("shading_model", unreal.MaterialShadingModel.MSM_UNLIT)
+
+    couleur = noeud(materiau, unreal.MaterialExpressionVectorParameter, -600, -100)
+    couleur.set_editor_property("parameter_name", "Couleur")
+    couleur.set_editor_property("default_value", unreal.LinearColor(1.0, 1.0, 1.0, 1.0))
+    eclat = noeud(materiau, unreal.MaterialExpressionScalarParameter, -600, 100)
+    eclat.set_editor_property("parameter_name", "Eclat")
+    eclat.set_editor_property("default_value", 1.0)
+    opacite = noeud(materiau, unreal.MaterialExpressionScalarParameter, -600, 250)
+    opacite.set_editor_property("parameter_name", "Opacite")
+    opacite.set_editor_property("default_value", 1.0)
+
+    emission = noeud(materiau, unreal.MaterialExpressionMultiply, -300, 0)
+    mat_lib.connect_material_expressions(couleur, "", emission, "A")
+    mat_lib.connect_material_expressions(eclat, "", emission, "B")
+    mat_lib.connect_material_property(emission, "", unreal.MaterialProperty.MP_EMISSIVE_COLOR)
+    mat_lib.connect_material_property(opacite, "", unreal.MaterialProperty.MP_OPACITY)
+
+    mat_lib.layout_material_expressions(materiau)
+    mat_lib.recompile_material(materiau)
+    bibli.save_loaded_asset(materiau)
+    unreal.log("DernierRempart : matériau M_Meteo créé")
+    return materiau
+
+
 def creer_instances(materiau, textures, defauts):
     for jeu, tex in textures.items():
         if "couleur" not in tex or "normal" not in tex:
@@ -305,7 +337,14 @@ def importer_sons(racine):
     dossier = os.path.join(racine, "sounds")
     for fichier in sorted(os.listdir(dossier)):
         if fichier.endswith(".wav"):
-            importer(os.path.join(dossier, fichier), DOSSIER_SONS, fichier[:-len(".wav")])
+            nom = fichier[:-len(".wav")]
+            importer(os.path.join(dossier, fichier), DOSSIER_SONS, nom)
+            if nom in ("wind", "rain"):
+                # Ambiance : le son repart du début sans coupure (Godot : loop_mode LOOP_FORWARD).
+                son = unreal.load_asset(DOSSIER_SONS + "/" + nom)
+                if son is not None:
+                    son.set_editor_property("looping", True)
+                    bibli.save_loaded_asset(son)
     unreal.log("DernierRempart : sons importés")
 
 
@@ -321,6 +360,7 @@ def main():
     materiau = creer_materiau(defauts)
     creer_instances(materiau, textures, defauts)
     creer_materiau_herbe()
+    creer_materiau_meteo()
     importer_modeles(racine)
     importer_sons(racine)
     bibli.save_directory(DOSSIER, only_if_is_dirty=True, recursive=True)

@@ -10,9 +10,11 @@
 #include "Engine/World.h"
 #include "Kismet/GameplayStatics.h"
 #include "Materials/MaterialInstanceDynamic.h"
+#include "MeshDescription.h"
 #include "Modules/ModuleManager.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
+#include "StaticMeshAttributes.h"
 
 namespace DRLookColors
 {
@@ -70,6 +72,56 @@ UMaterialInterface* DRLook::Grass(UObject* Outer, const FLinearColor& BaseSRGB, 
 	Material->SetVectorParameterValue(TEXT("Pointe"), DRData::ToLinear(TipSRGB));
 	Material->SetScalarParameterValue(TEXT("Balancement"), Sway);
 	return Material;
+}
+
+UStaticMesh* DRLook::BuildMesh(UObject* Outer, const FMeshParts& Parts)
+{
+	FMeshDescription Description;
+	FStaticMeshAttributes Attributes(Description);
+	Attributes.Register();
+	auto Positions = Attributes.GetVertexPositions();
+	auto InstanceNormals = Attributes.GetVertexInstanceNormals();
+	auto InstanceTangents = Attributes.GetVertexInstanceTangents();
+	auto InstanceSigns = Attributes.GetVertexInstanceBinormalSigns();
+	auto InstanceCoords = Attributes.GetVertexInstanceUVs();
+	const FPolygonGroupID Group = Description.CreatePolygonGroup();
+
+	TArray<FVertexInstanceID> Instances;
+	Instances.Reserve(Parts.Corners.Num());
+	for (int32 Index = 0; Index < Parts.Corners.Num(); ++Index)
+	{
+		const FVertexID Vertex = Description.CreateVertex();
+		Positions[Vertex] = Parts.Corners[Index];
+		const FVertexInstanceID Instance = Description.CreateVertexInstance(Vertex);
+		const FVector3f Facing = Parts.Normals[Index];
+		// Tangente quelconque perpendiculaire à la normale (pas de texture de relief sur ces pièces).
+		const FVector3f Helper = FMath::Abs(Facing.Z) < 0.9f ? FVector3f(0.0f, 0.0f, 1.0f) : FVector3f(1.0f, 0.0f, 0.0f);
+		InstanceNormals[Instance] = Facing;
+		InstanceTangents[Instance] = FVector3f::CrossProduct(Helper, Facing).GetSafeNormal();
+		InstanceSigns[Instance] = 1.0f;
+		InstanceCoords.Set(Instance, 0, Parts.Coords[Index]);
+		Instances.Add(Instance);
+	}
+	for (int32 Index = 0; Index + 2 < Parts.Triangles.Num(); Index += 3)
+	{
+		TArray<FVertexInstanceID> Three;
+		Three.Add(Instances[Parts.Triangles[Index]]);
+		Three.Add(Instances[Parts.Triangles[Index + 1]]);
+		Three.Add(Instances[Parts.Triangles[Index + 2]]);
+		Description.CreateTriangle(Group, Three);
+	}
+
+	UStaticMesh* Result = NewObject<UStaticMesh>(Outer);
+	Result->GetStaticMaterials().Add(FStaticMaterial());
+	UStaticMesh::FBuildMeshDescriptionsParams Params;
+	Params.bMarkPackageDirty = false;
+	Params.bBuildSimpleCollision = false;
+	Params.bCommitMeshDescription = false;
+	Params.bFastBuild = true; // le seul chemin possible hors de l'éditeur
+	TArray<const FMeshDescription*> Descriptions;
+	Descriptions.Add(&Description);
+	Result->BuildFromMeshDescriptions(Descriptions, Params);
+	return Result;
 }
 
 USoundBase* DRLook::Sound(const FString& Name)

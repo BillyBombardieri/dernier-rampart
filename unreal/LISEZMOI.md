@@ -24,7 +24,8 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 14 | Gadgets : barricade, leurre sonore, drone de récolte | à tester (8 nov.) |
 | 15 | Décor des chapitres 2 à 6 : mares, conteneurs, cuves, sapins, ruines, immeubles, réverbères, dunes, poteaux | à tester (8 nov.) |
 | 16 | Herbe qui ondule au vent et cailloux au sol | à tester (8 nov.) |
-| ensuite | Météo (pluie, neige, cendres, poussière, lucioles), tutoriel, effets de feu et de glace, export Windows | à faire |
+| 17 | Météo (neige, pluie, cendres, poussière, lucioles) et vent | à tester (8 nov.) |
+| ensuite | Tutoriel, effets de feu et de glace, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
 
@@ -227,7 +228,18 @@ Pour voir un chapitre sans avoir gagné les précédents : pendant la partie, ap
 4. Chaque chapitre a son herbe : haute et vert sombre dans le Marais, courte et pâle sous la neige du Col Gelé, broussailles claires sur la Route Brûlée (console : `open Entry?Niveau=6`, `16` ou `26`, voir l'étape 15).
 5. On marche à travers sans être gêné. Au-delà de 85 m environ, l'herbe et les cailloux ne sont plus dessinés. Si le jeu rame depuis cette étape, dis-le dans le fil.
 
-## 22. Si ça ne marche pas
+## 22. Tester l'étape 17 : la météo et le vent
+
+1. Relance le script d'import (`py importer_ressources.py` dans la barre **Cmd**) : il crée le matériau **M_Meteo** et règle le vent et la pluie pour qu'ils tournent en boucle sans coupure. Sans lui, les flocons et les gouttes sont opaques.
+2. **La Brèche** (chapitre 1) : pas de météo, seulement le vent qu'on entend en fond.
+3. **Le Marais** (`open Entry?Niveau=6`) : quelques lucioles vertes flottent autour de toi, s'allument puis s'éteignent.
+4. **La Raffinerie** (`11`) : des cendres grises tombent lentement en dérivant.
+5. **Le Col Gelé** (`16`) : la neige tombe en biais, poussée par le vent.
+6. **La Ville Morte** (`21`) : pluie fine en traits presque verticaux, et on entend la pluie par-dessus le vent.
+7. **La Route Brûlée** (`26`) : de la poussière file presque à l'horizontale au ras du sol, et le vent est plus fort.
+8. La météo te suit partout sur la carte. Le volume des réglages change aussi celui du vent et de la pluie.
+
+## 23. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

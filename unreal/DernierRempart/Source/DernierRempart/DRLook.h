@@ -31,6 +31,35 @@ namespace DRLook
 	 */
 	UMaterialInterface* Grass(UObject* Outer, const FLinearColor& BaseSRGB, const FLinearColor& TipSRGB, float Sway);
 
+	/**
+	 * Petit maillage fabriqué au lancement (touffe d'herbe, caillou, flocon) : sommets, normales, UV
+	 * et triangles. Chaque triangle est mis dans les deux sens : visible des deux côtés, avec la même
+	 * normale, sans dépendre du sens de rotation des sommets.
+	 */
+	struct FMeshParts
+	{
+		TArray<FVector3f> Corners;
+		TArray<FVector3f> Normals;
+		TArray<FVector2f> Coords;
+		TArray<int32> Triangles;
+
+		int32 Corner(const FVector3f& At, const FVector3f& Facing, const FVector2f& Coord)
+		{
+			Corners.Add(At);
+			Normals.Add(Facing);
+			Coords.Add(Coord);
+			return Corners.Num() - 1;
+		}
+
+		void Face(int32 A, int32 B, int32 C)
+		{
+			Triangles.Append({ A, B, C, A, C, B });
+		}
+	};
+
+	/** Fait un maillage fixe (sans collision) à partir de ces pièces. */
+	UStaticMesh* BuildMesh(UObject* Outer, const FMeshParts& Parts);
+
 	/** Son importé de assets/sounds (nom sans extension : « pistol », « reload »...), ou nul. */
 	USoundBase* Sound(const FString& Name);
 
