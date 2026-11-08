@@ -39,6 +39,8 @@ public:
 	double FrontDistance(const FVector& Point) const;
 	/** Point de la barrière le plus proche, pour que les zombies se répartissent sur sa largeur. */
 	FVector ContactPoint(const FVector& Point) const;
+	/** Sens du chemin vers le Cœur, à plat. */
+	const FVector& GetDirection() const { return Dir; }
 	/** Ajoute des PV ; détruite, elle se relève une fois revenue à 30 % de ses PV. */
 	void Repair(float Amount);
 	/** PV à retrouver pour relever la barrière une fois détruite. */

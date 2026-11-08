@@ -8,7 +8,18 @@
 class ADRBarrier;
 class ADRChapter;
 class UAnimSequence;
+class UPointLightComponent;
 class UStaticMeshComponent;
+
+/** Fouisseur : en surface, en train de creuser, sous terre, puis en train de ressortir. */
+enum class EDRDig : uint8
+{
+	None, // pas un Fouisseur
+	Walk,
+	Dig,
+	Under,
+	Rise,
+};
 
 /** Dégâts d'une arme lourde (pistolet lourd) : brisent un zombie gelé (combo BRISÉ). */
 UCLASS()
@@ -24,7 +35,9 @@ class DERNIERREMPART_API UDRHeavyDamage : public UDamageType
  * du chemin. Il ne s'en prend jamais aux tours. Un tir à la tête fait deux fois plus de dégâts.
  * Les tours et le joueur lui donnent des états : marqué, gelé (ralenti), en feu, chargé, étourdi,
  * d'où les combos BRISÉ (tir lourd sur un zombie gelé) et SURCHARGE (tir sur un zombie chargé).
- * (Les talents du Cracheur, du Hurleur, du Fouisseur et du boss viendront ensuite.)
+ * Talents : le Cracheur crache de l'acide de loin, le Hurleur rend la horde plus rapide et plus
+ * forte par son cri, le Fouisseur passe sous les barrières en creusant, le boss ne se laisse pas
+ * étourdir.
  */
 UCLASS()
 class DERNIERREMPART_API ADRZombie : public ACharacter
@@ -64,6 +77,13 @@ public:
 	bool IsBurning() const { return BurnTime > 0.0f; }
 	bool IsCharged() const { return ChargedTime > 0.0f; }
 	bool IsStunned() const { return StunTime > 0.0f; }
+	/** Cri du Hurleur : plus rapide et plus fort pendant quelques secondes. */
+	void Buff(float Duration);
+	bool IsBuffed() const { return BuffTime > 0.0f; }
+	/** Fouisseur sous terre : invisible, intouchable, ignoré des tours. */
+	bool IsBurrowed() const { return bBurrowed; }
+	/** Le Phare force un Fouisseur à sortir de terre. */
+	void ForceSurface();
 
 private:
 	void Think();
@@ -81,6 +101,21 @@ private:
 	void UpdateStatus(float DeltaSeconds);
 	void ApplyDot(float Amount);
 	float Surcharge();
+	float CurrentSpeed() const;
+	float CurrentDamage() const;
+	AActor* FindSpitTarget() const;
+	FVector AimPoint(const AActor* Aimed) const;
+	void Spit(AActor* Aimed);
+	void ReleaseSpit();
+	void Scream();
+	/** Machine à états du Fouisseur ; vrai quand elle gère seule le déplacement. */
+	bool UpdateDig(float DeltaSeconds);
+	bool WantsToDig() const;
+	void StartDig();
+	void StartRise();
+	void SnapToPath();
+	/** Enfonce le modèle sous le sol (Fouisseur) : 0 = à sa place. */
+	void SetRigDepth(float Depth);
 
 	UPROPERTY()
 	TObjectPtr<ADRChapter> Chapter;
@@ -97,6 +132,17 @@ private:
 	/** Silhouette provisoire quand les modèles ne sont pas encore importés. */
 	UPROPERTY()
 	TObjectPtr<UStaticMeshComponent> Placeholder;
+
+	/** Butte de terre qui avance quand le Fouisseur creuse. */
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> Mound;
+
+	/** Cracheur : ce qu'il vise (barrière ou joueur), et la cible du crachat en préparation. */
+	UPROPERTY()
+	TObjectPtr<AActor> SpitTarget;
+
+	UPROPERTY()
+	TObjectPtr<AActor> SpitAim;
 
 	FString Type = TEXT("rodeur");
 	FString ModelName = TEXT("rodeur");
@@ -127,6 +173,51 @@ private:
 	float BurnTick = 0.0f;
 	float ChargedTime = 0.0f;
 	float StunTime = 0.0f;
+	float BuffTime = 0.0f;
+	float HoldTime = 0.0f;     // le Hurleur s'arrête le temps de son cri
+	float SpitCooldown = 1.0f;
+	float SpitTime = 0.0f;
+	float ScreamCooldown = 3.0f;
+	EDRDig DigState = EDRDig::None;
+	float DigTimer = 0.0f;
+	float UnderTime = 0.0f;
+	float RumbleCooldown = 0.0f;
+	FVector DigDestination = FVector::ZeroVector;
+	FVector MeshBase = FVector::ZeroVector;
 	FVector LastHitDirection = FVector::ZeroVector;
+	bool bBurrowed = false;
 	bool bDead = false;
+};
+
+/** Crachat d'acide du Cracheur (Godot : projectile.gd) : vol en cloche, s'écrase sur le premier obstacle. */
+UCLASS()
+class DERNIERREMPART_API ADRAcid : public AActor
+{
+	GENERATED_BODY()
+
+public:
+	ADRAcid();
+
+	void Launch(const FVector& To, float InFlight, float InDamage, AActor* InTarget);
+	virtual void Tick(float DeltaSeconds) override;
+
+private:
+	void Splash(const FVector& Where);
+
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> Ball;
+
+	/** Flaque d'acide qui reste un moment au sol. */
+	UPROPERTY()
+	TObjectPtr<UStaticMeshComponent> Puddle;
+
+	UPROPERTY()
+	TObjectPtr<UPointLightComponent> Shine;
+
+	TWeakObjectPtr<AActor> Target;
+	FVector Velocity = FVector::ZeroVector;
+	float Flight = 1.0f;
+	float Age = 0.0f;
+	float Damage = 14.0f;
+	float PuddleLeft = -1.0f;
 };

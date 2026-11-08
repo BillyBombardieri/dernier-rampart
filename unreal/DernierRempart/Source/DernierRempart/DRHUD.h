@@ -40,6 +40,7 @@ private:
 	void DrawBuildCards(const ADRCharacter* Player);
 	void DrawHint(const ADRCharacter* Player);
 	void DrawPopups();
+	void DrawRings();
 	/** Anneau au sol (portée d'une tour), dessiné trait par trait. */
 	void DrawRing(const FVector& Center, float Radius, const FLinearColor& Color, float Thickness);
 	bool IsInFront(const FVector& Point) const;

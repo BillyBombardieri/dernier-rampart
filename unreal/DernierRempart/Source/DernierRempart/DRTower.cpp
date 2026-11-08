@@ -14,6 +14,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/DamageType.h"
 #include "Kismet/GameplayStatics.h"
+#include "UObject/ConstructorHelpers.h"
 
 namespace DRTowerParts
 {
@@ -48,7 +49,8 @@ namespace DRTowerParts
 		TArray<ADRZombie*> Found;
 		for (TActorIterator<ADRZombie> It(World); It; ++It)
 		{
-			if (!It->IsDead())
+			// Un Fouisseur sous terre est hors d'atteinte.
+			if (!It->IsDead() && !It->IsBurrowed())
 			{
 				Found.Add(*It);
 			}
@@ -555,7 +557,7 @@ ADRZombie* ADRTower::FindTarget() const
 
 bool ADRTower::IsValidTarget(const ADRZombie* Zombie) const
 {
-	if (!IsValid(Zombie) || Zombie->IsDead())
+	if (!IsValid(Zombie) || Zombie->IsDead() || Zombie->IsBurrowed())
 	{
 		return false;
 	}
@@ -730,6 +732,14 @@ void ADRTower::UpdateBeacon(float DeltaSeconds)
 	{
 		return;
 	}
+	// Il débusque les Fouisseurs qui passent sous terre dans son halo.
+	for (TActorIterator<ADRZombie> It(GetWorld()); It; ++It)
+	{
+		if (It->IsBurrowed() && FlatDistance(It->GetActorLocation()) < BeaconReveal * 100.0)
+		{
+			It->ForceSurface();
+		}
+	}
 	RevealCooldown -= DeltaSeconds;
 	if (RevealCooldown > 0.0f)
 	{
@@ -785,10 +795,11 @@ void ADRTower::UpdateBeaconBonus()
 ADRShell::ADRShell()
 {
 	PrimaryActorTick.bCanEverTick = true;
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Racine"));
 	Ball = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Obus"));
 	Ball->SetupAttachment(RootComponent);
-	Ball->SetStaticMesh(DRTowerParts::Mesh(TEXT("Sphere")));
+	Ball->SetStaticMesh(SphereMesh.Object);
 	Ball->SetRelativeScale3D(FVector(0.36, 0.26, 0.26));
 	Ball->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	Ball->SetCastShadow(false);

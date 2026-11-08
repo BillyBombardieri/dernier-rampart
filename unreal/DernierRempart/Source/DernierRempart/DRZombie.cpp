@@ -1,7 +1,9 @@
 #include "DRZombie.h"
 
 #include "Animation/AnimSequence.h"
+#include "CollisionQueryParams.h"
 #include "Components/CapsuleComponent.h"
+#include "Components/PointLightComponent.h"
 #include "Components/SkeletalMeshComponent.h"
 #include "Components/StaticMeshComponent.h"
 #include "DRChapter.h"
@@ -18,6 +20,7 @@
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/DamageType.h"
 #include "Kismet/GameplayStatics.h"
+#include "UObject/ConstructorHelpers.h"
 
 namespace DRZombieRules
 {
@@ -34,6 +37,42 @@ namespace DRZombieRules
 		{ TEXT("coureur"), 1.474f, 3.75f }, { TEXT("brute"), 0.923f, 0.0f }, { TEXT("cracheur"), 1.524f, 0.0f },
 		{ TEXT("hurleur"), 1.359f, 0.0f }, { TEXT("fouisseur"), 1.970f, 0.0f }, { TEXT("boss"), 0.469f, 0.0f },
 	};
+
+	// Talents (Godot : SPIT_RANGE, SCREAM_RADIUS, BUFF_*, DIG_*), distances en cm.
+	constexpr double SpitRange = 1400.0;
+	constexpr float SpitDuration = 0.9f;
+	constexpr float SpitRelease = 0.5f;  // moment où l'acide part dans l'animation
+	constexpr double ScreamRadius = 1000.0;
+	constexpr float ScreamDuration = 1.3f;
+	constexpr float BuffSpeed = 1.3f;
+	constexpr float BuffDamage = 1.25f;
+	constexpr double DigSpeed = 340.0;
+	constexpr double DigDistance = 600.0; // le Fouisseur creuse à cette distance d'une barrière
+	constexpr float DigCooldown = 4.0f;
+	constexpr double DigDepth = 220.0;    // profondeur où descend le modèle (taille 1)
+	const FVector MoundScale(2.52, 1.8, 0.42);
+
+	// Vrai si la cible (barrière, Cœur, joueur) existe et tient encore debout.
+	bool IsStanding(const AActor* Actor)
+	{
+		if (!IsValid(Actor))
+		{
+			return false;
+		}
+		if (const ADRBarrier* Barrier = Cast<ADRBarrier>(Actor))
+		{
+			return Barrier->IsAlive();
+		}
+		if (const ADRCore* Core = Cast<ADRCore>(Actor))
+		{
+			return Core->IsAlive();
+		}
+		if (const ADRCharacter* Player = Cast<ADRCharacter>(Actor))
+		{
+			return Player->IsAlive();
+		}
+		return true;
+	}
 }
 
 ADRZombie::ADRZombie()
@@ -141,6 +180,23 @@ void ADRZombie::Setup(const FString& InType, float HpScale, float SpeedScale, fl
 		Placeholder->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Placeholder->RegisterComponent();
 	}
+	MeshBase = Body->GetRelativeLocation();
+	SpitCooldown = FMath::FRandRange(0.5f, 1.5f);
+	ScreamCooldown = FMath::FRandRange(2.0f, 4.0f);
+	if (Type == TEXT("fouisseur"))
+	{
+		// Butte de terre (Godot : _build_mound), cachée tant qu'il marche en surface.
+		DigState = EDRDig::Walk;
+		Mound = NewObject<UStaticMeshComponent>(this);
+		Mound->SetupAttachment(GetCapsuleComponent());
+		Mound->SetStaticMesh(LoadObject<UStaticMesh>(nullptr, TEXT("/Engine/BasicShapes/Sphere.Sphere")));
+		Mound->SetRelativeLocation(FVector(0.0, 0.0, -95.0 * Size));
+		Mound->SetRelativeScale3D(DRZombieRules::MoundScale);
+		Mound->SetMaterial(0, DRLook::Textured(this, TEXT("mud"), 1.2f, FLinearColor(0.75f, 0.68f, 0.6f)));
+		Mound->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+		Mound->SetVisibility(false);
+		Mound->RegisterComponent();
+	}
 	PlayLoop(TEXT("idle"), 1.0f);
 }
 
@@ -202,6 +258,7 @@ bool ADRZombie::IsReachable(const FVector& Point) const
 void ADRZombie::Think()
 {
 	Blocker = FindBlocker();
+	SpitTarget = Type == TEXT("cracheur") ? FindSpitTarget() : nullptr;
 }
 
 float ADRZombie::HeadHeight() const
@@ -251,9 +308,15 @@ void ADRZombie::Tick(float DeltaSeconds)
 	{
 		return;
 	}
-	// Gelé : il avance à 35 % de sa vitesse.
-	GetCharacterMovement()->MaxWalkSpeed = Speed * 100.0f * (FrozenTime > 0.0f ? 0.35f : 1.0f);
+	// Le Fouisseur gère seul ses déplacements quand il creuse, passe sous terre ou ressort.
+	if (DigState != EDRDig::None && UpdateDig(DeltaSeconds))
+	{
+		return;
+	}
+	// Gelé : il avance à 35 % de sa vitesse ; le cri d'un Hurleur le rend plus rapide.
+	GetCharacterMovement()->MaxWalkSpeed = CurrentSpeed() * 100.0f;
 	AttackCooldown -= DeltaSeconds;
+	SpitCooldown -= DeltaSeconds;
 	GroanCooldown -= DeltaSeconds;
 	if (GroanCooldown <= 0.0f)
 	{
@@ -269,6 +332,16 @@ void ADRZombie::Tick(float DeltaSeconds)
 			Strike();
 		}
 	}
+	// Le crachat part quand la tête se projette en avant.
+	if (SpitAim)
+	{
+		SpitTime -= DeltaSeconds;
+		if (SpitTime <= 0.0f)
+		{
+			ReleaseSpit();
+		}
+	}
+	HoldTime = FMath::Max(0.0f, HoldTime - DeltaSeconds);
 	// Étourdi : il reste sur place, sans frapper.
 	if (StunTime > 0.0f)
 	{
@@ -281,10 +354,20 @@ void ADRZombie::Tick(float DeltaSeconds)
 		ThinkCooldown = FMath::FRandRange(0.2f, 0.3f);
 		Think();
 	}
+	if (Type == TEXT("hurleur"))
+	{
+		ScreamCooldown -= DeltaSeconds;
+		if (ScreamCooldown <= 0.0f)
+		{
+			ScreamCooldown = 5.0f;
+			Scream();
+		}
+	}
 
 	AActor* Target = nullptr;
 	FVector TargetPosition = GetActorLocation();
 	double Reach = (1.4 + 0.4 * Size) * 100.0;
+	bool bHold = HoldTime > 0.0f;
 	const double BarrierReach = (0.9 + 0.35 * Size) * 100.0;
 	const double ChaseRadius = (Type == TEXT("coureur") ? 18.0 : (Type == TEXT("cracheur") ? 4.0 : 7.0)) * 100.0;
 	ADRCharacter* Player = Cast<ADRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
@@ -294,6 +377,16 @@ void ADRZombie::Tick(float DeltaSeconds)
 	{
 		Target = Player;
 		TargetPosition = Player->GetActorLocation();
+	}
+	else if (Type == TEXT("cracheur") && DRZombieRules::IsStanding(SpitTarget.Get()))
+	{
+		// Reste à distance et crache.
+		bHold = true;
+		TargetPosition = AimPoint(SpitTarget.Get());
+		if (SpitCooldown <= 0.0f)
+		{
+			Spit(SpitTarget.Get());
+		}
 	}
 	else if (Blocker && Blocker->IsAlive() && Blocker->FrontDistance(GetActorLocation()) <= BarrierReach + 5.0)
 	{
@@ -321,7 +414,11 @@ void ADRZombie::Tick(float DeltaSeconds)
 
 	FVector Direction = TargetPosition - GetActorLocation();
 	Direction.Z = 0.0;
-	if (Target && FlatDistance(TargetPosition) <= Reach)
+	if (bHold)
+	{
+		// Sur place : le Hurleur crie, le Cracheur vise (il se tourne quand même vers sa cible).
+	}
+	else if (Target && FlatDistance(TargetPosition) <= Reach)
 	{
 		if (AttackCooldown <= 0.0f)
 		{
@@ -364,12 +461,12 @@ void ADRZombie::Strike()
 			return;
 		}
 	}
-	UGameplayStatics::ApplyDamage(Target, Damage, nullptr, this, UDamageType::StaticClass());
+	UGameplayStatics::ApplyDamage(Target, CurrentDamage(), nullptr, this, UDamageType::StaticClass());
 }
 
 float ADRZombie::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
-	if (bDead || DamageAmount <= 0.0f)
+	if (bDead || bBurrowed || DamageAmount <= 0.0f)
 	{
 		return 0.0f;
 	}
@@ -426,8 +523,23 @@ void ADRZombie::Die()
 	Hp = 0.0f;
 	BarShown = 0.0f;
 	BarAlpha = 0.0f;
-	MarkedTime = FrozenTime = BurnTime = ChargedTime = StunTime = 0.0f;
+	MarkedTime = FrozenTime = BurnTime = ChargedTime = StunTime = BuffTime = 0.0f;
 	StrikeTarget = nullptr;
+	SpitAim = nullptr;
+	SpitTarget = nullptr;
+	// Un Fouisseur tué en sortant de terre remonte d'un coup.
+	bBurrowed = false;
+	DigState = EDRDig::None;
+	SetRigDepth(0.0f);
+	GetMesh()->SetVisibility(true, true);
+	if (Placeholder)
+	{
+		Placeholder->SetVisibility(true);
+	}
+	if (Mound)
+	{
+		Mound->SetVisibility(false);
+	}
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GetCharacterMovement()->StopMovementImmediately();
 	GetCharacterMovement()->DisableMovement();
@@ -513,7 +625,7 @@ void ADRZombie::UpdateAnimation(float DeltaSeconds)
 
 void ADRZombie::Mark()
 {
-	if (!bDead)
+	if (!bDead && !bBurrowed)
 	{
 		MarkedTime = 8.0f;
 	}
@@ -521,7 +633,7 @@ void ADRZombie::Mark()
 
 void ADRZombie::Freeze(float Duration)
 {
-	if (!bDead)
+	if (!bDead && !bBurrowed)
 	{
 		FrozenTime = FMath::Max(FrozenTime, Duration);
 	}
@@ -529,7 +641,7 @@ void ADRZombie::Freeze(float Duration)
 
 void ADRZombie::Ignite(float Duration, float Dps)
 {
-	if (!bDead)
+	if (!bDead && !bBurrowed)
 	{
 		BurnTime = FMath::Max(BurnTime, Duration);
 		BurnDps = FMath::Max(BurnDps, Dps);
@@ -538,7 +650,7 @@ void ADRZombie::Ignite(float Duration, float Dps)
 
 void ADRZombie::Charge(float Duration)
 {
-	if (!bDead)
+	if (!bDead && !bBurrowed)
 	{
 		ChargedTime = FMath::Max(ChargedTime, Duration);
 	}
@@ -546,13 +658,14 @@ void ADRZombie::Charge(float Duration)
 
 void ADRZombie::Stun(float Duration)
 {
-	// Le boss ne se laisse pas étourdir. Un coup en préparation est interrompu.
-	if (bDead || Type == TEXT("boss"))
+	// Le boss ne se laisse pas étourdir. Un coup ou un crachat en préparation est interrompu.
+	if (bDead || bBurrowed || Type == TEXT("boss"))
 	{
 		return;
 	}
 	StunTime = FMath::Max(StunTime, Duration);
 	StrikeTarget = nullptr;
+	SpitAim = nullptr;
 	ActionTime = 0.0f;
 }
 
@@ -562,6 +675,7 @@ void ADRZombie::UpdateStatus(float DeltaSeconds)
 	MarkedTime = FMath::Max(0.0f, MarkedTime - DeltaSeconds);
 	StunTime = FMath::Max(0.0f, StunTime - DeltaSeconds);
 	ChargedTime = FMath::Max(0.0f, ChargedTime - DeltaSeconds);
+	BuffTime = FMath::Max(0.0f, BuffTime - DeltaSeconds);
 	if (BurnTime > 0.0f)
 	{
 		// Le feu ronge ses PV par petites bouchées, quatre fois par seconde.
@@ -581,7 +695,7 @@ void ADRZombie::UpdateStatus(float DeltaSeconds)
 
 void ADRZombie::ApplyDot(float Amount)
 {
-	if (bDead)
+	if (bDead || bBurrowed)
 	{
 		return;
 	}
@@ -608,7 +722,7 @@ float ADRZombie::Surcharge()
 	TArray<ADRZombie*> Around;
 	for (TActorIterator<ADRZombie> It(GetWorld()); It; ++It)
 	{
-		if (*It != this && !It->IsDead() && FlatDistance(It->GetActorLocation()) < 500.0)
+		if (*It != this && !It->IsDead() && !It->IsBurrowed() && FlatDistance(It->GetActorLocation()) < 500.0)
 		{
 			Around.Add(*It);
 		}
@@ -620,4 +734,403 @@ float ADRZombie::Surcharge()
 	}
 	Stun(0.8f);
 	return Damage45;
+}
+
+// ---------------------------------------------------------------- talents
+
+void ADRZombie::Buff(float Duration)
+{
+	if (!bDead)
+	{
+		BuffTime = FMath::Max(BuffTime, Duration);
+	}
+}
+
+float ADRZombie::CurrentSpeed() const
+{
+	return Speed * (FrozenTime > 0.0f ? 0.35f : 1.0f) * (BuffTime > 0.0f ? DRZombieRules::BuffSpeed : 1.0f);
+}
+
+float ADRZombie::CurrentDamage() const
+{
+	return Damage * (BuffTime > 0.0f ? DRZombieRules::BuffDamage : 1.0f);
+}
+
+AActor* ADRZombie::FindSpitTarget() const
+{
+	// Le Cracheur crache de loin sur la barrière qui le bloque, ou sur le joueur s'il est assez près.
+	// L'acide passe par-dessus la horde. Il ne vise jamais les tours.
+	AActor* Best = nullptr;
+	double BestScore = TNumericLimits<double>::Max();
+	if (Blocker && Blocker->IsAlive())
+	{
+		const double Front = Blocker->FrontDistance(GetActorLocation());
+		if (Front >= 0.0 && Front <= DRZombieRules::SpitRange * 0.6)
+		{
+			BestScore = Front;
+			Best = Blocker.Get();
+		}
+	}
+	ADRCharacter* Player = Cast<ADRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	if (Player && Player->IsAlive())
+	{
+		const double ToPlayer = FlatDistance(Player->GetActorLocation());
+		if (ToPlayer <= 1100.0 && ToPlayer + 200.0 < BestScore)
+		{
+			Best = Player;
+		}
+	}
+	return Best;
+}
+
+FVector ADRZombie::AimPoint(const AActor* Aimed) const
+{
+	// 1 m au-dessus du sol : milieu de la barrière, ou poitrine du joueur.
+	if (const ADRBarrier* Barrier = Cast<ADRBarrier>(Aimed))
+	{
+		return Barrier->ContactPoint(GetActorLocation()) + FVector(0.0, 0.0, 100.0);
+	}
+	return Aimed->GetActorLocation() + FVector(0.0, 0.0, 10.0);
+}
+
+void ADRZombie::Spit(AActor* Aimed)
+{
+	// Il se cambre en gonflant sa poche, puis projette la tête en avant : l'acide part à ce moment.
+	SpitCooldown = 2.6f;
+	PlayAction(TEXT("spit"), DRZombieRules::SpitDuration);
+	SpitAim = Aimed;
+	SpitTime = DRZombieRules::SpitDuration * DRZombieRules::SpitRelease;
+}
+
+void ADRZombie::ReleaseSpit()
+{
+	AActor* Aimed = SpitAim.Get();
+	SpitAim = nullptr;
+	if (!DRZombieRules::IsStanding(Aimed))
+	{
+		return;
+	}
+	const FVector Mouth = GetActorLocation() + FVector(0.0, 0.0, 162.0 * ModelScale - 95.0 * Size) + GetActorForwardVector() * 30.0;
+	const FVector To = AimPoint(Aimed);
+	const float FlightTime = FMath::Clamp((float)(FVector::Dist(Mouth, To) / 1100.0), 0.5f, 1.4f);
+	FActorSpawnParameters Params;
+	Params.SpawnCollisionHandlingOverride = ESpawnActorCollisionHandlingMethod::AlwaysSpawn;
+	if (ADRAcid* Acid = GetWorld()->SpawnActor<ADRAcid>(ADRAcid::StaticClass(), Mouth, FRotator::ZeroRotator, Params))
+	{
+		Acid->Launch(To, FlightTime, CurrentDamage(), Aimed);
+	}
+	DRLook::PlayAt(this, TEXT("spit"), Mouth, -1.0f, 0.15f);
+}
+
+void ADRZombie::Scream()
+{
+	// Cri du Hurleur : il s'arrête, et les zombies à moins de 10 m sont plus rapides et plus forts pendant 6 s.
+	PlayAction(TEXT("scream"), DRZombieRules::ScreamDuration);
+	HoldTime = DRZombieRules::ScreamDuration;
+	for (TActorIterator<ADRZombie> It(GetWorld()); It; ++It)
+	{
+		if (*It != this && !It->IsDead() && FlatDistance(It->GetActorLocation()) < DRZombieRules::ScreamRadius)
+		{
+			It->Buff(6.0f);
+		}
+	}
+	const FVector Feet = GetActorLocation() - FVector(0.0, 0.0, 95.0 * Size);
+	if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+	{
+		Mode->AddRing(Feet + FVector(0.0, 0.0, 25.0), (float)DRZombieRules::ScreamRadius, FLinearColor(1.0f, 0.35f, 0.15f, 0.8f), 0.6f);
+	}
+	DRLook::PlayAt(this, TEXT("howl"), Feet + FVector(0.0, 0.0, 200.0), 3.0f, 0.1f, 8000.0f);
+}
+
+// ---------------------------------------------------------------- Fouisseur
+
+bool ADRZombie::UpdateDig(float DeltaSeconds)
+{
+	switch (DigState)
+	{
+	case EDRDig::Walk:
+		// En surface : il creuse dès qu'il arrive devant une barrière debout.
+		DigTimer -= DeltaSeconds;
+		if (DigTimer <= 0.0f && GetCharacterMovement()->IsMovingOnGround() && StunTime <= 0.0f && WantsToDig())
+		{
+			StartDig();
+			return true;
+		}
+		return false;
+	case EDRDig::Dig:
+		DigTimer -= DeltaSeconds;
+		SetRigDepth(FMath::Lerp((float)(-DRZombieRules::DigDepth * Size), 0.0f, FMath::Clamp(DigTimer, 0.0f, 1.0f)));
+		if (DigTimer <= 0.0f)
+		{
+			// Sous terre : invisible, intouchable, il traverse tout en ligne droite.
+			DigState = EDRDig::Under;
+			bBurrowed = true;
+			MarkedTime = 0.0f;
+			GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			GetCharacterMovement()->DisableMovement();
+			GetMesh()->SetVisibility(false, true);
+			if (Placeholder)
+			{
+				Placeholder->SetVisibility(false);
+			}
+			Mound->SetVisibility(true);
+		}
+		return true;
+	case EDRDig::Under:
+	{
+		UnderTime += DeltaSeconds;
+		FVector To = DigDestination - GetActorLocation();
+		To.Z = 0.0;
+		const double Left = To.Size();
+		if (Left < 60.0 || UnderTime > 25.0f)
+		{
+			StartRise();
+			return true;
+		}
+		SetActorLocation(GetActorLocation() + To / Left * FMath::Min(Left, DRZombieRules::DigSpeed * DeltaSeconds));
+		SetActorRotation(FRotator(0.0, To.Rotation().Yaw, 0.0));
+		// La butte palpite un peu pendant qu'elle avance.
+		Mound->SetRelativeScale3D(DRZombieRules::MoundScale * (1.0 + FMath::Sin(GetWorld()->GetTimeSeconds() * 9.0) * 0.06));
+		RumbleCooldown -= DeltaSeconds;
+		if (RumbleCooldown <= 0.0f)
+		{
+			RumbleCooldown = 1.3f;
+			DRLook::PlayAt(this, TEXT("dig"), GetActorLocation(), -8.0f, 0.2f, 3500.0f);
+		}
+		return true;
+	}
+	case EDRDig::Rise:
+		DigTimer -= DeltaSeconds;
+		SetRigDepth(FMath::Lerp(0.0f, (float)(-DRZombieRules::DigDepth * Size), FMath::Clamp(DigTimer / 0.9f, 0.0f, 1.0f)));
+		if (DigTimer <= 0.0f)
+		{
+			DigState = EDRDig::Walk;
+			DigTimer = DRZombieRules::DigCooldown;
+			SetRigDepth(0.0f);
+			SnapToPath();
+			UpdateAnimation(DeltaSeconds);
+		}
+		return true;
+	default:
+		return false;
+	}
+}
+
+bool ADRZombie::WantsToDig() const
+{
+	if (!Blocker || !Blocker->IsAlive())
+	{
+		return false;
+	}
+	const double Front = Blocker->FrontDistance(GetActorLocation());
+	return Front >= -50.0 && Front <= DRZombieRules::DigDistance;
+}
+
+void ADRZombie::StartDig()
+{
+	// Passe sous la barrière en ligne droite et ressort juste derrière, côté Cœur.
+	DigDestination = Blocker->ContactPoint(GetActorLocation()) + Blocker->GetDirection() * 350.0;
+	DigDestination.Z = GetActorLocation().Z;
+	DigState = EDRDig::Dig;
+	DigTimer = 1.0f;
+	UnderTime = 0.0f;
+	GetCharacterMovement()->StopMovementImmediately();
+	ActionTime = 0.0f;
+	StrikeTarget = nullptr;
+	PlayLoop(TEXT("dig"), 1.3f);
+	DRLook::PlayAt(this, TEXT("dig"), GetActorLocation(), 0.0f, 0.1f);
+}
+
+void ADRZombie::StartRise()
+{
+	DigState = EDRDig::Rise;
+	DigTimer = 0.9f;
+	bBurrowed = false;
+	// Se pose sur le sol là où il ressort.
+	const FVector Here = GetActorLocation();
+	FHitResult Floor;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(DRFouisseur), false, this);
+	if (GetWorld()->LineTraceSingleByObjectType(Floor, Here + FVector(0.0, 0.0, 50.0), Here - FVector(0.0, 0.0, 600.0), FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+	{
+		SetActorLocation(FVector(Here.X, Here.Y, Floor.ImpactPoint.Z + GetCapsuleComponent()->GetScaledCapsuleHalfHeight() + 2.0));
+	}
+	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+	GetCharacterMovement()->SetMovementMode(MOVE_Walking);
+	GetMesh()->SetVisibility(true, true);
+	if (Placeholder)
+	{
+		Placeholder->SetVisibility(true);
+	}
+	Mound->SetVisibility(false);
+	PlayLoop(TEXT("dig"), 1.0f);
+	DRLook::PlayAt(this, TEXT("dig"), GetActorLocation(), 4.0f, 0.1f);
+}
+
+void ADRZombie::ForceSurface()
+{
+	if (DigState != EDRDig::Under)
+	{
+		return;
+	}
+	StartRise();
+	if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+	{
+		Mode->Popup(TEXT("D\u00C9BUSQU\u00C9 !"), GetActorLocation() + FVector(0.0, 0.0, 250.0 - 95.0 * Size), FLinearColor(1.0f, 0.9f, 0.5f), 48.0f);
+	}
+}
+
+void ADRZombie::SnapToPath()
+{
+	// Après être sorti de terre, il reprend le chemin depuis le tronçon le plus proche.
+	const TArray<FVector>& Points = Chapter->GetPath();
+	const FVector2D Here(GetActorLocation().X, GetActorLocation().Y);
+	double Best = TNumericLimits<double>::Max();
+	for (int32 Index = 0; Index + 1 < Points.Num(); ++Index)
+	{
+		const FVector2D A(Points[Index].X, Points[Index].Y);
+		const FVector2D B(Points[Index + 1].X, Points[Index + 1].Y);
+		const double Distance = FVector2D::Distance(Here, FMath::ClosestPointOnSegment2D(Here, A, B));
+		if (Distance < Best)
+		{
+			Best = Distance;
+			PathIndex = Index + 1;
+		}
+	}
+}
+
+void ADRZombie::SetRigDepth(float Depth)
+{
+	GetMesh()->SetRelativeLocation(MeshBase + FVector(0.0, 0.0, Depth));
+	if (Placeholder)
+	{
+		Placeholder->SetRelativeLocation(FVector(0.0, 0.0, Depth));
+	}
+}
+
+// ---------------------------------------------------------------- crachat d'acide
+
+ADRAcid::ADRAcid()
+{
+	PrimaryActorTick.bCanEverTick = true;
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> SphereMesh(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> CylinderMesh(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	RootComponent = CreateDefaultSubobject<USceneComponent>(TEXT("Racine"));
+	Ball = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Goutte"));
+	Ball->SetupAttachment(RootComponent);
+	Ball->SetStaticMesh(SphereMesh.Object);
+	Ball->SetRelativeScale3D(FVector(0.32));
+	Ball->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Ball->SetCastShadow(false);
+	Puddle = CreateDefaultSubobject<UStaticMeshComponent>(TEXT("Flaque"));
+	Puddle->SetupAttachment(RootComponent);
+	Puddle->SetStaticMesh(CylinderMesh.Object);
+	Puddle->SetRelativeScale3D(FVector(1.4, 1.4, 0.02));
+	Puddle->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+	Puddle->SetCastShadow(false);
+	Puddle->SetVisibility(false);
+	Shine = CreateDefaultSubobject<UPointLightComponent>(TEXT("Lueur"));
+	Shine->SetupAttachment(RootComponent);
+	Shine->IntensityUnits = ELightUnits::Candelas;
+	Shine->Intensity = 20.0f;
+	Shine->AttenuationRadius = 300.0f;
+	Shine->LightColor = FColor(115, 242, 51);
+	Shine->CastShadows = false;
+}
+
+void ADRAcid::Launch(const FVector& To, float InFlight, float InDamage, AActor* InTarget)
+{
+	Flight = FMath::Max(0.2f, InFlight);
+	Damage = InDamage;
+	Target = InTarget;
+	// Vitesse de départ pour arriver pile sur la cible avec une gravité de 14 m/s² (comme le Mortier).
+	const FVector Gravity(0.0, 0.0, -1400.0);
+	Velocity = (To - GetActorLocation() - 0.5 * Gravity * Flight * Flight) / Flight;
+	Ball->SetMaterial(0, DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(0.45f, 0.95f, 0.2f), 3.0f));
+	Puddle->SetMaterial(0, DRLook::Textured(this, TEXT("mud"), 1.0f, FLinearColor(0.5f, 1.0f, 0.25f), 1.5f));
+}
+
+void ADRAcid::Tick(float DeltaSeconds)
+{
+	Super::Tick(DeltaSeconds);
+	if (PuddleLeft >= 0.0f)
+	{
+		// La flaque rétrécit puis s'évapore.
+		PuddleLeft -= DeltaSeconds;
+		const float Left = FMath::Clamp(PuddleLeft / 3.5f, 0.0f, 1.0f);
+		Puddle->SetRelativeScale3D(FVector(1.4 * (0.4 + 0.6 * Left), 1.4 * (0.4 + 0.6 * Left), 0.02));
+		if (PuddleLeft <= 0.0f)
+		{
+			Destroy();
+		}
+		return;
+	}
+	Age += DeltaSeconds;
+	const FVector From = GetActorLocation();
+	Velocity.Z -= 1400.0 * DeltaSeconds;
+	const FVector Next = From + Velocity * DeltaSeconds;
+	bool bArrived = Age >= Flight;
+	FVector Where = Next;
+	if (!bArrived)
+	{
+		// L'acide s'écrase sur le premier obstacle rencontré (sol, mur, barrière, tour, joueur), pas sur les zombies.
+		FCollisionObjectQueryParams Objects;
+		Objects.AddObjectTypesToQuery(ECC_WorldStatic);
+		Objects.AddObjectTypesToQuery(ECC_WorldDynamic);
+		Objects.AddObjectTypesToQuery(ECC_Pawn);
+		FCollisionQueryParams Params(SCENE_QUERY_STAT(DRAcide), false, this);
+		FHitResult Hit;
+		if (GetWorld()->LineTraceSingleByObjectType(Hit, From, Next, Objects, Params))
+		{
+			bArrived = true;
+			Where = Hit.ImpactPoint;
+		}
+	}
+	SetActorLocation(Next);
+	if (!Velocity.IsNearlyZero())
+	{
+		SetActorRotation(Velocity.Rotation());
+	}
+	if (bArrived || Next.Z < -50.0)
+	{
+		Splash(Where);
+	}
+}
+
+void ADRAcid::Splash(const FVector& Where)
+{
+	// Touche la cible si l'acide tombe à moins de 2 m d'elle, sinon le joueur s'il est juste à côté.
+	AActor* Aimed = Target.Get();
+	bool bHit = false;
+	if (DRZombieRules::IsStanding(Aimed))
+	{
+		FVector Point = Aimed->GetActorLocation();
+		if (const ADRBarrier* Barrier = Cast<ADRBarrier>(Aimed))
+		{
+			Point = Barrier->ContactPoint(Where);
+		}
+		if (FVector::Dist2D(Point, Where) < 200.0)
+		{
+			UGameplayStatics::ApplyDamage(Aimed, Damage, nullptr, this, UDamageType::StaticClass());
+			bHit = true;
+		}
+	}
+	ADRCharacter* Player = Cast<ADRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
+	if (!bHit && Player && Player->IsAlive() && FVector::Dist2D(Player->GetActorLocation(), Where) < 150.0)
+	{
+		UGameplayStatics::ApplyDamage(Player, Damage, nullptr, this, UDamageType::StaticClass());
+	}
+	DRLook::PlayAt(this, TEXT("acid_hit"), Where, -3.0f, 0.15f);
+	// Flaque verte au sol, qui fume un peu (lueur) puis s'évapore.
+	FVector Ground = Where;
+	FHitResult Floor;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(DRFlaque), false, this);
+	if (GetWorld()->LineTraceSingleByObjectType(Floor, Where + FVector(0.0, 0.0, 30.0), Where - FVector(0.0, 0.0, 500.0), FCollisionObjectQueryParams(ECC_WorldStatic), Params))
+	{
+		Ground = Floor.ImpactPoint;
+	}
+	SetActorLocationAndRotation(Ground + FVector(0.0, 0.0, 3.0), FRotator::ZeroRotator);
+	Ball->SetVisibility(false);
+	Puddle->SetVisibility(true);
+	Shine->SetIntensity(8.0f);
+	PuddleLeft = 3.5f;
 }

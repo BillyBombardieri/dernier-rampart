@@ -235,6 +235,22 @@ void ADRGameMode::Popup(const FString& Text, const FVector& Location, const FLin
 	Popups.Add(Entry);
 }
 
+void ADRGameMode::AddRing(const FVector& Location, float Radius, const FLinearColor& Color, float Duration)
+{
+	FDRRing Entry;
+	Entry.Location = Location;
+	Entry.Radius = Radius;
+	Entry.Color = Color;
+	Entry.Duration = FMath::Max(0.05f, Duration);
+	Entry.Time = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	Rings.RemoveAll([Now = Entry.Time](const FDRRing& Old) { return Now - Old.Time > Old.Duration; });
+	if (Rings.Num() >= 16)
+	{
+		Rings.RemoveAt(0);
+	}
+	Rings.Add(Entry);
+}
+
 void ADRGameMode::AddScore(int32 Points)
 {
 	if (!bOver)

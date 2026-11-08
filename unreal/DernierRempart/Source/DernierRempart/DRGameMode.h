@@ -39,6 +39,16 @@ struct FDRPopup
 	float Time = 0.0f;
 };
 
+/** Onde qui s'élargit au sol puis s'efface (cri du Hurleur). */
+struct FDRRing
+{
+	FVector Location = FVector::ZeroVector;
+	FLinearColor Color = FLinearColor::White;
+	float Radius = 100.0f; // cm, à la fin de l'onde
+	float Duration = 0.6f;
+	float Time = 0.0f;
+};
+
 /** Message affiché quelques secondes en haut de l'écran. */
 struct FDRMessage
 {
@@ -82,6 +92,7 @@ public:
 	void AddScore(int32 Points);
 	void Say(const FString& Text);
 	void Popup(const FString& Text, const FVector& Location, const FLinearColor& Color, float Size = 48.0f);
+	void AddRing(const FVector& Location, float Radius, const FLinearColor& Color, float Duration);
 	/** Les combos suivent la montée en puissance des zombies au fil des vagues. */
 	float ComboScale() const { return 1.0f + 0.15f * FMath::Max(0, Wave - 1); }
 
@@ -119,6 +130,7 @@ public:
 	bool HasNextLevel() const { return Level + 1 < LevelCount; }
 	const TArray<FDRMessage>& GetMessages() const { return Messages; }
 	const TArray<FDRPopup>& GetPopups() const { return Popups; }
+	const TArray<FDRRing>& GetRings() const { return Rings; }
 
 private:
 	void LoadLevel(const FString& Options);
@@ -179,4 +191,5 @@ private:
 	TArray<FString> BuildOrder;
 	TArray<FDRMessage> Messages;
 	TArray<FDRPopup> Popups;
+	TArray<FDRRing> Rings;
 };

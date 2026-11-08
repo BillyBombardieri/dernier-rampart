@@ -15,7 +15,8 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 5 | Zombies sur le chemin, barrières et Cœur avec PV, vie du joueur, barres de vie | à tester (8 nov.) |
 | 6 | Vagues, ferraille, points, victoire et défaite | à tester (8 nov.) |
 | 7 | Tours, énergie, marquage, combos, réparation des barrières et du Cœur | à tester (8 nov.) |
-| 8 | Interface, menu, réglages et touches modifiables | à faire |
+| 8 | Talents des zombies spéciaux : crachat du Cracheur, cri du Hurleur, terrier du Fouisseur | à tester (8 nov.) |
+| 9 | Interface, menu, réglages et touches modifiables | à faire |
 | ensuite | Autres chapitres, gadgets, établi, implants, améliorations, sauvegarde, tutoriel, sons, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
@@ -116,11 +117,11 @@ Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, 
 ## 11. Tester l'étape 6 : les vagues
 
 1. En haut au milieu : le niveau, la vague (sur 10) et la phase. La partie commence par 40 s de **préparation** (25 s ensuite) ; **Entrée** lance la vague sans attendre.
-2. Pendant l'**assaut**, le compteur montre les zombies qui restent. La composition des vagues est celle de Godot : plus de coureurs et de brutes au fil des vagues, des cracheurs dès la vague 3, des hurleurs dès la 4, des fouisseurs dès la 5, et un boss aux nuits de siège (vagues 5 et 10, en rouge). Pour l'instant, ces zombies spéciaux se battent tous au corps à corps : leurs talents (crachat, cri, terrier) viendront plus tard.
+2. Pendant l'**assaut**, le compteur montre les zombies qui restent. La composition des vagues est celle de Godot : plus de coureurs et de brutes au fil des vagues, des cracheurs dès la vague 3, des hurleurs dès la 4, des fouisseurs dès la 5, et un boss aux nuits de siège (vagues 5 et 10, en rouge). Leurs talents arrivent à l'étape 8.
 3. Chaque zombie abattu rapporte des points et laisse un petit tas de **ferraille** doré : passe dessus (elle vient à toi à moins de 2,5 m). La ferraille et les points sont en haut à gauche. Elle disparaît au bout de 30 s.
 4. Vague repoussée : ta santé revient au maximum, tu reçois une prime de ferraille, puis 12 s de **récolte** pour ramasser le reste (Entrée pour passer).
 5. Les messages de la partie (vague qui arrive, nouveau type de zombie...) s'affichent quelques secondes sous le panneau du haut.
-6. **Défaite** si le Cœur tombe, **victoire** après la vague 10. Entrée recommence le niveau, ou passe au suivant après une victoire (c'est pour l'instant la seule façon de changer de niveau ; le menu arrive à l'étape 8).
+6. **Défaite** si le Cœur tombe, **victoire** après la vague 10. Entrée recommence le niveau, ou passe au suivant après une victoire (c'est pour l'instant la seule façon de changer de niveau ; le menu arrive à l'étape 9).
 7. Le choix d'implant après les nuits de siège n'est pas encore là. La ferraille sert aux tours et aux réparations (étape 7, juste en dessous).
 
 ## 12. Tester l'étape 7 : les tours
@@ -134,7 +135,17 @@ Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, 
 7. **Réparer** : va près d'une barrière abîmée (ou du Cœur) et **maintiens E** : 1 ferraille pour 10 PV. Une barrière détruite se relève quand elle a retrouvé 30 % de ses PV.
 8. Les tours n'ont pas encore de vraies flammes ni de glace (seulement des lumières et des traits lumineux) : les effets viendront plus tard. Dis-moi si une tour vise de travers ou si son canon pointe dans le mauvais sens.
 
-## 13. Si ça ne marche pas
+## 13. Tester l'étape 8 : les zombies spéciaux
+
+Ils arrivent à partir de la vague 3 : **Entrée** lance chaque vague sans attendre la fin du compte à rebours.
+
+1. **Cracheur** (dès la vague 3) : il s'arrête à distance de la barrière qui le bloque (ou de toi si tu es à moins de 11 m), se cambre et crache une boule d'acide verte en cloche. Elle s'écrase sur le premier obstacle et laisse une flaque qui rétrécit. Elle fait mal à la barrière ou à toi, jamais aux tours.
+2. **Hurleur** (dès la vague 4) : toutes les 5 s, il s'arrête et crie. Une onde orange s'élargit au sol, et les zombies à moins de 10 m deviennent plus rapides et plus forts pendant 6 s (point rouge sous leur barre de vie).
+3. **Fouisseur** (dès la vague 5) : arrivé devant une barrière debout, il s'enfonce dans le sol, avance sous terre (une butte de terre se déplace) et ressort juste derrière. Sous terre, ni les balles ni les tours ne le touchent, mais un **Phare** allumé le fait sortir (« DÉBUSQUÉ ! »).
+4. Le **boss** des nuits de siège ne se laisse pas étourdir (Mortier, SURCHARGE).
+5. Dis-moi si un zombie spécial reste bloqué, s'enterre dans un mur ou ressort sous le sol.
+
+## 14. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

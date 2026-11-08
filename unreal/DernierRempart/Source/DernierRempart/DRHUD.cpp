@@ -67,6 +67,7 @@ void ADRHUD::DrawHUD()
 	}
 
 	DrawTowers(Player);
+	DrawRings();
 	DrawZombieBars();
 	DrawPopups();
 	if (Player)
@@ -203,8 +204,8 @@ void ADRHUD::DrawZombieBars()
 	{
 		ADRZombie* Zombie = *It;
 		const float Alpha = Zombie->GetBarAlpha();
-		const bool bStatus = Zombie->IsFrozen() || Zombie->IsBurning() || Zombie->IsCharged() || Zombie->IsStunned();
-		if (Zombie->IsDead() || (Alpha <= 0.0f && !bStatus && !Zombie->IsMarked()))
+		const bool bStatus = Zombie->IsFrozen() || Zombie->IsBurning() || Zombie->IsCharged() || Zombie->IsStunned() || Zombie->IsBuffed();
+		if (Zombie->IsDead() || Zombie->IsBurrowed() || (Alpha <= 0.0f && !bStatus && !Zombie->IsMarked()))
 		{
 			continue;
 		}
@@ -242,14 +243,15 @@ void ADRHUD::DrawZombieBars()
 		const float Height = FMath::Max(3.0f, Width * 6.5f / WorldWidth);
 		const float X = Center.X - Width * 0.5f;
 		const float Y = Center.Y - Height * 0.5f;
-		// États sous la barre : gelé (bleu), en feu (orange), chargé (violet), étourdi (jaune).
+		// États sous la barre : gelé (bleu), en feu (orange), chargé (violet), étourdi (jaune),
+		// enragé par un Hurleur (rouge).
 		if (bStatus)
 		{
 			const float Dot = FMath::Max(4.0f, Height * 1.4f);
-			float DotX = Center.X - Dot * 2.4f;
-			const FLinearColor Colors[] = { FLinearColor(0.6f, 0.85f, 1.0f), FLinearColor(1.0f, 0.5f, 0.15f), FLinearColor(0.7f, 0.6f, 1.0f), FLinearColor(1.0f, 0.9f, 0.3f) };
-			const bool States[] = { Zombie->IsFrozen(), Zombie->IsBurning(), Zombie->IsCharged(), Zombie->IsStunned() };
-			for (int32 Index = 0; Index < 4; ++Index)
+			float DotX = Center.X - Dot * 3.1f;
+			const FLinearColor Colors[] = { FLinearColor(0.6f, 0.85f, 1.0f), FLinearColor(1.0f, 0.5f, 0.15f), FLinearColor(0.7f, 0.6f, 1.0f), FLinearColor(1.0f, 0.9f, 0.3f), FLinearColor(1.0f, 0.2f, 0.15f) };
+			const bool States[] = { Zombie->IsFrozen(), Zombie->IsBurning(), Zombie->IsCharged(), Zombie->IsStunned(), Zombie->IsBuffed() };
+			for (int32 Index = 0; Index < 5; ++Index)
 			{
 				if (States[Index])
 				{
@@ -692,5 +694,26 @@ void ADRHUD::DrawPopups()
 		}
 		const FVector Screen = Project(Where);
 		DrawLabel(Entry.Text, DRHUDStyle::WithAlpha(Entry.Color, 1.0f - Age / 0.9f), Screen.X, Screen.Y, Entry.Size / 48.0f * 0.9f, 0.5f);
+	}
+}
+
+void ADRHUD::DrawRings()
+{
+	// Ondes au sol (cri du Hurleur) : elles s'élargissent vite puis s'effacent.
+	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	if (!Mode)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	for (const FDRRing& Ring : Mode->GetRings())
+	{
+		const float Age = (Now - Ring.Time) / Ring.Duration;
+		if (Age < 0.0f || Age > 1.0f)
+		{
+			continue;
+		}
+		const float Grow = 1.0f - FMath::Square(1.0f - Age);
+		DrawRing(Ring.Location, FMath::Max(20.0f, Ring.Radius * Grow), DRHUDStyle::WithAlpha(Ring.Color, 1.0f - Age), 3.0f * Scale);
 	}
 }
