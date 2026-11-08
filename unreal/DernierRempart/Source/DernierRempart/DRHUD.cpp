@@ -1519,7 +1519,7 @@ void ADRHUD::DrawSettings(ADRGameMode* Mode)
 	const float RowGap = 8.0f * Scale;
 	const float KeyHeight = 32.0f * Scale;
 	const float KeyGap = 6.0f * Scale;
-	const float Height = Pad * 2.0f + 52.0f * Scale + 5.0f * (RowHeight + RowGap) + 44.0f * Scale + KeyRows * (KeyHeight + KeyGap) + 40.0f * Scale + 42.0f * Scale;
+	const float Height = Pad * 2.0f + 52.0f * Scale + 6.0f * (RowHeight + RowGap) + 44.0f * Scale + KeyRows * (KeyHeight + KeyGap) + 40.0f * Scale + 42.0f * Scale;
 	const float Left = (Canvas->ClipX - Width) * 0.5f;
 	const float Top = FMath::Max(10.0f * Scale, (Canvas->ClipY - Height) * 0.5f);
 	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Height);
@@ -1576,6 +1576,30 @@ void ADRHUD::DrawSettings(ADRGameMode* Mode)
 				UserSettings->SetOverallScalabilityLevel(Choice);
 				UserSettings->ApplyNonResolutionSettings();
 				UserSettings->SaveSettings();
+			}
+		}
+	}
+	Y += RowHeight + RowGap;
+
+	// Plein écran ou fenêtre, pour le jeu exporté (dans l'éditeur, la fenêtre de jeu ne change pas).
+	DrawLabel(TEXT("Affichage"), FLinearColor::White, Left + Pad, Y + 8.0f * Scale, 0.6f);
+	if (UGameUserSettings* WindowSettings = GEngine ? GEngine->GetGameUserSettings() : nullptr)
+	{
+		const bool bWindowed = WindowSettings->GetFullscreenMode() == EWindowMode::Windowed;
+		const float ModeGap = 8.0f * Scale;
+		const float ModeWidth = (ControlWidth - ModeGap) * 0.5f;
+		for (int32 Choice = 0; Choice < 2; ++Choice)
+		{
+			const bool bPickWindow = Choice == 1;
+			if (Button(bPickWindow ? TEXT("FEN\u00CATRE") : TEXT("PLEIN \u00C9CRAN"), ControlLeft + Choice * (ModeWidth + ModeGap), Y, ModeWidth, RowHeight, 0.5f, true, bPickWindow == bWindowed))
+			{
+				// En fenêtre : 1600 x 900 au plus, et jamais plus des trois quarts de l'écran.
+				const FIntPoint Desktop = WindowSettings->GetDesktopResolution();
+				const FIntPoint WindowSize(FMath::Min(1600, Desktop.X * 3 / 4), FMath::Min(900, Desktop.Y * 3 / 4));
+				WindowSettings->SetFullscreenMode(bPickWindow ? EWindowMode::Windowed : EWindowMode::WindowedFullscreen);
+				WindowSettings->SetScreenResolution(bPickWindow ? WindowSize : Desktop);
+				WindowSettings->ApplyResolutionSettings(false);
+				WindowSettings->SaveSettings();
 			}
 		}
 	}

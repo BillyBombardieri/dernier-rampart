@@ -27,7 +27,8 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 17 | Météo (neige, pluie, cendres, poussière, lucioles) et vent | à tester (8 nov.) |
 | 18 | Tutoriel de la première partie | à tester (8 nov.) |
 | 19 | Feu et glace : zombies en feu, gelés, chargés ou étourdis, barils en feu, jet du lance-flammes | à tester (8 nov.) |
-| ensuite | Export Windows (le jeu lancé sans l'éditeur) | à faire |
+| 20 | Export Windows : jeu lancé sans l'éditeur, réglage plein écran ou fenêtre | à tester (8 nov.) |
+| ensuite | Corriger ce que tu trouves en testant les étapes 2 à 20 | à faire |
 
 ## 1. Ce qu'il faut sur le PC
 
@@ -258,7 +259,21 @@ Pour voir un chapitre sans avoir gagné les précédents : pendant la partie, ap
 6. **Étourdi** (obus du Mortier ou SURCHARGE) : un anneau doré tourne au-dessus de sa tête.
 7. Dis-moi si les flammes sont trop grosses, trop claires ou pas assez nombreuses : ce sont des réglages simples.
 
-## 25. Si ça ne marche pas
+## 25. Exporter le jeu pour Windows (étape 20)
+
+Le jeu exporté se lance sans Unreal, comme un vrai jeu : c'est ce qu'il faudra plus tard pour Steam. À faire seulement quand le jeu marche bien dans l'éditeur, après avoir lancé le script d'import (section 7) : le dossier **Importe** est mis dans le jeu exporté.
+
+1. Dans la barre d'outils en haut de l'éditeur, clique sur **Plateformes** (Platforms), puis **Windows**.
+2. Dans ce menu, choisis la configuration : **Development** pour un premier essai (les erreurs sont plus claires, la console F10 marche), **Shipping** pour la version à donner (plus rapide, sans console).
+3. Toujours dans ce menu, clique sur **Empaqueter le projet** (Package Project) et choisis un dossier vide, par exemple `Documents\DernierRempartExport`.
+4. Attends : la première fois, ça peut durer plus d'une heure (Unreal prépare tous les matériaux). En bas à droite, une fenêtre montre l'avancement. À la fin, elle doit dire que l'empaquetage a réussi.
+5. Dans le dossier choisi, ouvre **Windows** et double-clique sur **DernierRempart.exe**. Au premier lancement, Windows peut installer des composants de Microsoft (Visual C++) : accepte.
+6. Le jeu s'ouvre en plein écran. Dans **RÉGLAGES**, la nouvelle ligne **Affichage** passe en **FENÊTRE** ou revient en **PLEIN ÉCRAN** (dans l'éditeur, ce réglage ne change rien). **Échap** met en pause, **QUITTER** ferme le jeu.
+7. La sauvegarde du jeu exporté est à part de celle de l'éditeur : dans `%LOCALAPPDATA%\DernierRempart\Saved\SaveGames` (tape ce chemin dans la barre d'adresse de l'explorateur).
+8. Pour donner le jeu à quelqu'un : fais un clic droit sur le dossier **Windows**, puis **Compresser en fichier ZIP**, et envoie ce ZIP.
+9. Si l'empaquetage échoue : ouvre le **Journal de sortie** (Output Log), cherche les lignes rouges qui contiennent « Error » et colle-les dans le fil.
+
+## 26. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.
