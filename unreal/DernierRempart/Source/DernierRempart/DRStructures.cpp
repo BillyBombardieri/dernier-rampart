@@ -52,6 +52,10 @@ void ADRBarrier::Build(const FString& InName, float InHp, const FVector& Directi
 	DisplayName = InName;
 	MaxHp = InHp;
 	Hp = InHp;
+	if (const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+	{
+		RebuildRatio = (float)Mode->Rule(TEXT("barrieres"), TEXT("rebuild_ratio"), 0.3);
+	}
 	Dir = Direction.GetSafeNormal2D();
 	HalfWidth = Width * 0.5;
 	ProgressValue = InProgress;
@@ -158,6 +162,33 @@ FVector ADRBarrier::ContactPoint(const FVector& Point) const
 	return GetActorLocation() + Side * Lateral;
 }
 
+void ADRBarrier::Repair(float Amount)
+{
+	Hp = FMath::Min(MaxHp, Hp + Amount);
+	if (!bAlive && Hp >= GetRebuildHp())
+	{
+		// Relevée : elle bloque de nouveau, et ses éléments se redressent d'un coup.
+		bAlive = true;
+		Blocker->SetCollisionEnabled(ECollisionEnabled::QueryAndPhysics);
+		RiseAlpha = 0.0f;
+		if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+		{
+			Mode->Say(FString::Printf(TEXT("%s relev\u00E9e : les zombies sont de nouveau bloqu\u00E9s."), *DisplayName));
+		}
+	}
+	else if (!bAlive)
+	{
+		// Pendant qu'on la relève, les éléments se redressent petit à petit.
+		const float Progress = FMath::Clamp(Hp / GetRebuildHp(), 0.0f, 1.0f) * 0.6f;
+		for (int32 Index = 0; Index < Parts.Num(); ++Index)
+		{
+			FTransform Blend;
+			Blend.Blend(Fallen[Index], Rest[Index], Progress);
+			Parts[Index]->SetRelativeTransform(Blend);
+		}
+	}
+}
+
 float ADRBarrier::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
 {
 	if (!bAlive || DamageAmount <= 0.0f || DRStructureMeshes::GameOver(this))
@@ -201,6 +232,18 @@ void ADRBarrier::Tick(float DeltaSeconds)
 			Parts[Index]->SetRelativeTransform(Blend);
 		}
 	}
+	else if (bAlive && RiseAlpha < 1.0f)
+	{
+		// Elle finit de se redresser en 0,6 s (elle l'était déjà à 60 %), avec un petit dépassement.
+		RiseAlpha = FMath::Min(1.0f, RiseAlpha + DeltaSeconds / 0.6f);
+		const float Back = 1.0f + 2.7f * FMath::Pow(RiseAlpha - 1.0f, 3.0f) + 1.7f * FMath::Pow(RiseAlpha - 1.0f, 2.0f);
+		for (int32 Index = 0; Index < Parts.Num(); ++Index)
+		{
+			FTransform Blend;
+			Blend.Blend(Fallen[Index], Rest[Index], 0.6f + 0.4f * Back);
+			Parts[Index]->SetRelativeTransform(Blend);
+		}
+	}
 	else if (bAlive && ShakeAmount > 0.0f)
 	{
 		// Elle tremble sous les coups.
@@ -234,6 +277,14 @@ ADRCore::ADRCore()
 	Light->AttenuationRadius = 700.0f;
 	Light->LightColor = FColor(77, 153, 255);
 	Light->CastShadows = false;
+}
+
+void ADRCore::Repair(float Amount)
+{
+	if (bAlive)
+	{
+		Hp = FMath::Min(MaxHp, Hp + Amount);
+	}
 }
 
 float ADRCore::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)

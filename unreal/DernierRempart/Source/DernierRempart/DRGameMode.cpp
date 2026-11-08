@@ -50,6 +50,20 @@ void ADRGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 	LastWave = (int32)Rule(TEXT("partie"), TEXT("last_wave"), 10.0);
 	SiegeEvery = (int32)Rule(TEXT("vagues"), TEXT("siege_every"), 5.0);
 	Scrap = (int32)Rule(TEXT("partie"), TEXT("start_scrap"), 55.0);
+	// Ordre des tours dans le choix de construction (Godot : Tower.BUILD_ORDER).
+	const TSharedPtr<FJsonObject>* TowerRules = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Order = nullptr;
+	if (GameData.IsValid() && GameData->TryGetObjectField(TEXT("tours_regles"), TowerRules) && (*TowerRules)->TryGetArrayField(TEXT("build_order"), Order))
+	{
+		for (const TSharedPtr<FJsonValue>& Entry : *Order)
+		{
+			BuildOrder.Add(Entry->AsString());
+		}
+	}
+	if (BuildOrder.Num() == 0)
+	{
+		BuildOrder = { TEXT("gun"), TEXT("cryo"), TEXT("flame"), TEXT("arc"), TEXT("mortar"), TEXT("beacon") };
+	}
 	// Construit la carte avant l'arrivée du joueur, pour qu'il ait un sol sous les pieds.
 	UWorld* World = GetWorld();
 	if (World && !TActorIterator<ADRChapter>(World))
@@ -159,6 +173,66 @@ void ADRGameMode::Say(const FString& Text)
 void ADRGameMode::AddScrap(int32 Amount)
 {
 	Scrap += Amount;
+}
+
+bool ADRGameMode::TrySpend(int32 Amount)
+{
+	if (Scrap < Amount)
+	{
+		Say(FString::Printf(TEXT("Pas assez de ferraille (%d n\u00E9cessaires)"), Amount));
+		return false;
+	}
+	Scrap -= Amount;
+	return true;
+}
+
+int32 ADRGameMode::GetEnergyCap() const
+{
+	// Le générateur de l'établi et l'implant Cœur de batterie viendront plus tard.
+	return (int32)Rule(TEXT("partie"), TEXT("energy_base"), 6.0);
+}
+
+bool ADRGameMode::RequestEnergy(int32 Amount)
+{
+	if (EnergyUsed + Amount > GetEnergyCap())
+	{
+		return false;
+	}
+	EnergyUsed += Amount;
+	return true;
+}
+
+void ADRGameMode::ReleaseEnergy(int32 Amount)
+{
+	EnergyUsed = FMath::Max(0, EnergyUsed - Amount);
+}
+
+TSharedPtr<FJsonObject> ADRGameMode::GetTowerData(const FString& Type) const
+{
+	const TSharedPtr<FJsonObject>* Towers = nullptr;
+	const TSharedPtr<FJsonObject>* Stats = nullptr;
+	if (GameData.IsValid() && GameData->TryGetObjectField(TEXT("tours"), Towers) && (*Towers)->TryGetObjectField(Type, Stats))
+	{
+		return *Stats;
+	}
+	return TSharedPtr<FJsonObject>();
+}
+
+void ADRGameMode::Popup(const FString& Text, const FVector& Location, const FLinearColor& Color, float Size)
+{
+	FDRPopup Entry;
+	Entry.Text = Text;
+	Entry.Location = Location;
+	Entry.Color = Color;
+	Entry.Size = Size;
+	Entry.Time = GetWorld() ? GetWorld()->GetTimeSeconds() : 0.0f;
+	// On oublie ceux qui ont fini de monter (0,9 s), et on en garde 24 au plus.
+	Popups.RemoveAll([Now = Entry.Time](const FDRPopup& Old) { return Now - Old.Time > 0.9f; });
+	if (Popups.Num() >= 24)
+	{
+		Popups.RemoveAt(0);
+	}
+	Popups.Add(Entry);
 }
 
 void ADRGameMode::AddScore(int32 Points)

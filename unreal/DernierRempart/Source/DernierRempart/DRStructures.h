@@ -12,7 +12,7 @@ class UPointLightComponent;
 /**
  * Barrière qui coupe le chemin des zombies (Godot : scripts/barrier.gd, porte d'avant-poste) :
  * blocs de béton, poteaux, fils et barrière rayée. Les zombies s'arrêtent devant pour la casser ;
- * détruite, elle s'effondre et les laisse passer. (La relever avec E viendra avec la réparation.)
+ * détruite, elle s'effondre et les laisse passer. On la répare (ou on la relève) en maintenant E.
  */
 UCLASS()
 class DERNIERREMPART_API ADRBarrier : public AActor
@@ -39,6 +39,10 @@ public:
 	double FrontDistance(const FVector& Point) const;
 	/** Point de la barrière le plus proche, pour que les zombies se répartissent sur sa largeur. */
 	FVector ContactPoint(const FVector& Point) const;
+	/** Ajoute des PV ; détruite, elle se relève une fois revenue à 30 % de ses PV. */
+	void Repair(float Amount);
+	/** PV à retrouver pour relever la barrière une fois détruite. */
+	float GetRebuildHp() const { return MaxHp * RebuildRatio; }
 
 private:
 	UStaticMeshComponent* AddPart(UStaticMesh* Mesh, UMaterialInterface* Material, const FVector& Center, const FVector& Scale, const FRotator& Rotation, bool bHeavy);
@@ -59,7 +63,9 @@ private:
 	float MaxHp = 600.0f;
 	float Hp = 600.0f;
 	float FallAlpha = 0.0f;
+	float RiseAlpha = 1.0f;
 	float ShakeAmount = 0.0f;
+	float RebuildRatio = 0.3f;
 	bool bAlive = true;
 };
 
@@ -80,6 +86,7 @@ public:
 	bool IsAlive() const { return bAlive; }
 	float GetHp() const { return Hp; }
 	float GetMaxHp() const { return MaxHp; }
+	void Repair(float Amount);
 
 private:
 	UPROPERTY()

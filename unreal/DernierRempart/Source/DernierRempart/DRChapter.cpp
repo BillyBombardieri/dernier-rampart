@@ -13,6 +13,7 @@
 #include "DRGameMode.h"
 #include "DRLook.h"
 #include "DRStructures.h"
+#include "DRTower.h"
 #include "Engine/CollisionProfile.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
@@ -364,12 +365,12 @@ void ADRChapter::BuildRings(const TSharedPtr<FJsonObject>& Data)
 		{
 			continue;
 		}
-		const TArray<TSharedPtr<FJsonValue>>* Sockets = nullptr;
-		if (RingData->TryGetArrayField(TEXT("sockets"), Sockets))
+		const TArray<TSharedPtr<FJsonValue>>* SocketList = nullptr;
+		if (RingData->TryGetArrayField(TEXT("sockets"), SocketList))
 		{
-			for (const TSharedPtr<FJsonValue>& Socket : *Sockets)
+			for (const TSharedPtr<FJsonValue>& Spot : *SocketList)
 			{
-				BuildSocket(DRData::Vector(Socket));
+				BuildSocket(DRData::Vector(Spot));
 			}
 		}
 		const FVector Gate = DRData::Vector(RingData, TEXT("gate"));
@@ -399,6 +400,11 @@ void ADRChapter::BuildSocket(const FVector& Position)
 		const double Angle = Index * 90.0;
 		const FVector Offset = FRotator(0.0, Angle, 0.0).RotateVector(FVector(78.0, 0.0, 31.0));
 		Box(Mark, Position + Offset, FVector(12.0, 40.0, 4.0), FRotator(0.0, Angle, 0.0), false);
+	}
+	// L'ancrage lui-même : c'est lui qui reçoit la tour.
+	if (ADRSocket* Socket = GetWorld()->SpawnActor<ADRSocket>(ADRSocket::StaticClass(), Position, FRotator::ZeroRotator))
+	{
+		Sockets.Add(Socket);
 	}
 	Blocked.Add(Position);
 }

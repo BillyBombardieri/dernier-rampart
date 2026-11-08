@@ -6,6 +6,7 @@
 
 class ADRBarrier;
 class ADRCore;
+class ADRSocket;
 class FJsonObject;
 class UInstancedStaticMeshComponent;
 class UMaterialInterface;
@@ -38,6 +39,8 @@ public:
 	const TArray<FVector>& GetPath() const { return Path; }
 
 	const TArray<TObjectPtr<ADRBarrier>>& GetBarriers() const { return Barriers; }
+	/** Ancrages où l'on peut poser une tour. */
+	const TArray<TObjectPtr<ADRSocket>>& GetSockets() const { return Sockets; }
 	ADRCore* GetCore() const;
 
 	/** Le Cœur, au milieu de la base (Godot : CORE_POS). */
@@ -99,6 +102,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<ADRCore> Core;
+
+	UPROPERTY()
+	TArray<TObjectPtr<ADRSocket>> Sockets;
 
 	/** Pièces regroupées par maillage, matériau et collision. */
 	UPROPERTY()

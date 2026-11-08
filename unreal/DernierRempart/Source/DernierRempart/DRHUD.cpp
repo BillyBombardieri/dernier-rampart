@@ -3,8 +3,10 @@
 #include "CollisionQueryParams.h"
 #include "DRChapter.h"
 #include "DRCharacter.h"
+#include "DRData.h"
 #include "DRGameMode.h"
 #include "DRStructures.h"
+#include "DRTower.h"
 #include "DRZombie.h"
 #include "Engine/Canvas.h"
 #include "Engine/Engine.h"
@@ -57,8 +59,16 @@ void ADRHUD::DrawHUD()
 	const ADRCharacter* Player = Cast<ADRCharacter>(GetOwningPawn());
 	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
 	const bool bOver = Mode && Mode->IsOver();
+	if (APlayerController* PlayerController = GetOwningPlayerController())
+	{
+		FRotator View;
+		PlayerController->GetPlayerViewPoint(ViewEye, View);
+		ViewForward = View.Vector();
+	}
 
+	DrawTowers(Player);
 	DrawZombieBars();
+	DrawPopups();
 	if (Player)
 	{
 		DrawEdges(Player->IsAlive() ? Player->GetHurt() : 0.8f);
@@ -79,6 +89,11 @@ void ADRHUD::DrawHUD()
 	{
 		DrawHealth(Player);
 		DrawFallen(Player);
+		if (Player->IsAlive())
+		{
+			DrawBuildCards(Player);
+			DrawHint(Player);
+		}
 	}
 	DrawMessages(PanelBottom + 12.0f * Scale);
 
@@ -94,6 +109,8 @@ void ADRHUD::DrawHUD()
 	{
 		DrawLabel(TEXT("ZQSD bouger   Maj courir   Espace sauter   Clic gauche tirer   Clic droit viser   R recharger   & / \u00E9 ou molette : arme   \u00C9chap quitter"),
 			FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), Canvas->ClipX * 0.5f, Canvas->ClipY - 70.0f * Scale, 0.75f, 0.5f);
+		DrawLabel(TEXT("E construire / am\u00E9liorer (maintenir : r\u00E9parer)   C ou molette : choisir la tour   X allumer / \u00E9teindre   F marquer   Entr\u00E9e lancer la vague"),
+			FLinearColor(1.0f, 1.0f, 1.0f, 0.65f), Canvas->ClipX * 0.5f, Canvas->ClipY - 46.0f * Scale, 0.65f, 0.5f);
 	}
 }
 
@@ -186,7 +203,8 @@ void ADRHUD::DrawZombieBars()
 	{
 		ADRZombie* Zombie = *It;
 		const float Alpha = Zombie->GetBarAlpha();
-		if (Zombie->IsDead() || Alpha <= 0.0f)
+		const bool bStatus = Zombie->IsFrozen() || Zombie->IsBurning() || Zombie->IsCharged() || Zombie->IsStunned();
+		if (Zombie->IsDead() || (Alpha <= 0.0f && !bStatus && !Zombie->IsMarked()))
 		{
 			continue;
 		}
@@ -195,6 +213,16 @@ void ADRHUD::DrawZombieBars()
 		if (FVector::DotProduct(ToBar, Forward) < 30.0 || ToBar.SizeSquared() > FMath::Square(DRHUDStyle::ZombieBarRange))
 		{
 			continue;
+		}
+		// Marqué : visible même derrière un mur, comme dans Godot.
+		if (Zombie->IsMarked())
+		{
+			const FVector Mark = Project(Anchor + FVector(0.0, 0.0, 30.0 * Zombie->GetSize()));
+			const FLinearColor MarkRed(1.0f, 0.25f, 0.25f);
+			const float Tip = 6.0f * Scale;
+			DrawLine(Mark.X - Tip, Mark.Y - Tip, Mark.X, Mark.Y, MarkRed, 2.0f * Scale);
+			DrawLine(Mark.X + Tip, Mark.Y - Tip, Mark.X, Mark.Y, MarkRed, 2.0f * Scale);
+			DrawLabel(TEXT("MARQU\u00C9"), MarkRed, Mark.X, Mark.Y - Tip - 22.0f * Scale, 0.5f, 0.5f);
 		}
 		FCollisionQueryParams Params(SCENE_QUERY_STAT(DRBarreDeVie), false, GetOwningPawn());
 		Params.AddIgnoredActor(Zombie);
@@ -214,6 +242,26 @@ void ADRHUD::DrawZombieBars()
 		const float Height = FMath::Max(3.0f, Width * 6.5f / WorldWidth);
 		const float X = Center.X - Width * 0.5f;
 		const float Y = Center.Y - Height * 0.5f;
+		// États sous la barre : gelé (bleu), en feu (orange), chargé (violet), étourdi (jaune).
+		if (bStatus)
+		{
+			const float Dot = FMath::Max(4.0f, Height * 1.4f);
+			float DotX = Center.X - Dot * 2.4f;
+			const FLinearColor Colors[] = { FLinearColor(0.6f, 0.85f, 1.0f), FLinearColor(1.0f, 0.5f, 0.15f), FLinearColor(0.7f, 0.6f, 1.0f), FLinearColor(1.0f, 0.9f, 0.3f) };
+			const bool States[] = { Zombie->IsFrozen(), Zombie->IsBurning(), Zombie->IsCharged(), Zombie->IsStunned() };
+			for (int32 Index = 0; Index < 4; ++Index)
+			{
+				if (States[Index])
+				{
+					DrawRect(Colors[Index], DotX, Y + Height + 3.0f, Dot, Dot);
+				}
+				DotX += Dot * 1.3f;
+			}
+		}
+		if (Alpha <= 0.0f)
+		{
+			continue;
+		}
 		const float Fill = FMath::Clamp(Zombie->GetHp() / FMath::Max(1.0f, Zombie->GetMaxHp()), 0.0f, 1.0f);
 		DrawRect(FLinearColor(0.02f, 0.02f, 0.02f, 0.75f * Alpha), X - 1.0f, Y - 1.0f, Width + 2.0f, Height + 2.0f);
 		DrawRect(FLinearColor(0.08f, 0.06f, 0.06f, 0.5f * Alpha), X, Y, Width, Height);
@@ -296,11 +344,13 @@ void ADRHUD::DrawStructures()
 		Name.ReplaceInline(TEXT("Barri\u00E8re de la "), TEXT(""));
 		Name.ToUpperInline();
 		const bool bAlive = Barrier->IsAlive();
-		const float Fill = Barrier->GetHp() / FMath::Max(1.0f, Barrier->GetMaxHp());
+		// Détruite : la barre montre où en est la remise en place (elle se relève une fois pleine).
+		const float Fill = Barrier->GetHp() / FMath::Max(1.0f, bAlive ? Barrier->GetMaxHp() : Barrier->GetRebuildHp());
 		const FLinearColor Color = bAlive && Fill > 0.35f ? FLinearColor(0.85f, 0.85f, 0.8f) : DRHUDStyle::Danger;
 		DrawLabel(Name, DRHUDStyle::Light, Left + Pad, Y, 0.5f);
 		DrawBar(BarLeft, Y + Row * 0.35f, BarWidth, 6.0f * Scale, Fill, Color);
-		const FString Value = bAlive ? FString::FromInt(FMath::CeilToInt(Barrier->GetHp())) : FString(TEXT("D\u00C9TRUITE"));
+		const FString Value = bAlive ? FString::FromInt(FMath::CeilToInt(Barrier->GetHp()))
+			: (Barrier->GetHp() < 1.0f ? FString(TEXT("D\u00C9TRUITE")) : FString::Printf(TEXT("%d / %d"), FMath::FloorToInt(Barrier->GetHp()), FMath::RoundToInt(Barrier->GetRebuildHp())));
 		DrawLabel(Value, bAlive ? DRHUDStyle::Light : DRHUDStyle::Danger, Left + Width - Pad, Y, 0.5f, 1.0f);
 		Y += Row;
 	}
@@ -411,11 +461,13 @@ void ADRHUD::DrawResources()
 	const float Width = 230.0f * Scale;
 	const float Row = 28.0f * Scale;
 	const float Pad = 12.0f * Scale;
-	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Pad * 2.0f + Row * 2.0f);
+	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Pad * 2.0f + Row * 3.0f);
 	DrawLabel(TEXT("FERRAILLE"), DRHUDStyle::Light, Left + Pad, Top + Pad + 4.0f * Scale, 0.5f);
 	DrawLabel(FString::FromInt(Mode->GetScrap()), DRHUDStyle::Accent, Left + Width - Pad, Top + Pad, 0.75f, 1.0f);
 	DrawLabel(TEXT("POINTS"), DRHUDStyle::Light, Left + Pad, Top + Pad + Row + 4.0f * Scale, 0.5f);
 	DrawLabel(FString::FromInt(Mode->GetScore()), FLinearColor::White, Left + Width - Pad, Top + Pad + Row, 0.75f, 1.0f);
+	DrawLabel(TEXT("\u00C9NERGIE"), DRHUDStyle::Light, Left + Pad, Top + Pad + Row * 2.0f + 4.0f * Scale, 0.5f);
+	DrawLabel(FString::Printf(TEXT("%d / %d"), Mode->GetEnergyUsed(), Mode->GetEnergyCap()), FLinearColor(0.45f, 0.8f, 1.0f), Left + Width - Pad, Top + Pad + Row * 2.0f, 0.75f, 1.0f);
 }
 
 void ADRHUD::DrawMessages(float Top)
@@ -479,4 +531,166 @@ void ADRHUD::DrawEnd()
 		FLinearColor(0.9f, 0.9f, 0.9f), CenterX, Top + 160.0f * Scale, 0.7f, 0.5f);
 	const TCHAR* Next = bWon && Mode->HasNextLevel() ? TEXT("[Entr\u00E9e]  niveau suivant") : TEXT("[Entr\u00E9e]  recommencer");
 	DrawLabel(Next, DRHUDStyle::Accent, CenterX, Top + Height - 60.0f * Scale, 0.8f, 0.5f);
+}
+
+// ---------------------------------------------------------------- tours
+
+bool ADRHUD::IsInFront(const FVector& Point) const
+{
+	return FVector::DotProduct(Point - ViewEye, ViewForward) > 20.0;
+}
+
+void ADRHUD::DrawRing(const FVector& Center, float Radius, const FLinearColor& Color, float Thickness)
+{
+	const int32 Segments = 72;
+	FVector Previous = FVector::ZeroVector;
+	bool bPrevious = false;
+	for (int32 Index = 0; Index <= Segments; ++Index)
+	{
+		const float Angle = 2.0f * PI * Index / Segments;
+		const FVector Point = Center + FVector(FMath::Cos(Angle) * Radius, FMath::Sin(Angle) * Radius, 0.0);
+		const bool bFront = IsInFront(Point);
+		const FVector Screen = bFront ? Project(Point) : FVector::ZeroVector;
+		if (bFront && bPrevious)
+		{
+			DrawLine(Previous.X, Previous.Y, Screen.X, Screen.Y, Color, Thickness);
+		}
+		Previous = Screen;
+		bPrevious = bFront;
+	}
+}
+
+void ADRHUD::DrawTowers(const ADRCharacter* Player)
+{
+	// Nom de chaque tour au-dessus d'elle, halo discret des Phares, portée de la tour ou de
+	// l'ancrage visés (Godot : Label3D et range_ring de tower.gd).
+	const ADRSocket* Sight = Player && Player->IsAlive() ? Player->GetSightSocket() : nullptr;
+	for (TActorIterator<ADRTower> It(GetWorld()); It; ++It)
+	{
+		const ADRTower* Tower = *It;
+		const FVector Ground = Tower->GetActorLocation() - FVector(0.0, 0.0, Tower->GetSimpleCollisionHalfHeight() - 8.0);
+		if (Tower->GetType() == TEXT("beacon") && Tower->IsPowered())
+		{
+			DrawRing(Ground, Tower->GetRange(), DRHUDStyle::WithAlpha(Tower->GetColor(), 0.25f), 1.5f * Scale);
+		}
+		const FVector Anchor = Tower->GetLabelAnchor();
+		if (!IsInFront(Anchor) || FVector::DistSquared(Anchor, ViewEye) > FMath::Square(3000.0))
+		{
+			continue;
+		}
+		FString Label = FString::Printf(TEXT("%s niv.%d"), *Tower->GetDisplayName(), Tower->GetLevel());
+		if (!Tower->IsPowered())
+		{
+			Label += TEXT("  [\u00C9TEINTE]");
+		}
+		if (Tower->IsBoosted())
+		{
+			Label += TEXT("  (Phare)");
+		}
+		const FVector Screen = Project(Anchor);
+		DrawLabel(Label, Tower->IsPowered() ? FLinearColor(0.95f, 0.95f, 0.95f, 0.9f) : DRHUDStyle::Danger, Screen.X, Screen.Y, 0.5f, 0.5f);
+	}
+	if (!Sight)
+	{
+		return;
+	}
+	if (const ADRTower* Tower = Sight->GetTower())
+	{
+		const FVector Ground = Tower->GetActorLocation() - FVector(0.0, 0.0, Tower->GetSimpleCollisionHalfHeight() - 8.0);
+		DrawRing(Ground, Tower->GetRange(), DRHUDStyle::WithAlpha(Tower->GetColor(), 0.7f), 2.5f * Scale);
+		return;
+	}
+	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	if (Mode && Mode->GetBuildOrder().IsValidIndex(Player->GetBuildChoice()))
+	{
+		const TSharedPtr<FJsonObject> Stats = Mode->GetTowerData(Mode->GetBuildOrder()[Player->GetBuildChoice()]);
+		const FLinearColor Color = DRData::ColorSRGB(Stats, TEXT("color"), FLinearColor::White);
+		DrawRing(Sight->GetActorLocation() + FVector(0.0, 0.0, 8.0), (float)DRData::Number(Stats, TEXT("range"), 10.0) * 100.0f, DRHUDStyle::WithAlpha(Color, 0.7f), 2.5f * Scale);
+	}
+}
+
+void ADRHUD::DrawBuildCards(const ADRCharacter* Player)
+{
+	// Devant un ancrage vide : une carte par tour, la tour choisie en surbrillance.
+	const ADRSocket* Sight = Player->GetSightSocket();
+	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	if (!Sight || Sight->GetTower() || !Mode)
+	{
+		return;
+	}
+	const TArray<FString>& Order = Mode->GetBuildOrder();
+	const float CardWidth = 150.0f * Scale;
+	const float CardHeight = 62.0f * Scale;
+	const float Gap = 6.0f * Scale;
+	const float Total = Order.Num() * CardWidth + (Order.Num() - 1) * Gap;
+	float X = (Canvas->ClipX - Total) * 0.5f;
+	const float Y = Canvas->ClipY - 338.0f * Scale;
+	for (int32 Index = 0; Index < Order.Num(); ++Index)
+	{
+		const TSharedPtr<FJsonObject> Stats = Mode->GetTowerData(Order[Index]);
+		FString Name = Order[Index];
+		if (Stats.IsValid())
+		{
+			Stats->TryGetStringField(TEXT("name"), Name);
+		}
+		const int32 Cost = (int32)DRData::Number(Stats, TEXT("cost"), 0.0);
+		const int32 Energy = (int32)DRData::Number(Stats, TEXT("energy"), 0.0);
+		const bool bChosen = Index == Player->GetBuildChoice();
+		if (bChosen)
+		{
+			DrawRect(DRHUDStyle::Accent, X - 2.0f * Scale, Y - 2.0f * Scale, CardWidth + 4.0f * Scale, CardHeight + 4.0f * Scale);
+		}
+		DrawRect(FLinearColor(0.04f, 0.05f, 0.07f, 0.9f), X, Y, CardWidth, CardHeight);
+		const FLinearColor Color = DRData::ColorSRGB(Stats, TEXT("color"), FLinearColor::White);
+		DrawRect(Color, X, Y, 4.0f * Scale, CardHeight);
+		DrawLabel(Name, bChosen ? FLinearColor::White : DRHUDStyle::Light, X + 12.0f * Scale, Y + 8.0f * Scale, 0.5f);
+		const FLinearColor CostColor = Mode->GetScrap() >= Cost ? DRHUDStyle::Accent : DRHUDStyle::Danger;
+		DrawLabel(FString::Printf(TEXT("%d ferraille"), Cost), CostColor, X + 12.0f * Scale, Y + 30.0f * Scale, 0.42f);
+		DrawLabel(FString::Printf(TEXT("%d \u00E9n."), Energy), FLinearColor(0.45f, 0.8f, 1.0f), X + CardWidth - 10.0f * Scale, Y + 30.0f * Scale, 0.42f, 1.0f);
+		X += CardWidth + Gap;
+	}
+}
+
+void ADRHUD::DrawHint(const ADRCharacter* Player)
+{
+	// Ce qu'on peut faire avec ce qu'on vise : première ligne en clair, la suite en gris.
+	const FString& Hint = Player->GetHint();
+	if (Hint.IsEmpty())
+	{
+		return;
+	}
+	TArray<FString> Lines;
+	Hint.ParseIntoArray(Lines, TEXT("\n"), true);
+	float Y = Canvas->ClipY - 250.0f * Scale;
+	for (int32 Index = 0; Index < Lines.Num(); ++Index)
+	{
+		DrawLabel(Lines[Index], Index == 0 ? FLinearColor::White : FLinearColor(0.6f, 0.6f, 0.6f), Canvas->ClipX * 0.5f, Y, Index == 0 ? 0.65f : 0.5f, 0.5f);
+		Y += (Index == 0 ? 30.0f : 24.0f) * Scale;
+	}
+}
+
+void ADRHUD::DrawPopups()
+{
+	// « TÊTE », « BRISÉ ! », « SURCHARGE ! », « EMBRASEMENT ! » : montent d'1,5 m et s'effacent en 0,9 s.
+	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	if (!Mode)
+	{
+		return;
+	}
+	const float Now = GetWorld()->GetTimeSeconds();
+	for (const FDRPopup& Entry : Mode->GetPopups())
+	{
+		const float Age = Now - Entry.Time;
+		if (Age < 0.0f || Age > 0.9f)
+		{
+			continue;
+		}
+		const FVector Where = Entry.Location + FVector(0.0, 0.0, 150.0 * Age / 0.9f);
+		if (!IsInFront(Where))
+		{
+			continue;
+		}
+		const FVector Screen = Project(Where);
+		DrawLabel(Entry.Text, DRHUDStyle::WithAlpha(Entry.Color, 1.0f - Age / 0.9f), Screen.X, Screen.Y, Entry.Size / 48.0f * 0.9f, 0.5f);
+	}
 }

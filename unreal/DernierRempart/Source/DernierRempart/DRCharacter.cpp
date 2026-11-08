@@ -8,6 +8,9 @@
 #include "DRData.h"
 #include "DRGameMode.h"
 #include "DRLook.h"
+#include "DRStructures.h"
+#include "DRTower.h"
+#include "DRZombie.h"
 #include "Engine/LocalPlayer.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -286,6 +289,31 @@ void ADRCharacter::NextWeapon()
 	SelectWeapon(CurrentWeapon == 0 ? 1 : 0);
 }
 
+void ADRCharacter::WheelUp()
+{
+	// Molette : choisit la tour à construire si on vise un ancrage vide, sinon change d'arme.
+	if (SightSocket.IsValid() && !SightSocket->GetTower())
+	{
+		CycleBuild(-1);
+	}
+	else
+	{
+		NextWeapon();
+	}
+}
+
+void ADRCharacter::WheelDown()
+{
+	if (SightSocket.IsValid() && !SightSocket->GetTower())
+	{
+		CycleBuild(1);
+	}
+	else
+	{
+		NextWeapon();
+	}
+}
+
 void ADRCharacter::StartFire()
 {
 	if (!CanAct())
@@ -375,7 +403,9 @@ void ADRCharacter::Shoot()
 		AActor* Target = Hit.GetActor();
 		if (Target && Target->CanBeDamaged() && Target->IsA<APawn>())
 		{
-			UGameplayStatics::ApplyPointDamage(Target, Weapon.Damage, Direction, Hit, GetController(), this, UDamageType::StaticClass());
+			// Le pistolet lourd brise les zombies gelés (combo BRISÉ).
+			UGameplayStatics::ApplyPointDamage(Target, Weapon.Damage, Direction, Hit, GetController(), this,
+				Weapon.bHeavy ? UDRHeavyDamage::StaticClass() : UDamageType::StaticClass());
 			HitMarkerAge = 0.0f;
 		}
 	}
@@ -471,6 +501,15 @@ void ADRCharacter::Tick(float DeltaSeconds)
 			Respawn();
 		}
 		return;
+	}
+	if (CanAct())
+	{
+		UpdateInteraction(DeltaSeconds);
+	}
+	else
+	{
+		Hint.Reset();
+		SightSocket = nullptr;
 	}
 	if (!Weapons.IsValidIndex(CurrentWeapon))
 	{
@@ -581,6 +620,237 @@ void ADRCharacter::AnimateView(float DeltaSeconds)
 		GunBaseRotation + FRotator(FMath::RadiansToDegrees(VmKick * 0.35f), 0.0, 0.0));
 }
 
+// ---------------------------------------------------------------- construction et réparation
+
+void ADRCharacter::UpdateInteraction(float DeltaSeconds)
+{
+	Hint.Reset();
+	SightSocket = nullptr;
+	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	const ADRChapter* Chapter = Mode ? Mode->GetChapter() : nullptr;
+	if (!Chapter)
+	{
+		return;
+	}
+	const FVector Eye = Camera->GetComponentLocation();
+	const FVector Aim = Camera->GetForwardVector();
+
+	// Ancrage ou tour dans le viseur, à 7 m au plus.
+	double BestAlong = 700.0;
+	for (const TObjectPtr<ADRSocket>& Socket : Chapter->GetSockets())
+	{
+		if (!Socket)
+		{
+			continue;
+		}
+		const ADRTower* Tower = Socket->GetTower();
+		const FVector Center = Tower ? Tower->GetActorLocation() : Socket->GetActorLocation() + FVector(0.0, 0.0, 30.0);
+		const double Radius = Tower ? (Tower->GetType() == TEXT("beacon") ? 150.0 : 100.0) : 120.0;
+		const double Along = FVector::DotProduct(Center - Eye, Aim);
+		if (Along < 0.0 || Along > BestAlong || FVector::Dist(Eye + Aim * Along, Center) > Radius)
+		{
+			continue;
+		}
+		BestAlong = Along;
+		SightSocket = Socket.Get();
+	}
+	if (ADRSocket* Socket = SightSocket.Get())
+	{
+		if (const ADRTower* Tower = Socket->GetTower())
+		{
+			const FString Upgrade = Tower->GetLevel() >= Tower->GetMaxLevel()
+				? FString(TEXT("niveau max"))
+				: FString::Printf(TEXT("E am\u00E9liorer (%d)"), Tower->GetUpgradeCost());
+			Hint = FString::Printf(TEXT("%s niv.%d   %s   X %s   (\u00E9nergie %d)"), *Tower->GetDisplayName(), Tower->GetLevel(), *Upgrade,
+				Tower->IsPowered() ? TEXT("\u00E9teindre") : TEXT("allumer"), Tower->GetEnergyCost());
+		}
+		else if (Mode->GetBuildOrder().Num() > 0)
+		{
+			BuildChoice = FMath::Clamp(BuildChoice, 0, Mode->GetBuildOrder().Num() - 1);
+			const TSharedPtr<FJsonObject> Stats = Mode->GetTowerData(Mode->GetBuildOrder()[BuildChoice]);
+			FString Name = Mode->GetBuildOrder()[BuildChoice];
+			if (Stats.IsValid())
+			{
+				Stats->TryGetStringField(TEXT("name"), Name);
+			}
+			Hint = FString::Printf(TEXT("E construire : %s (%d ferraille, %d \u00E9nergie)\nMolette ou C : choisir une autre tour"), *Name,
+				(int32)DRData::Number(Stats, TEXT("cost"), 0.0), (int32)DRData::Number(Stats, TEXT("energy"), 0.0));
+		}
+		return;
+	}
+
+	// Barrière à portée de main, vers laquelle on se tourne (une barrière détruite est au ras du sol).
+	FVector Flat = Aim;
+	Flat.Z = 0.0;
+	Flat.Normalize();
+	ADRBarrier* Barrier = nullptr;
+	double BestDistance = 320.0;
+	for (const TObjectPtr<ADRBarrier>& Candidate : Chapter->GetBarriers())
+	{
+		if (!Candidate)
+		{
+			continue;
+		}
+		FVector To = Candidate->ContactPoint(GetActorLocation()) - GetActorLocation();
+		To.Z = 0.0;
+		const double Distance = To.Size();
+		if (Distance >= BestDistance || (Distance > 120.0 && FVector::DotProduct(Flat, To / Distance) < 0.35))
+		{
+			continue;
+		}
+		BestDistance = Distance;
+		Barrier = Candidate.Get();
+	}
+	// Sinon le Cœur, si on est tout près et tourné vers lui.
+	const ADRCore* Core = Chapter->GetCore();
+	bool bCore = false;
+	if (!Barrier && Core)
+	{
+		FVector To = Core->GetActorLocation() - GetActorLocation();
+		To.Z = 0.0;
+		const double Distance = To.Size();
+		bCore = Distance < 300.0 || (Distance < 480.0 && FVector::DotProduct(Flat, To / Distance) > 0.35);
+	}
+	if (!Barrier && !bCore)
+	{
+		return;
+	}
+	const FString Name = Barrier ? Barrier->GetDisplayName() : FString(TEXT("C\u0153ur"));
+	const float StructureHp = Barrier ? Barrier->GetHp() : Core->GetHp();
+	const float MaxHpValue = Barrier ? Barrier->GetMaxHp() : Core->GetMaxHp();
+	const float RepairCost = (float)Mode->Rule(TEXT("joueur"), TEXT("repair_cost"), 10.0);
+	if (bCore && !Core->IsAlive())
+	{
+		return;
+	}
+	if (StructureHp >= MaxHpValue)
+	{
+		Hint = FString::Printf(TEXT("%s en bon \u00E9tat"), *Name);
+	}
+	else if (Mode->GetScrap() <= 0)
+	{
+		Hint = TEXT("Plus de ferraille pour r\u00E9parer : ramasse celle des zombies abattus");
+	}
+	else
+	{
+		// Une barrière détruite se relève dès qu'elle a retrouvé assez de PV.
+		const bool bRebuilding = Barrier && !Barrier->IsAlive();
+		const float Goal = bRebuilding ? Barrier->GetRebuildHp() : MaxHpValue;
+		Hint = FString::Printf(TEXT("[Maintenir E] %s : %s   %d / %d PV\n1 ferraille pour %d PV"),
+			bRebuilding ? TEXT("relever") : TEXT("r\u00E9parer"), *Name, FMath::FloorToInt(StructureHp), FMath::RoundToInt(Goal), FMath::RoundToInt(RepairCost));
+		if (bInteractHeld)
+		{
+			Repair(DeltaSeconds, Barrier, bCore);
+		}
+	}
+}
+
+void ADRCharacter::Repair(float DeltaSeconds, ADRBarrier* Barrier, bool bCore)
+{
+	// 80 PV par seconde, 1 ferraille pour 10 PV (Godot : REPAIR_RATE, REPAIR_COST).
+	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	ADRCore* Core = Mode && Mode->GetChapter() ? Mode->GetChapter()->GetCore() : nullptr;
+	if (!Mode)
+	{
+		return;
+	}
+	const float Rate = (float)Mode->Rule(TEXT("joueur"), TEXT("repair_rate"), 80.0);
+	const float Cost = (float)Mode->Rule(TEXT("joueur"), TEXT("repair_cost"), 10.0);
+	RepairBank += Rate * DeltaSeconds;
+	while (RepairBank >= Cost)
+	{
+		if (Mode->GetScrap() <= 0)
+		{
+			RepairBank = 0.0f;
+			return;
+		}
+		Mode->AddScrap(-1);
+		RepairBank -= Cost;
+		if (Barrier)
+		{
+			Barrier->Repair(Cost);
+		}
+		else if (bCore && Core)
+		{
+			Core->Repair(Cost);
+		}
+	}
+}
+
+void ADRCharacter::InteractPressed()
+{
+	bInteractHeld = true;
+	ADRSocket* Socket = SightSocket.Get();
+	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	if (!CanAct() || !Socket || !Mode)
+	{
+		return;
+	}
+	if (ADRTower* Tower = Socket->GetTower())
+	{
+		Tower->Upgrade();
+	}
+	else if (Mode->GetBuildOrder().IsValidIndex(BuildChoice))
+	{
+		Socket->Build(Mode->GetBuildOrder()[BuildChoice]);
+	}
+}
+
+void ADRCharacter::InteractReleased()
+{
+	bInteractHeld = false;
+}
+
+void ADRCharacter::CyclePressed()
+{
+	if (SightSocket.IsValid() && !SightSocket->GetTower())
+	{
+		CycleBuild(1);
+	}
+}
+
+void ADRCharacter::CycleBuild(int32 Step)
+{
+	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	const int32 Count = Mode ? Mode->GetBuildOrder().Num() : 0;
+	if (Count > 0)
+	{
+		BuildChoice = ((BuildChoice + Step) % Count + Count) % Count;
+		PlaySfx(TEXT("ui_click"), -12.0f, 0.05f);
+	}
+}
+
+void ADRCharacter::PowerPressed()
+{
+	if (!CanAct() || !SightSocket.IsValid())
+	{
+		return;
+	}
+	if (ADRTower* Tower = SightSocket->GetTower())
+	{
+		Tower->TogglePower();
+	}
+}
+
+void ADRCharacter::MarkPressed()
+{
+	// Marque le zombie visé : les tours le prennent pour cible en priorité, et il prend 25 % de plus.
+	if (!CanAct())
+	{
+		return;
+	}
+	const FVector Start = Camera->GetComponentLocation();
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(DRMarquage), false, this);
+	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, Start + ViewRotation().Vector() * 12000.0, ECC_Visibility, Params))
+	{
+		if (ADRZombie* Zombie = Cast<ADRZombie>(Hit.GetActor()))
+		{
+			Zombie->Mark();
+		}
+	}
+}
+
 // ---------------------------------------------------------------- santé
 
 float ADRCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
@@ -638,6 +908,9 @@ void ADRCharacter::Die()
 	bAimHeld = false;
 	bAiming = false;
 	ReloadLeft = 0.0f;
+	bInteractHeld = false;
+	Hint.Reset();
+	SightSocket = nullptr;
 	// On reste où l'on est tombé, sans arme ; les zombies ne nous voient plus et passent au travers.
 	GunRoot->SetVisibility(false, true);
 	Tracer->SetVisibility(false);
@@ -707,6 +980,11 @@ void ADRCharacter::CreateInput()
 	Weapon2Action = NewAction(TEXT("Fusil"), EInputActionValueType::Boolean);
 	NextWeaponAction = NewAction(TEXT("ArmeSuivante"), EInputActionValueType::Boolean);
 	SkipAction = NewAction(TEXT("LancerVague"), EInputActionValueType::Boolean);
+	PreviousWeaponAction = NewAction(TEXT("ArmePrecedente"), EInputActionValueType::Boolean);
+	InteractAction = NewAction(TEXT("Interagir"), EInputActionValueType::Boolean);
+	CycleAction = NewAction(TEXT("ChoisirTour"), EInputActionValueType::Boolean);
+	PowerAction = NewAction(TEXT("AllumerTour"), EInputActionValueType::Boolean);
+	MarkAction = NewAction(TEXT("Marquer"), EInputActionValueType::Boolean);
 
 	Mapping = NewObject<UInputMappingContext>(this, TEXT("CommandesJoueur"));
 	// ZQSD en AZERTY. L'action donne (droite, avant) : Z et S passent sur l'axe avant, S et Q sont inversés.
@@ -740,8 +1018,13 @@ void ADRCharacter::CreateInput()
 	Mapping->MapKey(Weapon1Action, EKeys::One);
 	Mapping->MapKey(Weapon2Action, EKeys::E_AccentAigu);
 	Mapping->MapKey(Weapon2Action, EKeys::Two);
-	Mapping->MapKey(NextWeaponAction, EKeys::MouseScrollUp);
+	Mapping->MapKey(PreviousWeaponAction, EKeys::MouseScrollUp);
 	Mapping->MapKey(NextWeaponAction, EKeys::MouseScrollDown);
+	// E construire, améliorer, réparer (maintenu) ; C choisir la tour ; X allumer ou éteindre ; F marquer.
+	Mapping->MapKey(InteractAction, EKeys::E);
+	Mapping->MapKey(CycleAction, EKeys::C);
+	Mapping->MapKey(PowerAction, EKeys::X);
+	Mapping->MapKey(MarkAction, EKeys::F);
 	// Entrée : lancer la vague sans attendre, passer la récolte, recommencer en fin de partie.
 	Mapping->MapKey(SkipAction, EKeys::Enter);
 }
@@ -779,7 +1062,13 @@ void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	EnhancedInput->BindAction(ReloadAction, ETriggerEvent::Started, this, &ADRCharacter::ReloadPressed);
 	EnhancedInput->BindAction(Weapon1Action, ETriggerEvent::Started, this, &ADRCharacter::SelectPistol);
 	EnhancedInput->BindAction(Weapon2Action, ETriggerEvent::Started, this, &ADRCharacter::SelectRifle);
-	EnhancedInput->BindAction(NextWeaponAction, ETriggerEvent::Started, this, &ADRCharacter::NextWeapon);
+	EnhancedInput->BindAction(NextWeaponAction, ETriggerEvent::Started, this, &ADRCharacter::WheelDown);
+	EnhancedInput->BindAction(PreviousWeaponAction, ETriggerEvent::Started, this, &ADRCharacter::WheelUp);
+	EnhancedInput->BindAction(InteractAction, ETriggerEvent::Started, this, &ADRCharacter::InteractPressed);
+	EnhancedInput->BindAction(InteractAction, ETriggerEvent::Completed, this, &ADRCharacter::InteractReleased);
+	EnhancedInput->BindAction(CycleAction, ETriggerEvent::Started, this, &ADRCharacter::CyclePressed);
+	EnhancedInput->BindAction(PowerAction, ETriggerEvent::Started, this, &ADRCharacter::PowerPressed);
+	EnhancedInput->BindAction(MarkAction, ETriggerEvent::Started, this, &ADRCharacter::MarkPressed);
 	EnhancedInput->BindAction(SkipAction, ETriggerEvent::Started, this, &ADRCharacter::SkipPressed);
 }
 

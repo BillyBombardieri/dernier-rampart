@@ -14,7 +14,7 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 4 | Tir, pistolet et fusil | à tester (8 nov.) |
 | 5 | Zombies sur le chemin, barrières et Cœur avec PV, vie du joueur, barres de vie | à tester (8 nov.) |
 | 6 | Vagues, ferraille, points, victoire et défaite | à tester (8 nov.) |
-| 7 | Tours, marquage, combos | à faire |
+| 7 | Tours, énergie, marquage, combos, réparation des barrières et du Cœur | à tester (8 nov.) |
 | 8 | Interface, menu, réglages et touches modifiables | à faire |
 | ensuite | Autres chapitres, gadgets, établi, implants, améliorations, sauvegarde, tutoriel, sons, export Windows | à faire |
 
@@ -121,9 +121,20 @@ Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, 
 4. Vague repoussée : ta santé revient au maximum, tu reçois une prime de ferraille, puis 12 s de **récolte** pour ramasser le reste (Entrée pour passer).
 5. Les messages de la partie (vague qui arrive, nouveau type de zombie...) s'affichent quelques secondes sous le panneau du haut.
 6. **Défaite** si le Cœur tombe, **victoire** après la vague 10. Entrée recommence le niveau, ou passe au suivant après une victoire (c'est pour l'instant la seule façon de changer de niveau ; le menu arrive à l'étape 8).
-7. Le choix d'implant après les nuits de siège n'est pas encore là, ni les tours : la ferraille s'accumule en attendant l'étape 7.
+7. Le choix d'implant après les nuits de siège n'est pas encore là. La ferraille sert aux tours et aux réparations (étape 7, juste en dessous).
 
-## 12. Si ça ne marche pas
+## 12. Tester l'étape 7 : les tours
+
+1. Approche-toi d'un **ancrage** (dalle carrée au bord du chemin) et vise-le : des cartes apparaissent en bas, une par tour, avec leur prix en ferraille et en énergie. **C** ou la **molette** choisit la tour, **E** la construit. Un anneau au sol montre sa portée.
+2. Les six tours de Godot, mêmes prix et mêmes chiffres : Mitrailleuse (25), Cryo (30, ralentit), Lance-flammes (35, met le feu), Arc électrique (40, saute de zombie en zombie), Mortier (45, tire en cloche et étourdit) et Phare (30, marque les zombies et renforce les tours dans son halo).
+3. **Énergie** : 6 au départ (en haut à gauche). Chaque tour allumée en consomme 1 à 3 ; sans assez d'énergie, la tour est posée mais éteinte. Vise une tour et appuie sur **X** pour l'allumer ou l'éteindre.
+4. Vise une tour et appuie sur **E** pour l'améliorer (3 niveaux) : elle grossit un peu, tire plus fort et plus loin.
+5. **F** marque le zombie visé (« MARQUÉ » au-dessus de lui, même derrière un mur) : les tours le visent en premier et il prend 25 % de dégâts en plus.
+6. **Combos**, comme dans Godot : pistolet sur un zombie gelé = **BRISÉ** (dégâts x3) ; tir sur un zombie chargé par l'Arc = **SURCHARGE** (onde qui blesse et étourdit autour) ; obus de Mortier sur un zombie en feu = **EMBRASEMENT**. Un petit texte s'affiche à chaque fois. Sous la barre de vie, des points de couleur montrent les états : bleu gelé, orange en feu, violet chargé, jaune étourdi.
+7. **Réparer** : va près d'une barrière abîmée (ou du Cœur) et **maintiens E** : 1 ferraille pour 10 PV. Une barrière détruite se relève quand elle a retrouvé 30 % de ses PV.
+8. Les tours n'ont pas encore de vraies flammes ni de glace (seulement des lumières et des traits lumineux) : les effets viendront plus tard. Dis-moi si une tour vise de travers ou si son canon pointe dans le mauvais sens.
+
+## 13. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

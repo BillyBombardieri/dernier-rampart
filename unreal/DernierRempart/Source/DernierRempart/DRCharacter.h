@@ -4,6 +4,9 @@
 #include "GameFramework/Character.h"
 #include "DRCharacter.generated.h"
 
+class ADRBarrier;
+class ADRSocket;
+class ADRTower;
 class UCameraComponent;
 class UInputAction;
 class UInputMappingContext;
@@ -42,7 +45,8 @@ struct FDRWeapon
  * gravité 20 m/s², capsule de 1,8 m, yeux à 1,6 m. Deux armes (pistolet lourd, fusil d'assaut)
  * avec dispersion, recul de la vue, visée, rechargement, flash, traçante et sons.
  * 100 PV : à terre, on revient au Cœur après quelques secondes pendant que les tours défendent.
- * Touches par défaut en AZERTY : ZQSD, Espace, Maj, clic gauche, clic droit, R, & et é (ou molette), Entrée pour lancer la vague.
+ * Touches par défaut en AZERTY : ZQSD, Espace, Maj, clic gauche, clic droit, R, & et é (ou molette), E construire, améliorer ou réparer, C choisir la tour, X allumer ou
+ * éteindre une tour, F marquer un zombie, Entrée pour lancer la vague.
  */
 UCLASS()
 class DERNIERREMPART_API ADRCharacter : public ACharacter
@@ -65,6 +69,11 @@ public:
 	float GetRespawnLeft() const { return RespawnLeft; }
 	/** Rougeur des bords de l'écran après un coup (0 à 1). */
 	float GetHurt() const { return Hurt; }
+	/** Ce qu'on peut faire avec ce qu'on vise (construire, améliorer, réparer...), ou vide. */
+	const FString& GetHint() const { return Hint; }
+	/** Ancrage visé (avec ou sans tour), et tour choisie pour la construction. */
+	ADRSocket* GetSightSocket() const { return SightSocket.Get(); }
+	int32 GetBuildChoice() const { return BuildChoice; }
 	bool HasWeapon() const { return Weapons.IsValidIndex(CurrentWeapon); }
 	const FDRWeapon& GetWeapon() const { return Weapons[CurrentWeapon]; }
 	int32 GetAmmo() const { return Ammo[CurrentWeapon]; }
@@ -106,6 +115,16 @@ private:
 	void Die();
 	void Respawn();
 	void SkipPressed();
+	void UpdateInteraction(float DeltaSeconds);
+	void Repair(float DeltaSeconds, ADRBarrier* Barrier, bool bCore);
+	void InteractPressed();
+	void InteractReleased();
+	void CyclePressed();
+	void WheelUp();
+	void WheelDown();
+	void CycleBuild(int32 Step);
+	void PowerPressed();
+	void MarkPressed();
 	/** Vivant et partie pas finie : on peut bouger, tirer, recharger. */
 	bool CanAct() const;
 
@@ -167,6 +186,21 @@ private:
 	UPROPERTY(Transient)
 	TObjectPtr<UInputAction> SkipAction;
 
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> PreviousWeaponAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> InteractAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> CycleAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> PowerAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> MarkAction;
+
 	/** Multiplicateur de sensibilité de la souris (1 = comme le réglage par défaut de Godot). */
 	UPROPERTY(EditAnywhere, Category = "Joueur")
 	float Sensitivity = 1.0f;
@@ -178,6 +212,13 @@ private:
 	float RespawnLeft = 0.0f;
 	int32 Deaths = 0;
 	float Hurt = 0.0f;
+
+	// Construction, améliorations et réparations (Godot : _handle_interaction).
+	TWeakObjectPtr<ADRSocket> SightSocket;
+	FString Hint;
+	int32 BuildChoice = 0;
+	bool bInteractHeld = false;
+	float RepairBank = 0.0f;
 
 	TArray<FDRWeapon> Weapons;
 	TArray<int32> Ammo;

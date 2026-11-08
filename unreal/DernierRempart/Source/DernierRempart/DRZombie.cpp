@@ -14,6 +14,7 @@
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
+#include "EngineUtils.h"
 #include "GameFramework/CharacterMovementComponent.h"
 #include "GameFramework/DamageType.h"
 #include "Kismet/GameplayStatics.h"
@@ -241,10 +242,17 @@ void ADRZombie::Tick(float DeltaSeconds)
 	BarAlpha = BarShown > 0.0f
 		? FMath::Min(1.0f, BarAlpha + DeltaSeconds / 0.15f)
 		: FMath::Max(0.0f, BarAlpha - DeltaSeconds);
+	UpdateStatus(DeltaSeconds);
+	if (bDead)
+	{
+		return;
+	}
 	if (!Chapter || Chapter->GetPath().Num() < 2)
 	{
 		return;
 	}
+	// Gelé : il avance à 35 % de sa vitesse.
+	GetCharacterMovement()->MaxWalkSpeed = Speed * 100.0f * (FrozenTime > 0.0f ? 0.35f : 1.0f);
 	AttackCooldown -= DeltaSeconds;
 	GroanCooldown -= DeltaSeconds;
 	if (GroanCooldown <= 0.0f)
@@ -260,6 +268,12 @@ void ADRZombie::Tick(float DeltaSeconds)
 		{
 			Strike();
 		}
+	}
+	// Étourdi : il reste sur place, sans frapper.
+	if (StunTime > 0.0f)
+	{
+		UpdateAnimation(DeltaSeconds);
+		return;
 	}
 	ThinkCooldown -= DeltaSeconds;
 	if (ThinkCooldown <= 0.0f)
@@ -361,6 +375,7 @@ float ADRZombie::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 	}
 	float Amount = DamageAmount;
 	const bool bFromPlayer = EventInstigator && EventInstigator->IsPlayerController();
+	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
 	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{
 		const FPointDamageEvent& Point = static_cast<const FPointDamageEvent&>(DamageEvent);
@@ -369,11 +384,32 @@ float ADRZombie::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 		if (bFromPlayer && Where.Z > HeadHeight() - 2.0f * Size)
 		{
 			Amount *= DRZombieRules::HeadshotMultiplier;
+			if (Mode)
+			{
+				Mode->Popup(TEXT("T\u00CATE"), Where + FVector(0.0, 0.0, 40.0), FLinearColor(1.0f, 0.4f, 0.3f), 40.0f);
+			}
 		}
 		if (bFromPlayer)
 		{
 			DRLook::PlayAt(this, TEXT("hit_flesh"), Where, -2.0f, 0.15f);
 		}
+	}
+	// Combo BRISÉ : un tir d'arme lourde sur un zombie gelé fait trois fois plus de dégâts.
+	const bool bHeavy = DamageEvent.DamageTypeClass && DamageEvent.DamageTypeClass->IsChildOf(UDRHeavyDamage::StaticClass());
+	if (bFromPlayer && bHeavy && FrozenTime > 0.0f)
+	{
+		Amount *= 3.0f;
+		FrozenTime = 0.0f;
+		if (Mode)
+		{
+			Mode->AddScore(10);
+			Mode->Popup(TEXT("BRIS\u00C9 !"), GetActorLocation() + FVector(0.0, 0.0, (220.0 - 95.0) * Size), FLinearColor(0.6f, 0.9f, 1.0f), 64.0f);
+		}
+	}
+	// Combo SURCHARGE : un tir sur un zombie chargé libère une onde électrique autour de lui.
+	if (bFromPlayer && ChargedTime > 0.0f)
+	{
+		Amount += Surcharge();
 	}
 	Hp -= Amount;
 	BarShown = 6.0f;
@@ -390,6 +426,7 @@ void ADRZombie::Die()
 	Hp = 0.0f;
 	BarShown = 0.0f;
 	BarAlpha = 0.0f;
+	MarkedTime = FrozenTime = BurnTime = ChargedTime = StunTime = 0.0f;
 	StrikeTarget = nullptr;
 	GetCapsuleComponent()->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	GetCharacterMovement()->StopMovementImmediately();
@@ -468,6 +505,119 @@ void ADRZombie::UpdateAnimation(float DeltaSeconds)
 	}
 	else
 	{
-		PlayLoop(TEXT("idle"), 1.0f);
+		PlayLoop(TEXT("idle"), StunTime > 0.0f ? 0.5f : 1.0f);
 	}
+}
+
+// ---------------------------------------------------------------- états
+
+void ADRZombie::Mark()
+{
+	if (!bDead)
+	{
+		MarkedTime = 8.0f;
+	}
+}
+
+void ADRZombie::Freeze(float Duration)
+{
+	if (!bDead)
+	{
+		FrozenTime = FMath::Max(FrozenTime, Duration);
+	}
+}
+
+void ADRZombie::Ignite(float Duration, float Dps)
+{
+	if (!bDead)
+	{
+		BurnTime = FMath::Max(BurnTime, Duration);
+		BurnDps = FMath::Max(BurnDps, Dps);
+	}
+}
+
+void ADRZombie::Charge(float Duration)
+{
+	if (!bDead)
+	{
+		ChargedTime = FMath::Max(ChargedTime, Duration);
+	}
+}
+
+void ADRZombie::Stun(float Duration)
+{
+	// Le boss ne se laisse pas étourdir. Un coup en préparation est interrompu.
+	if (bDead || Type == TEXT("boss"))
+	{
+		return;
+	}
+	StunTime = FMath::Max(StunTime, Duration);
+	StrikeTarget = nullptr;
+	ActionTime = 0.0f;
+}
+
+void ADRZombie::UpdateStatus(float DeltaSeconds)
+{
+	FrozenTime = FMath::Max(0.0f, FrozenTime - DeltaSeconds);
+	MarkedTime = FMath::Max(0.0f, MarkedTime - DeltaSeconds);
+	StunTime = FMath::Max(0.0f, StunTime - DeltaSeconds);
+	ChargedTime = FMath::Max(0.0f, ChargedTime - DeltaSeconds);
+	if (BurnTime > 0.0f)
+	{
+		// Le feu ronge ses PV par petites bouchées, quatre fois par seconde.
+		BurnTime -= DeltaSeconds;
+		BurnTick += DeltaSeconds;
+		if (BurnTick >= 0.25f)
+		{
+			ApplyDot(BurnDps * BurnTick);
+			BurnTick = 0.0f;
+		}
+	}
+	else
+	{
+		BurnDps = 0.0f;
+	}
+}
+
+void ADRZombie::ApplyDot(float Amount)
+{
+	if (bDead)
+	{
+		return;
+	}
+	Hp -= Amount;
+	BarShown = 6.0f;
+	if (Hp <= 0.0f)
+	{
+		Die();
+	}
+}
+
+float ADRZombie::Surcharge()
+{
+	// Décharge la cible, blesse et étourdit les zombies à moins de 5 m (Godot : _surcharge).
+	ChargedTime = 0.0f;
+	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	const float Damage45 = 45.0f * (Mode ? Mode->ComboScale() : 1.0f);
+	if (Mode)
+	{
+		Mode->AddScore(10);
+		Mode->Popup(TEXT("SURCHARGE !"), GetActorLocation() + FVector(0.0, 0.0, (240.0 - 95.0) * Size), FLinearColor(0.75f, 0.65f, 1.0f), 64.0f);
+	}
+	DRLook::PlayAt(this, TEXT("zap"), GetActorLocation() + FVector(0.0, 0.0, 30.0 * Size), 3.0f, 0.1f);
+	TArray<ADRZombie*> Around;
+	for (TActorIterator<ADRZombie> It(GetWorld()); It; ++It)
+	{
+		if (*It != this && !It->IsDead() && FlatDistance(It->GetActorLocation()) < 500.0)
+		{
+			Around.Add(*It);
+		}
+	}
+	for (ADRZombie* Other : Around)
+	{
+		Other->Stun(0.8f);
+		UGameplayStatics::ApplyDamage(Other, Damage45, nullptr, this, UDamageType::StaticClass());
+	}
+	Stun(0.8f);
+	return Damage45;
 }

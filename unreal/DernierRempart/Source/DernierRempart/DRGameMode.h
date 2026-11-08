@@ -29,6 +29,16 @@ struct FDRDifficulty
 	int32 Bosses = 1;
 };
 
+/** Texte qui monte et s'efface au-dessus d'un zombie (« TÊTE », « BRISÉ ! »...). */
+struct FDRPopup
+{
+	FString Text;
+	FVector Location = FVector::ZeroVector;
+	FLinearColor Color = FLinearColor::White;
+	float Size = 48.0f;
+	float Time = 0.0f;
+};
+
 /** Message affiché quelques secondes en haut de l'écran. */
 struct FDRMessage
 {
@@ -67,8 +77,23 @@ public:
 	/** Entrée : lance la vague, passe la récolte, ou relance la partie quand elle est finie. */
 	void SkipPhase();
 	void AddScrap(int32 Amount);
+	/** Dépense de la ferraille, ou dit qu'il en manque et renvoie faux. */
+	bool TrySpend(int32 Amount);
 	void AddScore(int32 Points);
 	void Say(const FString& Text);
+	void Popup(const FString& Text, const FVector& Location, const FLinearColor& Color, float Size = 48.0f);
+	/** Les combos suivent la montée en puissance des zombies au fil des vagues. */
+	float ComboScale() const { return 1.0f + 0.15f * FMath::Max(0, Wave - 1); }
+
+	// Énergie des tours (Godot : 6 au départ, chaque tour allumée en consomme 1 à 3).
+	int32 GetEnergyUsed() const { return EnergyUsed; }
+	int32 GetEnergyCap() const;
+	bool RequestEnergy(int32 Amount);
+	void ReleaseEnergy(int32 Amount);
+
+	/** Chiffres d'une tour (jeu.json, « tours ») et ordre du choix de construction. */
+	TSharedPtr<FJsonObject> GetTowerData(const FString& Type) const;
+	const TArray<FString>& GetBuildOrder() const { return BuildOrder; }
 	/** Appelé par un zombie quand il meurt : points, ferraille au sol, fin de vague. */
 	void ZombieDied(ADRZombie* Zombie);
 	/** Appelé par le Cœur quand il tombe. */
@@ -93,6 +118,7 @@ public:
 	bool IsVictory() const { return bVictory; }
 	bool HasNextLevel() const { return Level + 1 < LevelCount; }
 	const TArray<FDRMessage>& GetMessages() const { return Messages; }
+	const TArray<FDRPopup>& GetPopups() const { return Popups; }
 
 private:
 	void LoadLevel(const FString& Options);
@@ -149,5 +175,8 @@ private:
 	bool bOver = false;
 	bool bVictory = false;
 	bool bStarted = false;
+	int32 EnergyUsed = 0;
+	TArray<FString> BuildOrder;
 	TArray<FDRMessage> Messages;
+	TArray<FDRPopup> Popups;
 };
