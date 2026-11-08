@@ -18,6 +18,7 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 8 | Talents des zombies spéciaux : crachat du Cracheur, cri du Hurleur, terrier du Fouisseur | à tester (8 nov.) |
 | 9 | Menu principal, choix du niveau, pause, sauvegarde de la progression | à tester (8 nov.) |
 | 10 | Réglages (souris, son, champ de vision, qualité) et touches modifiables | à tester (8 nov.) |
+| 11 | Insignes et améliorations permanentes | à tester (8 nov.) |
 | ensuite | Autres chapitres, gadgets, établi, implants, améliorations, sauvegarde, tutoriel, sons, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
@@ -164,7 +165,15 @@ Ils arrivent à partir de la vague 3 : **Entrée** lance chaque vague sans atten
 5. Les textes d'aide du jeu (rappel des touches, « E construire », « [Entrée] lancer la vague »...) affichent tes nouvelles touches. Échap reste toujours la pause et la molette change toujours d'arme ou de tour.
 6. Ferme Unreal et rouvre-le : les réglages et les touches doivent être restés (même fichier `Progression.sav`).
 
-## 16. Si ça ne marche pas
+## 16. Tester l'étape 11 : insignes et améliorations permanentes
+
+1. Chaque partie rapporte des **insignes** : 1 par vague repoussée (un peu plus dans les niveaux durs), plus 5 en cas de victoire. L'écran de fin affiche « +N insignes » et le total à dépenser.
+2. Dans le menu principal, le nouveau bouton **AMÉLIORATIONS** ouvre les sept améliorations de la version Godot : Vitalité, Armurier, Ingénieur, Maçonnerie, Réserves, Récupération, Dynamo. Chaque case orange est un rang acheté.
+3. **ACHETER** dépense les insignes (le bouton est grisé s'il en manque). **TOUT REMBOURSER** rend tous les insignes dépensés.
+4. Les achats comptent dès la partie suivante : par exemple Réserves donne 65 ferraille au départ au lieu de 55, Vitalité monte la barre de vie au-dessus de 100, Dynamo ajoute 1 à l'énergie.
+5. Insignes et améliorations sont gardés dans le même fichier `Progression.sav`.
+
+## 17. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

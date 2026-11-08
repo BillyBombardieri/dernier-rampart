@@ -35,8 +35,9 @@ bool UDRSave::SubmitScore(int32 FinalScore, int32 ReachedWave)
 	return bRecord;
 }
 
-bool UDRSave::FinishLevel(int32 LevelIndex, bool bWon, int32 LevelTotal)
+bool UDRSave::FinishLevel(int32 LevelIndex, bool bWon, int32 LevelTotal, int32 Earned)
 {
+	Insignes += FMath::Max(0, Earned);
 	if (!bWon)
 	{
 		return false;

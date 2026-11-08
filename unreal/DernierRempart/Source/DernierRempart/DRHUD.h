@@ -15,7 +15,8 @@ class UFont;
  * zombies blessés et leurs états (marqué, gelé, en feu, chargé, étourdi), noms et portée des
  * tours, choix de la tour à construire, ce qu'on peut faire avec ce qu'on vise, textes des combos,
  * écran rougi quand on est touché, message quand on tombe, fin de partie. Menus à la souris :
- * menu principal et choix du niveau, pause, réglages et touches, boutons de fin de partie.
+ * menu principal, choix du niveau et améliorations permanentes, pause, réglages et touches,
+ * boutons de fin de partie.
  */
 UCLASS()
 class DERNIERREMPART_API ADRHUD : public AHUD
@@ -25,7 +26,7 @@ class DERNIERREMPART_API ADRHUD : public AHUD
 public:
 	virtual void DrawHUD() override;
 
-	/** Échap : annule l'attente d'une touche, ferme les réglages ou le choix du niveau. Vrai si c'était le cas. */
+	/** Échap : annule l'attente d'une touche, ferme les réglages, le choix du niveau ou les améliorations. Vrai si c'était le cas. */
 	bool Back();
 	bool IsInSettings() const { return bSettingsOpen; }
 
@@ -53,6 +54,8 @@ private:
 	bool Button(const FString& Text, float X, float Y, float Width, float Height, float TextSize, bool bEnabled = true, bool bHighlight = false, bool bDone = false);
 	void DrawMainMenu(ADRGameMode* Mode);
 	void DrawLevels(ADRGameMode* Mode);
+	/** Améliorations permanentes (Godot : upgrade_panel.gd), achetées avec les insignes. */
+	void DrawUpgrades(ADRGameMode* Mode);
 	void DrawPause(ADRGameMode* Mode);
 	/** Réglages (Godot : settings_panel.gd) : souris, volume, champ de vision, qualité, touches. */
 	void DrawSettings(ADRGameMode* Mode);
@@ -78,6 +81,8 @@ private:
 	bool bMouseSynced = false;
 	/** Menu principal : choix du niveau ouvert (sinon l'accueil). */
 	bool bLevelsPage = false;
+	/** Menu principal : améliorations permanentes ouvertes. */
+	bool bUpgradesPage = false;
 	/** Réglages ouverts, depuis le menu principal ou la pause. */
 	bool bSettingsOpen = false;
 	/** Action dont on attend la nouvelle touche (aucune sinon). */

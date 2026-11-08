@@ -75,16 +75,17 @@ void ADRHUD::DrawHUD()
 		bSettingsOpen = false;
 		WaitingKey = NAME_None;
 	}
-	if (Mode && Mode->IsMainMenu())
-	{
-		DrawMainMenu(Mode);
-		return;
-	}
+	// Point de vue d'abord : les sons des boutons du menu se jouent à la caméra.
 	if (APlayerController* PlayerController = GetOwningPlayerController())
 	{
 		FRotator View;
 		PlayerController->GetPlayerViewPoint(ViewEye, View);
 		ViewForward = View.Vector();
+	}
+	if (Mode && Mode->IsMainMenu())
+	{
+		DrawMainMenu(Mode);
+		return;
 	}
 
 	DrawTowers(Player);
@@ -554,7 +555,7 @@ void ADRHUD::DrawEnd()
 	}
 	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
 	const float Width = 760.0f * Scale;
-	const float Height = 380.0f * Scale;
+	const float Height = 420.0f * Scale;
 	const float Left = (Canvas->ClipX - Width) * 0.5f;
 	const float Top = (Canvas->ClipY - Height) * 0.5f;
 	const float CenterX = Canvas->ClipX * 0.5f;
@@ -567,6 +568,10 @@ void ADRHUD::DrawEnd()
 	DrawLabel(Summary, FLinearColor::White, CenterX, Top + 115.0f * Scale, 0.8f, 0.5f);
 	DrawLabel(FString::Printf(TEXT("Score : %d points  \u00B7  %d zombies abattus"), Mode->GetScore(), Mode->GetKills()),
 		FLinearColor(0.9f, 0.9f, 0.9f), CenterX, Top + 160.0f * Scale, 0.7f, 0.5f);
+	// Insignes gagnés, à dépenser dans les améliorations permanentes du menu principal.
+	const UDRSave* Progress = Mode->GetProgress();
+	DrawLabel(FString::Printf(TEXT("+%d insignes  (%d \u00E0 d\u00E9penser dans Am\u00E9liorations)"), Mode->GetEarnedInsignes(), Progress ? Progress->Insignes : 0),
+		FLinearColor(0.85f, 0.85f, 0.85f), CenterX, Top + 198.0f * Scale, 0.62f, 0.5f);
 	// Record et niveau débloqué (sauvegardés sur le PC).
 	FString News;
 	if (Mode->IsNewRecord())
@@ -583,7 +588,7 @@ void ADRHUD::DrawEnd()
 	}
 	if (!News.IsEmpty())
 	{
-		DrawLabel(News, DRHUDStyle::Accent, CenterX, Top + 200.0f * Scale, 0.7f, 0.5f);
+		DrawLabel(News, DRHUDStyle::Accent, CenterX, Top + 238.0f * Scale, 0.7f, 0.5f);
 	}
 	// Boutons : niveau suivant ou recommencer, et menu principal. Entrée marche toujours.
 	const float ButtonWidth = 260.0f * Scale;
@@ -876,6 +881,11 @@ void ADRHUD::DrawMainMenu(ADRGameMode* Mode)
 		DrawSettings(Mode);
 		return;
 	}
+	if (bUpgradesPage)
+	{
+		DrawUpgrades(Mode);
+		return;
+	}
 	const UDRSave* Progress = Mode->GetProgress();
 	const float CenterX = Canvas->ClipX * 0.5f;
 	float Y = Canvas->ClipY * 0.5f - 290.0f * Scale;
@@ -891,6 +901,11 @@ void ADRHUD::DrawMainMenu(ADRGameMode* Mode)
 		bLevelsPage = true;
 	}
 	Y += 68.0f * Scale;
+	if (Button(TEXT("AM\u00C9LIORATIONS"), Left, Y, Width, 50.0f * Scale, 0.8f))
+	{
+		bUpgradesPage = true;
+	}
+	Y += 62.0f * Scale;
 	if (Button(TEXT("R\u00C9GLAGES"), Left, Y, Width, 50.0f * Scale, 0.8f))
 	{
 		bSettingsOpen = true;
@@ -908,6 +923,9 @@ void ADRHUD::DrawMainMenu(ADRGameMode* Mode)
 	Y += 32.0f * Scale;
 	DrawLabel(FString::Printf(TEXT("Niveaux d\u00E9bloqu\u00E9s : %d / %d   \u00B7   [%s] jouer le niveau %s"),
 		(Progress ? Progress->UnlockedLevel : 0) + 1, Mode->GetLevelCount(), *DRHUDStyle::KeyOf(Mode, TEXT("vague")), *Mode->GetLevelShort()),
+		FLinearColor(0.85f, 0.85f, 0.85f), CenterX, Y, 0.55f, 0.5f);
+	Y += 28.0f * Scale;
+	DrawLabel(FString::Printf(TEXT("%d insignes \u00E0 d\u00E9penser dans Am\u00E9liorations"), Progress ? Progress->Insignes : 0),
 		FLinearColor(0.85f, 0.85f, 0.85f), CenterX, Y, 0.55f, 0.5f);
 	DrawLabel(TEXT("Portage Unreal Engine 5 en cours  \u00B7  clavier AZERTY"), FLinearColor(1.0f, 1.0f, 1.0f, 0.4f), 16.0f * Scale, Canvas->ClipY - 34.0f * Scale, 0.45f);
 }
@@ -1034,12 +1052,77 @@ bool ADRHUD::Back()
 		bSettingsOpen = false;
 		return true;
 	}
-	if (bLevelsPage)
+	if (bLevelsPage || bUpgradesPage)
 	{
 		bLevelsPage = false;
+		bUpgradesPage = false;
 		return true;
 	}
 	return false;
+}
+
+void ADRHUD::DrawUpgrades(ADRGameMode* Mode)
+{
+	// Améliorations permanentes (Godot : upgrade_panel.gd) : on dépense les insignes gagnés en jouant.
+	// Les achats sont sauvegardés tout de suite et comptent dès la partie suivante.
+	const UDRSave* Progress = Mode->GetProgress();
+	const int32 Insignes = Progress ? Progress->Insignes : 0;
+	const TArray<FName>& Ids = ADRGameMode::GetUpgradeIds();
+	const float Width = 900.0f * Scale;
+	const float Pad = 24.0f * Scale;
+	const float RowHeight = 44.0f * Scale;
+	const float RowGap = 8.0f * Scale;
+	const float Height = Pad * 2.0f + 50.0f * Scale + 56.0f * Scale + Ids.Num() * (RowHeight + RowGap) + 8.0f * Scale + 42.0f * Scale;
+	const float Left = (Canvas->ClipX - Width) * 0.5f;
+	const float Top = FMath::Max(10.0f * Scale, (Canvas->ClipY - Height) * 0.5f);
+	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Height);
+	float Y = Top + Pad;
+	DrawLabel(TEXT("AM\u00C9LIORATIONS PERMANENTES"), DRHUDStyle::Accent, Left + Pad, Y, 1.1f);
+	DrawLabel(FString::Printf(TEXT("%d insignes"), Insignes), DRHUDStyle::Accent, Left + Width - Pad, Y + 8.0f * Scale, 0.85f, 1.0f);
+	Y += 50.0f * Scale;
+	const TArray<FString> Lines = Wrap(TEXT("Chaque partie rapporte des insignes : 1 par vague repouss\u00E9e (plus dans les niveaux durs), et une prime en cas de victoire."),
+		0.48f, Width - 2.0f * Pad);
+	for (int32 Line = 0; Line < FMath::Min(2, Lines.Num()); ++Line)
+	{
+		DrawLabel(Lines[Line], FLinearColor(0.65f, 0.65f, 0.65f), Left + Pad, Y + 22.0f * Scale * Line, 0.48f);
+	}
+	Y += 56.0f * Scale;
+	const float BuyWidth = 190.0f * Scale;
+	const float Pip = 14.0f * Scale;
+	const float PipGap = 6.0f * Scale;
+	for (const FName& Id : Ids)
+	{
+		DrawRect(FLinearColor(1.0f, 1.0f, 1.0f, 0.04f), Left + Pad, Y, Width - 2.0f * Pad, RowHeight);
+		DrawLabel(Mode->GetUpgradeText(Id, TEXT("name")), FLinearColor::White, Left + Pad + 12.0f * Scale, Y + 11.0f * Scale, 0.65f);
+		DrawLabel(Mode->GetUpgradeText(Id, TEXT("desc")) + TEXT(" par rang"), FLinearColor(0.85f, 0.85f, 0.85f), Left + Pad + 210.0f * Scale, Y + 13.0f * Scale, 0.5f);
+		// Rangs : une case orange par rang acheté, grise pour ceux qui restent.
+		const int32 Rank = Mode->GetUpgradeRank(Id);
+		const int32 MaxRank = Mode->GetUpgradeMaxRank(Id);
+		const float PipsLeft = Left + Width - Pad - 12.0f * Scale - BuyWidth - 24.0f * Scale - 3.0f * (Pip + PipGap);
+		for (int32 Step = 0; Step < MaxRank; ++Step)
+		{
+			DrawRect(Step < Rank ? DRHUDStyle::Accent : FLinearColor(1.0f, 1.0f, 1.0f, 0.15f), PipsLeft + Step * (Pip + PipGap), Y + (RowHeight - Pip) * 0.5f, Pip, Pip);
+		}
+		const int32 Cost = Mode->GetUpgradeCost(Id);
+		const FString BuyText = Cost < 0 ? FString(TEXT("MAXIMUM")) : FString::Printf(TEXT("ACHETER (%d)"), Cost);
+		if (Button(BuyText, Left + Width - Pad - 6.0f * Scale - BuyWidth, Y + 5.0f * Scale, BuyWidth, RowHeight - 10.0f * Scale, 0.5f, Cost >= 0 && Insignes >= Cost))
+		{
+			if (Mode->BuyUpgrade(Id))
+			{
+				DRLook::PlayAt(this, TEXT("upgrade"), ViewEye, -6.0f, 0.05f);
+			}
+		}
+		Y += RowHeight + RowGap;
+	}
+	Y += 8.0f * Scale;
+	if (Button(TEXT("TOUT REMBOURSER"), Left + Pad, Y, 240.0f * Scale, 42.0f * Scale, 0.55f))
+	{
+		Mode->RefundUpgrades();
+	}
+	if (Button(TEXT("RETOUR"), Left + Width - Pad - 170.0f * Scale, Y, 170.0f * Scale, 42.0f * Scale, 0.6f, true, true))
+	{
+		bUpgradesPage = false;
+	}
 }
 
 void ADRHUD::PollRebind(ADRGameMode* Mode)

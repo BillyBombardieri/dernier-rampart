@@ -28,6 +28,7 @@ struct FDRDifficulty
 	float Spawn = 1.0f;
 	int32 Early = 0;
 	int32 Bosses = 1;
+	float Points = 1.0f; // multiplicateur des insignes gagnés
 };
 
 /** Texte qui monte et s'efface au-dessus d'un zombie (« TÊTE », « BRISÉ ! »...). */
@@ -152,7 +153,28 @@ public:
 	const TArray<FDRPopup>& GetPopups() const { return Popups; }
 	const TArray<FDRRing>& GetRings() const { return Rings; }
 
+	/**
+	 * Améliorations permanentes (Godot : upgrades.gd, chiffres de jeu.json « ameliorations »),
+	 * achetées avec les insignes dans le menu principal. Elles comptent dès la partie suivante.
+	 */
+	static const TArray<FName>& GetUpgradeIds();
+	int32 GetUpgradeRank(FName Id) const;
+	int32 GetUpgradeMaxRank(FName Id) const;
+	/** Prix du prochain rang en insignes, -1 si l'amélioration est au maximum. */
+	int32 GetUpgradeCost(FName Id) const;
+	/** Bonus total (rang x bonus par rang), et multiplicateur 1 + bonus pour les pourcentages. */
+	float UpgradeBonus(FName Id) const;
+	float UpgradeMult(FName Id) const { return 1.0f + UpgradeBonus(Id); }
+	/** « name » ou « desc » d'une amélioration. */
+	FString GetUpgradeText(FName Id, const TCHAR* Field) const;
+	bool BuyUpgrade(FName Id);
+	/** Rend tous les insignes dépensés et remet les améliorations à zéro. */
+	void RefundUpgrades();
+	/** Insignes gagnés à la fin de cette partie. */
+	int32 GetEarnedInsignes() const { return EarnedInsignes; }
+
 private:
+	TSharedPtr<FJsonObject> GetUpgradeData(FName Id) const;
 	void LoadLevel(const FString& Options);
 	void EnterPhase(EDRPhase NewPhase, float Duration);
 	void BuildQueue();
@@ -215,6 +237,7 @@ private:
 	bool bPauseMenu = false;
 	bool bNewRecord = false;
 	bool bUnlockedNext = false;
+	int32 EarnedInsignes = 0;
 	int32 EnergyUsed = 0;
 	TArray<FString> BuildOrder;
 	TArray<FDRMessage> Messages;

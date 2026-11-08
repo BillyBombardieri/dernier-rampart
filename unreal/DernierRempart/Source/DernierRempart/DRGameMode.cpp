@@ -54,7 +54,8 @@ void ADRGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 	LoadLevel(Options);
 	LastWave = (int32)Rule(TEXT("partie"), TEXT("last_wave"), 10.0);
 	SiegeEvery = (int32)Rule(TEXT("vagues"), TEXT("siege_every"), 5.0);
-	Scrap = (int32)Rule(TEXT("partie"), TEXT("start_scrap"), 55.0);
+	// Amélioration « Réserves » : plus de ferraille au départ.
+	Scrap = (int32)Rule(TEXT("partie"), TEXT("start_scrap"), 55.0) + (int32)UpgradeBonus(TEXT("reserves"));
 	// Ordre des tours dans le choix de construction (Godot : Tower.BUILD_ORDER).
 	const TSharedPtr<FJsonObject>* TowerRules = nullptr;
 	const TArray<TSharedPtr<FJsonValue>>* Order = nullptr;
@@ -115,6 +116,7 @@ void ADRGameMode::LoadLevel(const FString& Options)
 				Difficulty.Spawn = (float)DRData::Number(*Diff, TEXT("spawn"), 1.0);
 				Difficulty.Early = (int32)DRData::Number(*Diff, TEXT("early"), 0.0);
 				Difficulty.Bosses = (int32)DRData::Number(*Diff, TEXT("bosses"), 1.0);
+				Difficulty.Points = (float)DRData::Number(*Diff, TEXT("points"), 1.0);
 			}
 		}
 	}
@@ -195,8 +197,8 @@ bool ADRGameMode::TrySpend(int32 Amount)
 
 int32 ADRGameMode::GetEnergyCap() const
 {
-	// Le générateur de l'établi et l'implant Cœur de batterie viendront plus tard.
-	return (int32)Rule(TEXT("partie"), TEXT("energy_base"), 6.0);
+	// Le générateur de l'établi et l'implant Cœur de batterie viendront plus tard. « Dynamo » : +1 par rang.
+	return (int32)Rule(TEXT("partie"), TEXT("energy_base"), 6.0) + (int32)UpgradeBonus(TEXT("dynamo"));
 }
 
 bool ADRGameMode::RequestEnergy(int32 Amount)
@@ -441,7 +443,9 @@ void ADRGameMode::WaveCleared()
 		EndGame(true);
 		return;
 	}
-	Bonus = FMath::RoundToInt((float)(Rule(TEXT("partie"), TEXT("wave_scrap_base"), 10.0) + Rule(TEXT("partie"), TEXT("wave_scrap_per_wave"), 5.0) * Wave));
+	// Amélioration « Récupération » : prime de vague plus grosse.
+	Bonus = FMath::RoundToInt((float)(Rule(TEXT("partie"), TEXT("wave_scrap_base"), 10.0) + Rule(TEXT("partie"), TEXT("wave_scrap_per_wave"), 5.0) * Wave)
+		* UpgradeMult(TEXT("recuperation")));
 	AddScrap(Bonus);
 	// Entre deux vagues, le joueur récupère toute sa santé. (Le choix d'implant après un siège
 	// viendra avec les implants.)
@@ -547,13 +551,116 @@ void ADRGameMode::EndGame(bool bWon)
 	}
 	bOver = true;
 	bVictory = bWon;
-	// Sauvegarde : record, niveau gagné, niveau suivant débloqué.
+	// Insignes (Godot : Upgrades.earned) : 1 par vague repoussée, multiplié par la difficulté du
+	// niveau, plus une prime en cas de victoire.
+	const int32 Cleared = bWon ? LastWave : Wave - 1;
+	EarnedInsignes = FMath::FloorToInt(FMath::Max(0, Cleared) * Difficulty.Points);
+	if (bWon)
+	{
+		const TSharedPtr<FJsonValue> Prize = GameData.IsValid() ? GameData->TryGetField(TEXT("insignes_victoire")) : TSharedPtr<FJsonValue>();
+		EarnedInsignes += Prize.IsValid() ? (int32)Prize->AsNumber() : 5;
+	}
+	// Sauvegarde : record, insignes, niveau gagné, niveau suivant débloqué.
 	if (Progress)
 	{
 		bNewRecord = Progress->SubmitScore(Score, Wave);
-		bUnlockedNext = Progress->FinishLevel(Level, bWon, LevelCount);
+		bUnlockedNext = Progress->FinishLevel(Level, bWon, LevelCount, EarnedInsignes);
 		Progress->Write();
 	}
+}
+
+const TArray<FName>& ADRGameMode::GetUpgradeIds()
+{
+	// Même ordre que Upgrades.LIST dans Godot (l'ordre du JSON n'est pas gardé par Unreal).
+	static const TArray<FName> Ids = { TEXT("vitalite"), TEXT("armurier"), TEXT("ingenieur"), TEXT("maconnerie"), TEXT("reserves"), TEXT("recuperation"), TEXT("dynamo") };
+	return Ids;
+}
+
+TSharedPtr<FJsonObject> ADRGameMode::GetUpgradeData(FName Id) const
+{
+	const TSharedPtr<FJsonObject>* List = nullptr;
+	const TSharedPtr<FJsonObject>* Entry = nullptr;
+	if (GameData.IsValid() && GameData->TryGetObjectField(TEXT("ameliorations"), List) && (*List)->TryGetObjectField(Id.ToString(), Entry))
+	{
+		return *Entry;
+	}
+	return TSharedPtr<FJsonObject>();
+}
+
+int32 ADRGameMode::GetUpgradeMaxRank(FName Id) const
+{
+	const TSharedPtr<FJsonObject> Data = GetUpgradeData(Id);
+	const TArray<TSharedPtr<FJsonValue>>* Costs = nullptr;
+	return Data.IsValid() && Data->TryGetArrayField(TEXT("costs"), Costs) ? Costs->Num() : 0;
+}
+
+int32 ADRGameMode::GetUpgradeRank(FName Id) const
+{
+	return Progress ? FMath::Clamp(Progress->Upgrades.FindRef(Id), 0, GetUpgradeMaxRank(Id)) : 0;
+}
+
+int32 ADRGameMode::GetUpgradeCost(FName Id) const
+{
+	const TSharedPtr<FJsonObject> Data = GetUpgradeData(Id);
+	const TArray<TSharedPtr<FJsonValue>>* Costs = nullptr;
+	const int32 Rank = GetUpgradeRank(Id);
+	if (Data.IsValid() && Data->TryGetArrayField(TEXT("costs"), Costs) && Costs->IsValidIndex(Rank))
+	{
+		return (int32)(*Costs)[Rank]->AsNumber();
+	}
+	return -1;
+}
+
+float ADRGameMode::UpgradeBonus(FName Id) const
+{
+	return GetUpgradeRank(Id) * (float)DRData::Number(GetUpgradeData(Id), TEXT("per"), 0.0);
+}
+
+FString ADRGameMode::GetUpgradeText(FName Id, const TCHAR* Field) const
+{
+	FString Text = Id.ToString();
+	if (const TSharedPtr<FJsonObject> Data = GetUpgradeData(Id))
+	{
+		Data->TryGetStringField(Field, Text);
+	}
+	return Text;
+}
+
+bool ADRGameMode::BuyUpgrade(FName Id)
+{
+	const int32 Cost = GetUpgradeCost(Id);
+	if (!Progress || Cost < 0 || Progress->Insignes < Cost)
+	{
+		return false;
+	}
+	Progress->Insignes -= Cost;
+	Progress->Upgrades.Add(Id, GetUpgradeRank(Id) + 1);
+	Progress->Write();
+	return true;
+}
+
+void ADRGameMode::RefundUpgrades()
+{
+	if (!Progress)
+	{
+		return;
+	}
+	int32 Spent = 0;
+	for (const FName& Id : GetUpgradeIds())
+	{
+		const TSharedPtr<FJsonObject> Data = GetUpgradeData(Id);
+		const TArray<TSharedPtr<FJsonValue>>* Costs = nullptr;
+		if (Data.IsValid() && Data->TryGetArrayField(TEXT("costs"), Costs))
+		{
+			for (int32 Step = 0; Step < GetUpgradeRank(Id) && Costs->IsValidIndex(Step); ++Step)
+			{
+				Spent += (int32)(*Costs)[Step]->AsNumber();
+			}
+		}
+	}
+	Progress->Insignes += Spent;
+	Progress->Upgrades.Empty();
+	Progress->Write();
 }
 
 void ADRGameMode::Tick(float DeltaSeconds)

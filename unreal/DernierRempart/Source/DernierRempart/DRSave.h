@@ -15,7 +15,7 @@ struct FDRBinding
 
 /**
  * Progression et réglages sauvegardés sur le PC (Godot : settings.gd, user://reglages.cfg) : niveaux
- * gagnés et débloqués, record, sensibilité, volume, champ de vision, axe inversé et touches. Gagner un
+ * gagnés et débloqués, record, insignes et améliorations permanentes, sensibilité, volume, champ de vision, axe inversé et touches. Gagner un
  * niveau ouvre le suivant ; gagner le 5e d'un chapitre ouvre le chapitre suivant.
  * Fichier : Saved/SaveGames/Progression.sav. (La qualité graphique est gardée par Unreal.)
  */
@@ -31,8 +31,8 @@ public:
 
 	/** Garde le meilleur score et la vague la plus lointaine ; vrai si c'est un nouveau record. */
 	bool SubmitScore(int32 FinalScore, int32 ReachedWave);
-	/** Fin d'un niveau ; vrai si une victoire vient de débloquer le niveau suivant. */
-	bool FinishLevel(int32 LevelIndex, bool bWon, int32 LevelTotal);
+	/** Fin d'un niveau : ajoute les insignes gagnés ; vrai si une victoire vient de débloquer le niveau suivant. */
+	bool FinishLevel(int32 LevelIndex, bool bWon, int32 LevelTotal, int32 Earned);
 	bool HasWon(int32 LevelIndex) const { return LevelsWon.Contains(LevelIndex); }
 
 	/** Actions dont on peut changer la touche, dans l'ordre d'affichage, avec leur touche AZERTY par défaut. */
@@ -62,6 +62,13 @@ public:
 
 	UPROPERTY()
 	TArray<int32> LevelsWon;
+
+	/** Insignes à dépenser, et rang de chaque amélioration permanente achetée (Godot : upgrades). */
+	UPROPERTY()
+	int32 Insignes = 0;
+
+	UPROPERTY()
+	TMap<FName, int32> Upgrades;
 
 	// Réglages (Godot : sensitivity 1, volume 0,8, fov 78°, invert_y).
 	UPROPERTY()

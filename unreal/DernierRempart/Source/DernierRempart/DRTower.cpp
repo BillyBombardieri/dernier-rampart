@@ -142,7 +142,8 @@ void ADRTower::Setup(const FString& InType, ADRSocket* InSocket)
 		RangeUp = (float)DRData::Number(Stats, TEXT("range_up"), 2.0);
 		MinRange = (float)DRData::Number(Stats, TEXT("min_range"), 0.0);
 		Rate = (float)DRData::Number(Stats, TEXT("rate"), Rate);
-		BaseDamage = (float)DRData::Number(Stats, TEXT("damage"), BaseDamage);
+		// Amélioration permanente « Ingénieur » : +5 % de dégâts par rang.
+		BaseDamage = (float)DRData::Number(Stats, TEXT("damage"), BaseDamage) * Mode->UpgradeMult(TEXT("ingenieur"));
 		FreezeTime = (float)DRData::Number(Stats, TEXT("freeze"), FreezeTime);
 		BurnDps = (float)DRData::Number(Stats, TEXT("burn"), BurnDps);
 		Chain = (int32)DRData::Number(Stats, TEXT("chain"), Chain);

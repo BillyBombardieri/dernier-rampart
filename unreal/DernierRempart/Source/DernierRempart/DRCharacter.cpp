@@ -135,6 +135,16 @@ void ADRCharacter::BeginPlay()
 {
 	Super::BeginPlay();
 	LoadWeapons();
+	// Améliorations permanentes : « Vitalité » (PV du joueur) et « Armurier » (dégâts des armes).
+	if (const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+	{
+		MaxHp = 100.0f * Mode->UpgradeMult(TEXT("vitalite"));
+		Hp = MaxHp;
+		for (FDRWeapon& Weapon : Weapons)
+		{
+			Weapon.Damage *= Mode->UpgradeMult(TEXT("armurier"));
+		}
+	}
 	MuzzleFlash->SetMaterial(0, DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.75f, 0.35f), 60.0f));
 	Tracer->SetMaterial(0, DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.85f, 0.6f), 40.0f));
 	SelectWeapon(0);

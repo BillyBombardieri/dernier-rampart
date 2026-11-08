@@ -382,7 +382,10 @@ void ADRChapter::BuildRings(const TSharedPtr<FJsonObject>& Data)
 			const double GateProgress = 1000.0 * (Segment + 1) - FVector::Dist2D(Gate, Path[Segment + 1]) / 100.0;
 			if (ADRBarrier* Barrier = GetWorld()->SpawnActor<ADRBarrier>(Gate, FRotator::ZeroRotator))
 			{
-				Barrier->Build(GateName, (float)DRData::Number(RingData, TEXT("hp"), 600.0), Path[Segment + 1] - Path[Segment], 720.0, GateProgress);
+				// Amélioration permanente « Maçonnerie » : +8 % de PV par rang.
+				const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+				const float GateHp = (float)DRData::Number(RingData, TEXT("hp"), 600.0) * (Mode ? Mode->UpgradeMult(TEXT("maconnerie")) : 1.0f);
+				Barrier->Build(GateName, GateHp, Path[Segment + 1] - Path[Segment], 720.0, GateProgress);
 				Barriers.Add(Barrier);
 			}
 		}
