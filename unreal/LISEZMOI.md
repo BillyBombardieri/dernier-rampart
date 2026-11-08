@@ -188,7 +188,7 @@ Ils arrivent à partir de la vague 3 : **Entrée** lance chaque vague sans atten
 
 ## 18. Tester l'étape 13 : l'établi
 
-1. L'**établi** est à gauche du Cœur quand on le regarde depuis le départ, avec « ÉTABLI » écrit en vert au-dessus. Approche-toi, vise-le : l'aide propose « E ouvrir l'établi ». Pendant l'assaut, il est fermé (« utilisable seulement entre les vagues »).
+1. L'**établi** est à côté du Cœur : au départ, retourne-toi, il est sur ta droite, avec « ÉTABLI » écrit en vert au-dessus. Approche-toi, vise-le : l'aide propose « E ouvrir l'établi ». Pendant l'assaut, il est fermé (« utilisable seulement entre les vagues »).
 2. **E** l'ouvre et fige la partie. **E**, **Échap**, **P** ou **FERMER** le referment.
 3. Pour chaque arme : **Canon** (+20 % de dégâts par niveau, 40 puis 80 ferraille), **Chargeur** (+30 % de balles, 30 puis 60 ; le nouveau chargeur arrive plein) et quatre **munitions** (60 ferraille chacune la première fois, gratuites ensuite) :
    - **Incendiaires** : mettent le feu (-10 % de dégâts), traçante orange.
