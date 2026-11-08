@@ -5,6 +5,7 @@
 #include "DRGameMode.generated.h"
 
 class ADRChapter;
+class ADRCharacter;
 class ADRZombie;
 class FJsonObject;
 class UDRSave;
@@ -220,7 +221,27 @@ public:
 	bool BuyGenerator();
 	int32 GetGenerator() const { return Generator; }
 
+	/**
+	 * Gadgets (Godot : gadgets.gd, chiffres de jeu.json « gadgets ») : deux emplacements (A et G par
+	 * défaut), choisis à l'établi parmi la barricade, le leurre sonore et le drone de récolte.
+	 * Chaque gadget se recharge après usage.
+	 */
+	static const TArray<FName>& GetGadgetIds();
+	FName GetGadgetSlot(int32 Slot) const { return GadgetSlots.IsValidIndex(Slot) ? GadgetSlots[Slot] : FName(); }
+	/** Met un gadget dans un emplacement (s'il était dans l'autre, les deux s'échangent). */
+	void SetGadget(int32 Slot, FName Id);
+	/** Secondes avant de pouvoir réutiliser un gadget (0 = prêt), et sa recharge complète. */
+	float GetGadgetCooldown(FName Id) const;
+	float GetGadgetRecharge(FName Id) const;
+	/** « name » ou « desc » d'un gadget. */
+	FString GetGadgetText(FName Id, const TCHAR* Field) const;
+	/** Utilise le gadget de l'emplacement 0 ou 1 ; vrai s'il a servi. */
+	bool UseGadget(int32 Slot, ADRCharacter* User);
+
 private:
+	bool PlaceBarricade(ADRCharacter* User);
+	bool ThrowDecoy(ADRCharacter* User);
+	bool LaunchDrone(ADRCharacter* User);
 	TSharedPtr<FJsonObject> GetUpgradeData(FName Id) const;
 	void LoadLevel(const FString& Options);
 	void EnterPhase(EDRPhase NewPhase, float Duration);
@@ -291,6 +312,8 @@ private:
 	bool bWorkbenchOpen = false;
 	TMap<FString, FDRWeaponMods> WeaponMods;
 	int32 Generator = 0;
+	TArray<FName> GadgetSlots;
+	TMap<FName, float> GadgetCooldowns;
 	int32 EnergyUsed = 0;
 	TArray<FString> BuildOrder;
 	TArray<FDRMessage> Messages;

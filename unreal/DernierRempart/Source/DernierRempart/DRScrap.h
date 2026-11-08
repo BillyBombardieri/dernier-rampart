@@ -20,10 +20,16 @@ public:
 	void Setup(int32 InValue);
 	virtual void Tick(float DeltaSeconds) override;
 
+	int32 GetValue() const { return Value; }
+	/** Pièce déjà visée par un drone de récolte (un seul drone par pièce). */
+	bool IsClaimed() const { return bClaimed; }
+	void Claim() { bClaimed = true; }
+
 private:
 	UPROPERTY()
 	TObjectPtr<USceneComponent> Pile;
 
 	int32 Value = 1;
 	float Age = 0.0f;
+	bool bClaimed = false;
 };

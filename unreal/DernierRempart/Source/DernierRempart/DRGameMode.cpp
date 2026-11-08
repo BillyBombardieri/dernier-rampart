@@ -3,6 +3,7 @@
 #include "DRChapter.h"
 #include "DRCharacter.h"
 #include "DRData.h"
+#include "DRGadgets.h"
 #include "DRHUD.h"
 #include "DRLook.h"
 #include "DRSave.h"
@@ -33,6 +34,21 @@ namespace DRGameModeSounds
 	}
 }
 
+namespace DRGameModeGadgets
+{
+	// Chiffres d'un gadget dans jeu.json (« gadgets »).
+	TSharedPtr<FJsonObject> Find(const TSharedPtr<FJsonObject>& Data, FName Id)
+	{
+		const TSharedPtr<FJsonObject>* List = nullptr;
+		const TSharedPtr<FJsonObject>* Entry = nullptr;
+		if (Data.IsValid() && Data->TryGetObjectField(TEXT("gadgets"), List) && (*List)->TryGetObjectField(Id.ToString(), Entry))
+		{
+			return *Entry;
+		}
+		return TSharedPtr<FJsonObject>();
+	}
+}
+
 ADRGameMode::ADRGameMode()
 {
 	PrimaryActorTick.bCanEverTick = true;
@@ -54,6 +70,8 @@ void ADRGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 	LoadLevel(Options);
 	LastWave = (int32)Rule(TEXT("partie"), TEXT("last_wave"), 10.0);
 	SiegeEvery = (int32)Rule(TEXT("vagues"), TEXT("siege_every"), 5.0);
+	// Gadgets de départ (Godot : Game.gadget_slots).
+	GadgetSlots = { FName(TEXT("barricade")), FName(TEXT("leurre")) };
 	// Amélioration « Réserves » : plus de ferraille au départ.
 	Scrap = (int32)Rule(TEXT("partie"), TEXT("start_scrap"), 55.0) + (int32)UpgradeBonus(TEXT("reserves"));
 	// Ordre des tours dans le choix de construction (Godot : Tower.BUILD_ORDER).
@@ -615,6 +633,185 @@ bool ADRGameMode::BuyGenerator()
 	return true;
 }
 
+// ---------------------------------------------------------------- gadgets
+
+const TArray<FName>& ADRGameMode::GetGadgetIds()
+{
+	static const TArray<FName> Ids = { TEXT("barricade"), TEXT("leurre"), TEXT("drone") };
+	return Ids;
+}
+
+void ADRGameMode::SetGadget(int32 Slot, FName Id)
+{
+	if (!GadgetSlots.IsValidIndex(Slot) || !GetGadgetIds().Contains(Id))
+	{
+		return;
+	}
+	const int32 Other = 1 - Slot;
+	if (GadgetSlots.IsValidIndex(Other) && GadgetSlots[Other] == Id)
+	{
+		GadgetSlots[Other] = GadgetSlots[Slot];
+	}
+	GadgetSlots[Slot] = Id;
+}
+
+float ADRGameMode::GetGadgetCooldown(FName Id) const
+{
+	const float* Left = GadgetCooldowns.Find(Id);
+	return Left ? *Left : 0.0f;
+}
+
+float ADRGameMode::GetGadgetRecharge(FName Id) const
+{
+	return (float)DRData::Number(DRGameModeGadgets::Find(GameData, Id), TEXT("cooldown"), 30.0);
+}
+
+FString ADRGameMode::GetGadgetText(FName Id, const TCHAR* Field) const
+{
+	FString Text = Id.ToString();
+	const TSharedPtr<FJsonObject> Entry = DRGameModeGadgets::Find(GameData, Id);
+	if (Entry.IsValid())
+	{
+		Entry->TryGetStringField(Field, Text);
+	}
+	return Text;
+}
+
+bool ADRGameMode::UseGadget(int32 Slot, ADRCharacter* User)
+{
+	const FName Id = GetGadgetSlot(Slot);
+	if (Id.IsNone() || !User || bOver || IsMenuOpen())
+	{
+		return false;
+	}
+	const float Left = GetGadgetCooldown(Id);
+	if (Left > 0.0f)
+	{
+		Say(FString::Printf(TEXT("%s : encore %d s de recharge"), *GetGadgetText(Id, TEXT("name")), FMath::CeilToInt(Left)));
+		return false;
+	}
+	bool bUsed = false;
+	if (Id == FName(TEXT("barricade")))
+	{
+		bUsed = PlaceBarricade(User);
+	}
+	else if (Id == FName(TEXT("leurre")))
+	{
+		bUsed = ThrowDecoy(User);
+	}
+	else if (Id == FName(TEXT("drone")))
+	{
+		bUsed = LaunchDrone(User);
+	}
+	if (bUsed)
+	{
+		GadgetCooldowns.Add(Id, GetGadgetRecharge(Id));
+	}
+	return bUsed;
+}
+
+bool ADRGameMode::PlaceBarricade(ADRCharacter* User)
+{
+	// En travers du chemin, sur le point du chemin le plus proche de l'endroit 3 m devant soi.
+	if (!Chapter)
+	{
+		return false;
+	}
+	FVector Forward = User->GetAimDirection();
+	Forward.Z = 0.0;
+	const FVector Spot = User->GetActorLocation() + Forward.GetSafeNormal() * 300.0;
+	const TArray<FVector>& Points = Chapter->GetPath();
+	double Best = TNumericLimits<double>::Max();
+	int32 BestSegment = -1;
+	FVector BestPoint = FVector::ZeroVector;
+	for (int32 Index = 0; Index + 1 < Points.Num(); ++Index)
+	{
+		const FVector2D A(Points[Index].X, Points[Index].Y);
+		const FVector2D B(Points[Index + 1].X, Points[Index + 1].Y);
+		const FVector2D P(Spot.X, Spot.Y);
+		const FVector2D AB = B - A;
+		const double LengthSquared = AB.SizeSquared();
+		if (LengthSquared < 1.0)
+		{
+			continue;
+		}
+		const double T = FMath::Clamp(FVector2D::DotProduct(P - A, AB) / LengthSquared, 0.02, 0.98);
+		const FVector2D Closest = A + AB * T;
+		const double Distance = FVector2D::Distance(P, Closest);
+		if (Distance < Best)
+		{
+			Best = Distance;
+			BestSegment = Index;
+			BestPoint = FVector(Closest.X, Closest.Y, 0.0);
+		}
+	}
+	if (BestSegment < 0 || Best > 450.0)
+	{
+		Say(TEXT("La barricade se pose en travers du chemin des zombies : approche-toi du chemin."));
+		return false;
+	}
+	for (const TObjectPtr<ADRBarrier>& Other : Chapter->GetBarriers())
+	{
+		if (Other && FVector::Dist2D(Other->GetActorLocation(), BestPoint) < 300.0)
+		{
+			Say(TEXT("Il y a d\u00E9j\u00E0 une barri\u00E8re ici."));
+			return false;
+		}
+	}
+	ADRBarrier* Barricade = GetWorld()->SpawnActor<ADRBarrier>(BestPoint, FRotator::ZeroRotator);
+	if (!Barricade)
+	{
+		return false;
+	}
+	// Plus solide au fil des vagues : 250 PV, +10 % par vague.
+	const FVector& Next = Points[BestSegment + 1];
+	const double Along = 1000.0 * (BestSegment + 1) - FVector::Dist2D(BestPoint, Next) / 100.0;
+	Barricade->BuildBarricade(250.0f * (1.0f + 0.1f * FMath::Max(0, Wave - 1)), Next - Points[BestSegment], 360.0, Along, 20.0f);
+	Chapter->AddBarrier(Barricade);
+	DRLook::PlayAt(this, TEXT("build"), BestPoint + FVector(0.0, 0.0, 50.0), 0.0f, 0.1f);
+	return true;
+}
+
+bool ADRGameMode::ThrowDecoy(ADRCharacter* User)
+{
+	// Lancé devant soi : il atterrit au sol, jusqu'à 14 m (ou devant le premier obstacle).
+	const FVector From = User->GetEyeLocation();
+	const FVector Aim = User->GetAimDirection();
+	FVector Land = From + Aim * 1400.0;
+	FHitResult Hit;
+	FCollisionQueryParams Params(SCENE_QUERY_STAT(DRLeurre), false, User);
+	FCollisionObjectQueryParams Solid(ECC_WorldStatic);
+	Solid.AddObjectTypesToQuery(ECC_WorldDynamic);
+	if (GetWorld()->LineTraceSingleByObjectType(Hit, From, Land, Solid, Params))
+	{
+		Land = Hit.ImpactPoint - Aim * 40.0;
+	}
+	Land.Z = 2.0;
+	ADRDecoy* Decoy = GetWorld()->SpawnActor<ADRDecoy>(From, FRotator(0.0, Aim.Rotation().Yaw, 0.0));
+	if (!Decoy)
+	{
+		return false;
+	}
+	Decoy->Launch(From, Land);
+	PlaySfx2D(TEXT("throw"), -6.0f);
+	return true;
+}
+
+bool ADRGameMode::LaunchDrone(ADRCharacter* User)
+{
+	// Il décolle 2 m au-dessus des pieds du joueur.
+	const FVector Start = User->GetActorLocation() + FVector(0.0, 0.0, 200.0 - User->GetSimpleCollisionHalfHeight());
+	ADRDrone* Drone = GetWorld()->SpawnActor<ADRDrone>(Start, FRotator(0.0, User->GetActorRotation().Yaw, 0.0));
+	if (!Drone)
+	{
+		return false;
+	}
+	DRLook::PlayAt(this, TEXT("build"), Start, -6.0f, 0.1f);
+	return true;
+}
+
+// ---------------------------------------------------------------- implants
+
 const TArray<FName>& ADRGameMode::GetImplantIds()
 {
 	static const TArray<FName> Ids = { TEXT("batterie"), TEXT("sang_froid"), TEXT("charognard"), TEXT("main_lourde") };
@@ -870,6 +1067,11 @@ void ADRGameMode::Tick(float DeltaSeconds)
 	if (bMenu)
 	{
 		return;
+	}
+	// Recharge des gadgets (le jeu en pause ne compte pas).
+	for (TPair<FName, float>& Cooldown : GadgetCooldowns)
+	{
+		Cooldown.Value = FMath::Max(0.0f, Cooldown.Value - DeltaSeconds);
 	}
 	if (!bStarted)
 	{

@@ -830,7 +830,7 @@ void ADRCharacter::UpdateInteraction(float DeltaSeconds)
 		bBenchInSight = true;
 		Hint = Mode->GetPhase() == EDRPhase::Assault
 			? FString(TEXT("\u00C9tabli : utilisable seulement entre les vagues"))
-			: FString::Printf(TEXT("%s ouvrir l'\u00E9tabli (armes, munitions, g\u00E9n\u00E9rateur)"), *KeyName(TEXT("interagir")));
+			: FString::Printf(TEXT("%s ouvrir l'\u00E9tabli (armes, munitions, gadgets, g\u00E9n\u00E9rateur)"), *KeyName(TEXT("interagir")));
 		return;
 	}
 
@@ -842,7 +842,8 @@ void ADRCharacter::UpdateInteraction(float DeltaSeconds)
 	double BestDistance = 320.0;
 	for (const TObjectPtr<ADRBarrier>& Candidate : Chapter->GetBarriers())
 	{
-		if (!Candidate)
+		// Une barricade cassée ou repliée ne se répare pas : elle disparaît.
+		if (!Candidate || (Candidate->IsTemporary() && !Candidate->IsAlive()))
 		{
 			continue;
 		}
@@ -1017,6 +1018,38 @@ void ADRCharacter::MarkPressed()
 	}
 }
 
+void ADRCharacter::Gadget1Pressed()
+{
+	if (CanAct())
+	{
+		if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+		{
+			Mode->UseGadget(0, this);
+		}
+	}
+}
+
+void ADRCharacter::Gadget2Pressed()
+{
+	if (CanAct())
+	{
+		if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+		{
+			Mode->UseGadget(1, this);
+		}
+	}
+}
+
+FVector ADRCharacter::GetEyeLocation() const
+{
+	return Camera->GetComponentLocation();
+}
+
+FVector ADRCharacter::GetAimDirection() const
+{
+	return ViewRotation().Vector();
+}
+
 // ---------------------------------------------------------------- santé
 
 float ADRCharacter::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent, AController* EventInstigator, AActor* DamageCauser)
@@ -1188,6 +1221,8 @@ void ADRCharacter::CreateInput()
 	CycleAction = NewAction(TEXT("ChoisirTour"), EInputActionValueType::Boolean);
 	PowerAction = NewAction(TEXT("AllumerTour"), EInputActionValueType::Boolean);
 	MarkAction = NewAction(TEXT("Marquer"), EInputActionValueType::Boolean);
+	Gadget1Action = NewAction(TEXT("Gadget1"), EInputActionValueType::Boolean);
+	Gadget2Action = NewAction(TEXT("Gadget2"), EInputActionValueType::Boolean);
 	InteractAction->bTriggerWhenPaused = true; // pour refermer l'établi
 	PauseAction = NewAction(TEXT("Pause"), EInputActionValueType::Boolean);
 	PauseAction->bTriggerWhenPaused = true; // pour reprendre la partie et revenir en arrière dans les réglages
@@ -1245,6 +1280,9 @@ void ADRCharacter::ApplyBindings()
 	Bind(CycleAction, TEXT("tour"));
 	Bind(PowerAction, TEXT("allumer"));
 	Bind(MarkAction, TEXT("marquer"));
+	// A et G : les deux gadgets choisis à l'établi.
+	Bind(Gadget1Action, TEXT("gadget1"));
+	Bind(Gadget2Action, TEXT("gadget2"));
 	// Entrée : lancer la vague sans attendre, passer la récolte, recommencer en fin de partie.
 	Bind(SkipAction, TEXT("vague"));
 	// Pause : P (modifiable) et Échap (fixe ; dans l'éditeur, Échap arrête la partie).
@@ -1311,6 +1349,8 @@ void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	EnhancedInput->BindAction(CycleAction, ETriggerEvent::Started, this, &ADRCharacter::CyclePressed);
 	EnhancedInput->BindAction(PowerAction, ETriggerEvent::Started, this, &ADRCharacter::PowerPressed);
 	EnhancedInput->BindAction(MarkAction, ETriggerEvent::Started, this, &ADRCharacter::MarkPressed);
+	EnhancedInput->BindAction(Gadget1Action, ETriggerEvent::Started, this, &ADRCharacter::Gadget1Pressed);
+	EnhancedInput->BindAction(Gadget2Action, ETriggerEvent::Started, this, &ADRCharacter::Gadget2Pressed);
 	EnhancedInput->BindAction(SkipAction, ETriggerEvent::Started, this, &ADRCharacter::SkipPressed);
 	EnhancedInput->BindAction(PauseAction, ETriggerEvent::Started, this, &ADRCharacter::PausePressed);
 }

@@ -9,6 +9,7 @@
 #include "DRChapter.h"
 #include "DRCharacter.h"
 #include "DRData.h"
+#include "DRGadgets.h"
 #include "DRGameMode.h"
 #include "DRLook.h"
 #include "DRStructures.h"
@@ -50,6 +51,7 @@ namespace DRZombieRules
 	constexpr double DigDistance = 600.0; // le Fouisseur creuse à cette distance d'une barrière
 	constexpr float DigCooldown = 4.0f;
 	constexpr double DigDepth = 220.0;    // profondeur où descend le modèle (taille 1)
+	constexpr double LureRadius = 1600.0; // un leurre sonore attire les zombies à moins de 16 m
 	const FVector MoundScale(2.52, 1.8, 0.42);
 
 	// Vrai si la cible (barrière, Cœur, joueur) existe et tient encore debout.
@@ -70,6 +72,10 @@ namespace DRZombieRules
 		if (const ADRCharacter* Player = Cast<ADRCharacter>(Actor))
 		{
 			return Player->IsAlive();
+		}
+		if (const ADRDecoy* Decoy = Cast<ADRDecoy>(Actor))
+		{
+			return Decoy->IsActive();
 		}
 		return true;
 	}
@@ -250,6 +256,19 @@ ADRBarrier* ADRZombie::FindBlocker() const
 	return Best;
 }
 
+ADRDecoy* ADRZombie::FindLure() const
+{
+	for (TActorIterator<ADRDecoy> It(GetWorld()); It; ++It)
+	{
+		ADRDecoy* Decoy = *It;
+		if (Decoy->IsActive() && FlatDistance(Decoy->GetActorLocation()) < DRZombieRules::LureRadius && IsReachable(Decoy->GetActorLocation()))
+		{
+			return Decoy;
+		}
+	}
+	return nullptr;
+}
+
 bool ADRZombie::IsReachable(const FVector& Point) const
 {
 	return !Blocker || !Blocker->IsAlive() || !Blocker->IsBehind(Point);
@@ -258,6 +277,7 @@ bool ADRZombie::IsReachable(const FVector& Point) const
 void ADRZombie::Think()
 {
 	Blocker = FindBlocker();
+	Lure = FindLure();
 	SpitTarget = Type == TEXT("cracheur") ? FindSpitTarget() : nullptr;
 }
 
@@ -373,7 +393,15 @@ void ADRZombie::Tick(float DeltaSeconds)
 	ADRCharacter* Player = Cast<ADRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0));
 	const bool bChase = Player && Player->IsAlive() && IsReachable(Player->GetActorLocation()) && FlatDistance(Player->GetActorLocation()) < ChaseRadius;
 	const TArray<FVector>& Points = Chapter->GetPath();
-	if (bChase)
+	ADRDecoy* Bait = Lure.Get();
+	if (Bait && Bait->IsActive())
+	{
+		// Le leurre sonore passe avant tout : il fonce dessus et le frappe.
+		Target = Bait;
+		TargetPosition = Bait->GetActorLocation();
+		Reach = (1.2 + 0.3 * Size) * 100.0;
+	}
+	else if (bChase)
 	{
 		Target = Player;
 		TargetPosition = Player->GetActorLocation();

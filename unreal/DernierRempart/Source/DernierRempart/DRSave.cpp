@@ -70,6 +70,8 @@ const TArray<FDRBinding>& UDRSave::Bindable()
 		{ TEXT("interagir"), TEXT("Construire, am\u00E9liorer, r\u00E9parer"), EKeys::E },
 		{ TEXT("tour"), TEXT("Changer de tour \u00E0 construire"), EKeys::C },
 		{ TEXT("allumer"), TEXT("Allumer / \u00E9teindre une tour"), EKeys::X },
+		{ TEXT("gadget1"), TEXT("Gadget 1"), EKeys::A },
+		{ TEXT("gadget2"), TEXT("Gadget 2"), EKeys::G },
 		{ TEXT("vague"), TEXT("Lancer la vague"), EKeys::Enter },
 		{ TEXT("pause"), TEXT("Pause"), EKeys::P },
 	};

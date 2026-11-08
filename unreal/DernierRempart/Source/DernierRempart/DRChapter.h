@@ -39,6 +39,9 @@ public:
 	const TArray<FVector>& GetPath() const { return Path; }
 
 	const TArray<TObjectPtr<ADRBarrier>>& GetBarriers() const { return Barriers; }
+	/** Barricades du gadget, ajoutées quand on les pose et retirées quand elles disparaissent. */
+	void AddBarrier(ADRBarrier* Barrier);
+	void RemoveBarrier(ADRBarrier* Barrier);
 	/** Ancrages où l'on peut poser une tour. */
 	const TArray<TObjectPtr<ADRSocket>>& GetSockets() const { return Sockets; }
 	ADRCore* GetCore() const;

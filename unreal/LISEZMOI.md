@@ -21,7 +21,8 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 11 | Insignes et améliorations permanentes | à tester (8 nov.) |
 | 12 | Implants après les Nuits de siège | à tester (8 nov.) |
 | 13 | Établi : canon, chargeur, munitions spéciales, générateur | à tester (8 nov.) |
-| ensuite | Autres chapitres, gadgets, établi, implants, améliorations, sauvegarde, tutoriel, sons, export Windows | à faire |
+| 14 | Gadgets : barricade, leurre sonore, drone de récolte | à tester (8 nov.) |
+| ensuite | Décor complet des chapitres 2 à 6, tutoriel, effets de feu et de glace, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
 
@@ -195,9 +196,17 @@ Ils arrivent à partir de la vague 3 : **Entrée** lance chaque vague sans atten
    - **Perforantes** : traversent jusqu'à 3 zombies, +25 % sur Brutes et Boss.
    - **Électriques** : chargent la cible ; un tir normal ensuite déclenche la SURCHARGE.
 4. **Générateur** : +2 énergie par niveau (50, 90, 140 ferraille), donc plus de tours allumées en même temps.
-5. Tout repart de zéro à chaque partie. Les gadgets de l'établi viendront à l'étape suivante.
+5. Tout repart de zéro à chaque partie.
 
-## 19. Si ça ne marche pas
+## 19. Tester l'étape 14 : les gadgets
+
+1. En bas à gauche, au-dessus de ta vie : « [A] Barricade   [G] Leurre sonore ». En orange, le gadget est prêt ; en gris, il affiche sa recharge en secondes.
+2. **A : Barricade**. Va près du chemin des zombies et regarde-le : elle se déplie en travers, 3 m devant toi (250 PV, +10 % par vague). Les zombies s'arrêtent pour la casser. Au-dessus : « Barricade 250 PV 20 s ». Elle disparaît au bout de 20 s, ou s'effondre quand elle cède. Recharge : 35 s. Loin du chemin ou sur une autre barrière, un message explique pourquoi elle ne se pose pas.
+3. **G : Leurre sonore**. Il part en cloche là où tu vises (14 m au plus), bipe et clignote en rouge pendant 8 s. Les zombies à moins de 16 m foncent dessus et le frappent (120 PV). Recharge : 30 s.
+4. **Drone de récolte** : à choisir à l'établi (carte **GADGETS**, un bouton par gadget pour chaque touche ; mettre le même gadget sur les deux touches les échange). Il décolle au-dessus de toi, va chercher la ferraille à moins de 25 m pendant 25 s (un « + » vert s'affiche à chaque pièce ramassée), puis revient et disparaît. Recharge : 45 s.
+5. Les touches **A** et **G** se changent dans les réglages, comme les autres.
+
+## 20. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

@@ -47,7 +47,7 @@ struct FDRWeapon
  * avec dispersion, recul de la vue, visée, rechargement, flash, traçante et sons.
  * 100 PV : à terre, on revient au Cœur après quelques secondes pendant que les tours défendent.
  * Touches par défaut en AZERTY : ZQSD, Espace, Maj, clic gauche, clic droit, R, & et é (ou molette), E construire, améliorer ou réparer, C choisir la tour, X allumer ou
- * éteindre une tour, F marquer un zombie, Entrée pour lancer la vague, Échap ou P pour la pause.
+ * éteindre une tour, F marquer un zombie, A et G les gadgets, Entrée pour lancer la vague, Échap ou P pour la pause.
  * Toutes ces touches (sauf Échap et la molette) se changent dans les réglages.
  */
 UCLASS()
@@ -102,6 +102,9 @@ public:
 	FName GetAmmoType() const;
 	/** Recharge gratuitement une arme (après l'achat d'un plus grand chargeur). */
 	void Refill(const FString& WeaponId);
+	/** Position de l'œil et direction du regard, recul compris (pour lancer un gadget). */
+	FVector GetEyeLocation() const;
+	FVector GetAimDirection() const;
 
 protected:
 	virtual void BeginPlay() override;
@@ -148,6 +151,8 @@ private:
 	void CycleBuild(int32 Step);
 	void PowerPressed();
 	void MarkPressed();
+	void Gadget1Pressed();
+	void Gadget2Pressed();
 	void PausePressed();
 	void JumpPressed();
 	/** Menu principal ou pause : ni regard ni déplacement. */
@@ -238,6 +243,12 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInputAction> PauseAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> Gadget1Action;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> Gadget2Action;
 
 	/** Multiplicateur de sensibilité de la souris (1 = comme le réglage par défaut de Godot). */
 	UPROPERTY(EditAnywhere, Category = "Joueur")

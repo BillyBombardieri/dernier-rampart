@@ -107,6 +107,7 @@ void ADRHUD::DrawHUD()
 	}
 
 	DrawTowers(Player);
+	DrawBarricades();
 	DrawRings();
 	DrawZombieBars();
 	DrawPopups();
@@ -174,8 +175,8 @@ void ADRHUD::DrawHUD()
 			*Progress->MoveKeysName(), *Key(TEXT("courir")), *Key(TEXT("sauter")), *Key(TEXT("tirer")), *Key(TEXT("viser")), *Key(TEXT("recharger")),
 			*Key(TEXT("pistolet")), *Key(TEXT("fusil")), *Key(TEXT("pause"))),
 			FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), Canvas->ClipX * 0.5f, Canvas->ClipY - 70.0f * Scale, 0.75f, 0.5f);
-		DrawLabel(FString::Printf(TEXT("%s construire / am\u00E9liorer (maintenir : r\u00E9parer)   %s ou molette : choisir la tour   %s allumer / \u00E9teindre   %s marquer   %s lancer la vague"),
-			*Key(TEXT("interagir")), *Key(TEXT("tour")), *Key(TEXT("allumer")), *Key(TEXT("marquer")), *Key(TEXT("vague"))),
+		DrawLabel(FString::Printf(TEXT("%s construire / am\u00E9liorer (maintenir : r\u00E9parer)   %s ou molette : choisir la tour   %s allumer / \u00E9teindre   %s marquer   %s / %s gadgets   %s lancer la vague"),
+			*Key(TEXT("interagir")), *Key(TEXT("tour")), *Key(TEXT("allumer")), *Key(TEXT("marquer")), *Key(TEXT("gadget1")), *Key(TEXT("gadget2")), *Key(TEXT("vague"))),
 			FLinearColor(1.0f, 1.0f, 1.0f, 0.65f), Canvas->ClipX * 0.5f, Canvas->ClipY - 46.0f * Scale, 0.65f, 0.5f);
 	}
 }
@@ -348,7 +349,15 @@ void ADRHUD::DrawStructures()
 		return;
 	}
 	const ADRCore* Core = Chapter->GetCore();
-	const TArray<TObjectPtr<ADRBarrier>>& Barriers = Chapter->GetBarriers();
+	// Les barricades du gadget ont leur propre étiquette (DrawBarricades) : seules les portes sont listées.
+	TArray<const ADRBarrier*> Barriers;
+	for (const TObjectPtr<ADRBarrier>& Barrier : Chapter->GetBarriers())
+	{
+		if (Barrier && !Barrier->IsTemporary())
+		{
+			Barriers.Add(Barrier.Get());
+		}
+	}
 	const float Width = 480.0f * Scale;
 	const float Row = 22.0f * Scale;
 	const float WaveRow = 30.0f * Scale;
@@ -400,12 +409,8 @@ void ADRHUD::DrawStructures()
 		DrawLabel(FString::FromInt(FMath::CeilToInt(FMath::Max(0.0f, Core->GetHp()))), FLinearColor(0.85f, 0.9f, 1.0f), Left + Width - Pad, Y, 0.6f, 1.0f);
 	}
 	Y += Row;
-	for (const TObjectPtr<ADRBarrier>& Barrier : Barriers)
+	for (const ADRBarrier* Barrier : Barriers)
 	{
-		if (!Barrier)
-		{
-			continue;
-		}
 		FString Name = Barrier->GetDisplayName();
 		Name.ReplaceInline(TEXT("Barri\u00E8re de l'"), TEXT(""));
 		Name.ReplaceInline(TEXT("Barri\u00E8re de la "), TEXT(""));
@@ -495,16 +500,70 @@ void ADRHUD::DrawHealth(const ADRCharacter* Player)
 	DrawLabel(TEXT("VIE"), DRHUDStyle::Light, Left + Pad, Top + Pad * 0.6f, 0.55f);
 	DrawLabel(FString::FromInt(FMath::CeilToInt(FMath::Max(0.0f, Player->GetHp()))), FLinearColor::White, Left + Width - Pad, Top + Pad * 0.3f, 0.9f, 1.0f);
 	DrawBar(Left + Pad, Top + Height - Pad - 10.0f * Scale, Width - 2.0f * Pad, 10.0f * Scale, Ratio, Color);
-	// Implants installés pendant cette partie, juste au-dessus.
+	// Gadgets juste au-dessus, puis les implants installés pendant cette partie.
 	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
-	if (Mode && Mode->GetImplants().Num() > 0)
+	if (!Mode)
+	{
+		return;
+	}
+	DrawGadgets(Mode, Left, Top - 28.0f * Scale);
+	if (Mode->GetImplants().Num() > 0)
 	{
 		TArray<FString> Names;
 		for (const FName& Id : Mode->GetImplants())
 		{
 			Names.Add(Mode->GetImplantText(Id, TEXT("name")));
 		}
-		DrawLabel(TEXT("Implants : ") + FString::Join(Names, TEXT(", ")), FLinearColor(0.8f, 0.8f, 0.8f), Left, Top - 26.0f * Scale, 0.5f);
+		DrawLabel(TEXT("Implants : ") + FString::Join(Names, TEXT(", ")), FLinearColor(0.8f, 0.8f, 0.8f), Left, Top - 54.0f * Scale, 0.5f);
+	}
+}
+
+void ADRHUD::DrawGadgets(const ADRGameMode* Mode, float X, float Y)
+{
+	// « [A] Barricade » en orange quand il est prêt, « [A] Barricade 12 s » en gris pendant la recharge.
+	for (int32 Slot = 0; Slot < 2; ++Slot)
+	{
+		const FName Id = Mode->GetGadgetSlot(Slot);
+		if (Id.IsNone())
+		{
+			continue;
+		}
+		const FString Key = DRHUDStyle::KeyOf(Mode, Slot == 0 ? TEXT("gadget1") : TEXT("gadget2"));
+		const FString Name = Mode->GetGadgetText(Id, TEXT("name"));
+		const float Left = Mode->GetGadgetCooldown(Id);
+		const FString Text = Left > 0.0f
+			? FString::Printf(TEXT("[%s] %s %d s"), *Key, *Name, FMath::CeilToInt(Left))
+			: FString::Printf(TEXT("[%s] %s"), *Key, *Name);
+		DrawLabel(Text, Left > 0.0f ? FLinearColor(0.55f, 0.55f, 0.55f) : DRHUDStyle::Accent, X, Y, 0.55f);
+		float TextWidth = 0.0f;
+		float TextHeight = 0.0f;
+		GetTextSize(Text, TextWidth, TextHeight, Font, 0.55f * Scale);
+		X += TextWidth + 24.0f * Scale;
+	}
+}
+
+void ADRHUD::DrawBarricades()
+{
+	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	const ADRChapter* Chapter = Mode ? Mode->GetChapter() : nullptr;
+	if (!Chapter)
+	{
+		return;
+	}
+	for (const TObjectPtr<ADRBarrier>& Barrier : Chapter->GetBarriers())
+	{
+		if (!Barrier || !Barrier->IsTemporary() || !Barrier->IsAlive())
+		{
+			continue;
+		}
+		const FVector Anchor = Barrier->GetActorLocation() + FVector(0.0, 0.0, Barrier->GetTopHeight() + 90.0);
+		if (!IsInFront(Anchor) || FVector::DistSquared(Anchor, ViewEye) > FMath::Square(3000.0))
+		{
+			continue;
+		}
+		const FVector Screen = Project(Anchor);
+		DrawLabel(FString::Printf(TEXT("Barricade  %d PV  %d s"), FMath::CeilToInt(Barrier->GetHp()), FMath::CeilToInt(Barrier->GetLifeLeft())),
+			FLinearColor(1.0f, 0.85f, 0.4f), Screen.X, Screen.Y, 0.5f, 0.5f);
 	}
 }
 
@@ -1113,8 +1172,8 @@ void ADRHUD::DrawWorkbench(ADRGameMode* Mode)
 	const float Gap = 12.0f * Scale;
 	const float CardPad = 14.0f * Scale;
 	const float WeaponHeight = 330.0f * Scale;
-	const float GeneratorHeight = 130.0f * Scale;
-	const float Height = Pad * 2.0f + 46.0f * Scale + 30.0f * Scale + WeaponHeight + Gap + GeneratorHeight + Gap + 44.0f * Scale;
+	const float LowerHeight = 236.0f * Scale;
+	const float Height = Pad * 2.0f + 46.0f * Scale + 30.0f * Scale + WeaponHeight + Gap + LowerHeight + Gap + 44.0f * Scale;
 	const float Left = (Canvas->ClipX - Width) * 0.5f;
 	const float Top = FMath::Max(10.0f * Scale, (Canvas->ClipY - Height) * 0.5f);
 	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Height);
@@ -1180,17 +1239,57 @@ void ADRHUD::DrawWorkbench(ADRGameMode* Mode)
 	}
 	Y += WeaponHeight + Gap;
 
-	// Générateur : plus d'énergie = plus de tours allumées en même temps.
-	DrawRect(FLinearColor(1.0f, 1.0f, 1.0f, 0.04f), Left + Pad, Y, Width - 2.0f * Pad, GeneratorHeight);
-	const float GenX = Left + Pad + CardPad;
+	// Gadgets (à gauche) : un gadget par emplacement, à choisir parmi les trois (Godot : _gadget_card).
+	const float GadgetWidth = (Width - 2.0f * Pad - Gap) * 0.6f;
+	DrawRect(FLinearColor(1.0f, 1.0f, 1.0f, 0.04f), Left + Pad, Y, GadgetWidth, LowerHeight);
+	const float GadgetX = Left + Pad + CardPad;
+	const float GadgetInner = GadgetWidth - 2.0f * CardPad;
+	DrawLabel(TEXT("GADGETS"), FLinearColor::White, GadgetX, Y + CardPad, 0.7f);
+	DrawLabel(TEXT("Deux emplacements. Chaque gadget se recharge apr\u00E8s usage."), FLinearColor(0.6f, 0.6f, 0.6f), GadgetX, Y + CardPad + 30.0f * Scale, 0.42f);
+	const TArray<FName>& GadgetIds = ADRGameMode::GetGadgetIds();
+	const float KeyWidth = 56.0f * Scale;
+	const float ChoiceWidth = (GadgetInner - KeyWidth - 2.0f * 6.0f * Scale) / FMath::Max(1, GadgetIds.Num());
+	for (int32 Slot = 0; Slot < 2; ++Slot)
+	{
+		const float RowY = Y + CardPad + 58.0f * Scale + Slot * 42.0f * Scale;
+		DrawLabel(FString::Printf(TEXT("[%s]"), *DRHUDStyle::KeyOf(Mode, Slot == 0 ? TEXT("gadget1") : TEXT("gadget2"))), DRHUDStyle::Accent, GadgetX, RowY + 6.0f * Scale, 0.55f);
+		for (int32 Choice = 0; Choice < GadgetIds.Num(); ++Choice)
+		{
+			const FName GadgetId = GadgetIds[Choice];
+			if (Button(Mode->GetGadgetText(GadgetId, TEXT("name")), GadgetX + KeyWidth + Choice * (ChoiceWidth + 6.0f * Scale), RowY, ChoiceWidth, 34.0f * Scale, 0.46f, true, Mode->GetGadgetSlot(Slot) == GadgetId))
+			{
+				Mode->SetGadget(Slot, GadgetId);
+			}
+		}
+	}
+	float AboutY = Y + CardPad + 58.0f * Scale + 2.0f * 42.0f * Scale + 8.0f * Scale;
+	for (const FName& GadgetId : GadgetIds)
+	{
+		DrawLabel(FString::Printf(TEXT("%s : %s Recharge %d s."), *Mode->GetGadgetText(GadgetId, TEXT("name")), *Mode->GetGadgetText(GadgetId, TEXT("desc")), FMath::RoundToInt(Mode->GetGadgetRecharge(GadgetId))),
+			FLinearColor(0.6f, 0.6f, 0.6f), GadgetX, AboutY, 0.4f);
+		AboutY += 21.0f * Scale;
+	}
+
+	// Générateur (à droite) : plus d'énergie = plus de tours allumées en même temps.
+	const float GeneratorLeft = Left + Pad + GadgetWidth + Gap;
+	const float GeneratorWidth = Width - 2.0f * Pad - Gap - GadgetWidth;
+	DrawRect(FLinearColor(1.0f, 1.0f, 1.0f, 0.04f), GeneratorLeft, Y, GeneratorWidth, LowerHeight);
+	const float GenX = GeneratorLeft + CardPad;
+	const float GenInner = GeneratorWidth - 2.0f * CardPad;
 	DrawLabel(TEXT("G\u00C9N\u00C9RATEUR"), FLinearColor::White, GenX, Y + CardPad, 0.7f);
-	DrawLabel(TEXT("Plus d'\u00E9nergie = plus de tours allum\u00E9es en m\u00EAme temps."), FLinearColor(0.6f, 0.6f, 0.6f), GenX, Y + CardPad + 30.0f * Scale, 0.42f);
-	if (BenchRow(TEXT("Niveau"), Mode->GetGenerator(), Mode->GetBenchMax(TEXT("generateur")), FString::Printf(TEXT("+2 \u00E9nergie par niveau  \u00B7  \u00E9nergie max %d"), Mode->GetEnergyCap()),
-		Mode->GetBenchCost(TEXT("generateur"), Mode->GetGenerator()), Scrap, GenX, Y + CardPad + 60.0f * Scale, Width - 2.0f * Pad - 2.0f * CardPad))
+	const TArray<FString> GenLines = Wrap(TEXT("Plus d'\u00E9nergie = plus de tours allum\u00E9es en m\u00EAme temps."), 0.42f, GenInner);
+	for (int32 Line = 0; Line < FMath::Min(2, GenLines.Num()); ++Line)
+	{
+		DrawLabel(GenLines[Line], FLinearColor(0.6f, 0.6f, 0.6f), GenX, Y + CardPad + 30.0f * Scale + Line * 20.0f * Scale, 0.42f);
+	}
+	if (BenchRow(TEXT("Niveau"), Mode->GetGenerator(), Mode->GetBenchMax(TEXT("generateur")), FString(),
+		Mode->GetBenchCost(TEXT("generateur"), Mode->GetGenerator()), Scrap, GenX, Y + CardPad + 84.0f * Scale, GenInner))
 	{
 		bBought = Mode->BuyGenerator();
 	}
-	Y += GeneratorHeight + Gap;
+	DrawLabel(FString::Printf(TEXT("\u00C9nergie max : %d"), Mode->GetEnergyCap()), FLinearColor::White, GenX, Y + CardPad + 138.0f * Scale, 0.5f);
+	DrawLabel(TEXT("+2 \u00E9nergie par niveau"), FLinearColor(0.6f, 0.6f, 0.6f), GenX, Y + CardPad + 164.0f * Scale, 0.42f);
+	Y += LowerHeight + Gap;
 
 	DrawLabel(FString::Printf(TEXT("%s ou \u00C9chap pour fermer"), *DRHUDStyle::KeyOf(Mode, TEXT("interagir"))), FLinearColor(0.6f, 0.6f, 0.6f),
 		Left + Width - Pad - 180.0f * Scale, Y + 12.0f * Scale, 0.45f, 1.0f);

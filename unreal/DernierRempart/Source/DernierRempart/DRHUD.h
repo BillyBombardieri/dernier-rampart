@@ -16,7 +16,7 @@ class UFont;
  * tours, choix de la tour à construire, ce qu'on peut faire avec ce qu'on vise, textes des combos,
  * écran rougi quand on est touché, message quand on tombe, fin de partie. Menus à la souris :
  * menu principal, choix du niveau et améliorations permanentes, pause, réglages et touches,
- * choix d'implant après un siège, établi, boutons de fin de partie.
+ * choix d'implant après un siège, établi, boutons de fin de partie. Gadgets et leur recharge, étiquettes des barricades.
  */
 UCLASS()
 class DERNIERREMPART_API ADRHUD : public AHUD
@@ -44,6 +44,10 @@ private:
 	void DrawMessages(float Top);
 	void DrawEnd();
 	void DrawTowers(const ADRCharacter* Player);
+	/** Étiquette « Barricade  250 PV  20 s » au-dessus des barricades posées avec le gadget. */
+	void DrawBarricades();
+	/** Les deux gadgets et leur recharge, en bas à gauche au-dessus de la vie. */
+	void DrawGadgets(const ADRGameMode* Mode, float X, float Y);
 	void DrawBuildCards(const ADRCharacter* Player);
 	void DrawHint(const ADRCharacter* Player);
 	void DrawPopups();
@@ -59,7 +63,7 @@ private:
 	void DrawPause(ADRGameMode* Mode);
 	/** Choix d'implant après une Nuit de siège (Godot : hud.gd, show_implants). */
 	void DrawImplants(ADRGameMode* Mode);
-	/** Établi (Godot : workbench_panel.gd) : canon, chargeur et munitions des armes, générateur. */
+	/** Établi (Godot : workbench_panel.gd) : canon, chargeur et munitions des armes, gadgets, générateur. */
 	void DrawWorkbench(ADRGameMode* Mode);
 	/** Ligne « Canon ●●○ » de l'établi avec son bouton ; vrai si on vient d'acheter. */
 	bool BenchRow(const FString& Title, int32 Done, int32 Total, const FString& About, int32 Cost, int32 Scrap, float X, float Y, float Width);

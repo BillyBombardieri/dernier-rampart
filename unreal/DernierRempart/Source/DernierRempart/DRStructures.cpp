@@ -3,6 +3,7 @@
 #include "Components/BoxComponent.h"
 #include "Components/PointLightComponent.h"
 #include "Components/StaticMeshComponent.h"
+#include "DRChapter.h"
 #include "DRGameMode.h"
 #include "DRLook.h"
 #include "Engine/World.h"
@@ -47,7 +48,7 @@ ADRBarrier::ADRBarrier()
 	Blocker->SetCollisionResponseToChannel(ECC_Camera, ECR_Ignore);
 }
 
-void ADRBarrier::Build(const FString& InName, float InHp, const FVector& Direction, double Width, double InProgress)
+void ADRBarrier::Setup(const FString& InName, float InHp, const FVector& Direction, double Width, double InProgress, double Height)
 {
 	DisplayName = InName;
 	MaxHp = InHp;
@@ -59,13 +60,19 @@ void ADRBarrier::Build(const FString& InName, float InHp, const FVector& Directi
 	Dir = Direction.GetSafeNormal2D();
 	HalfWidth = Width * 0.5;
 	ProgressValue = InProgress;
+	// L'acteur est tourné vers Dir (sens du chemin vers le Cœur).
+	SetActorRotation(FRotator(0.0, FMath::RadiansToDegrees(FMath::Atan2(Dir.Y, Dir.X)), 0.0));
+	Blocker->SetBoxExtent(FVector(45.0, Width * 0.5, Height * 0.5));
+	Blocker->SetRelativeLocation(FVector(0.0, 0.0, Height * 0.5));
+}
+
+void ADRBarrier::Build(const FString& InName, float InHp, const FVector& Direction, double Width, double InProgress)
+{
+	Setup(InName, InHp, Direction, Width, InProgress, 250.0);
 
 	// Coordonnées locales de Godot en mètres : X = largeur, Y = hauteur, Z = vers la base.
 	// L'acteur est tourné vers Dir : son X local = Z de Godot, son Y local = X de Godot.
-	SetActorRotation(FRotator(0.0, FMath::RadiansToDegrees(FMath::Atan2(Dir.Y, Dir.X)), 0.0));
 	const double W = Width / 100.0;
-	Blocker->SetBoxExtent(FVector(45.0, Width * 0.5, 125.0));
-	Blocker->SetRelativeLocation(FVector(0.0, 0.0, 125.0));
 
 	UStaticMesh* Cube = DRStructureMeshes::Cube();
 	UStaticMesh* Cyl = DRStructureMeshes::Cylinder();
@@ -109,9 +116,56 @@ void ADRBarrier::Build(const FString& InName, float InHp, const FVector& Directi
 		AddPart(Cyl, Index % 2 == 0 ? Red : White, At(X, 1.15, -0.55), FVector(12.0, 12.0, StripeLength * 100.0), FRotator(0.0, 0.0, 90.0), false);
 	}
 	GodotBox(Metal, -W * 0.5 - 0.35, 0.575, -0.55, 0.3, 1.15, 0.3, true);
+	FinishParts();
+}
 
+void ADRBarrier::BuildBarricade(float InHp, const FVector& Direction, double Width, double InProgress, float Life)
+{
+	Setup(TEXT("Barricade"), InHp, Direction, Width, InProgress, 120.0);
+	bTemporary = true;
+	LifeLeft = Life;
+
+	// Trois panneaux d'acier en quinconce, rayés jaune et noir, sur des pieds (Godot : _build_barricade).
+	UStaticMesh* Cube = DRStructureMeshes::Cube();
+	UMaterialInterface* Steel = DRLook::Textured(this, TEXT("metal"), 1.5f, FLinearColor(0.7f, 0.7f, 0.7f));
+	UMaterialInterface* Yellow = DRLook::Plain(this, FLinearColor(0.95f, 0.72f, 0.1f));
+	UMaterialInterface* Black = DRLook::Plain(this, FLinearColor(0.06f, 0.06f, 0.06f));
+	const double W = Width / 100.0;
+	const double PanelWidth = W / 3.0;
+	auto At = [](double X, double Y, double Z) { return FVector(Z, -X, Y) * 100.0; };
+	for (int32 Index = 0; Index < 3; ++Index)
+	{
+		const double Side = Index % 2 == 0 ? 1.0 : -1.0;
+		USceneComponent* Panel = AddGroup(At(-W * 0.5 + PanelWidth * (Index + 0.5), 0.0, 0.12 * Side), FRotator(0.0, 10.3 * Side, 0.0));
+		// Tôle (largeur, hauteur, épaisseur de Godot -> épaisseur, largeur, hauteur d'Unreal).
+		AddPart(Cube, Steel, At(0.0, 0.62, 0.0), FVector(0.06, PanelWidth - 0.05, 1.05) * 100.0, FRotator::ZeroRotator, false, Panel);
+		for (int32 Band = 0; Band < 4; ++Band)
+		{
+			const double X = -PanelWidth * 0.5 + 0.22 + Band * (PanelWidth - 0.3) / 3.0;
+			AddPart(Cube, Band % 2 == 0 ? Yellow : Black, At(X, 0.62, -0.01), FVector(0.065, 0.16, 0.85) * 100.0, FRotator(0.0, 0.0, 34.4), false, Panel);
+		}
+		AddPart(Cube, Steel, At(0.0, 0.04, 0.0), FVector(0.7, 0.12, 0.08) * 100.0, FRotator::ZeroRotator, false, Panel);
+	}
+	FinishParts();
+	// Elle se déplie depuis le sol.
+	GrowAlpha = 0.0f;
+	SetActorScale3D(FVector(1.0, 1.0, 0.05));
+}
+
+USceneComponent* ADRBarrier::AddGroup(const FVector& Center, const FRotator& Rotation)
+{
+	USceneComponent* Group = NewObject<USceneComponent>(this);
+	Group->SetupAttachment(RootComponent);
+	Group->SetRelativeLocationAndRotation(Center, Rotation);
+	Group->RegisterComponent();
+	Parts.Add(Group);
+	return Group;
+}
+
+void ADRBarrier::FinishParts()
+{
 	// Position une fois effondrée : le grillage et les fils tombent à plat, les blocs glissent et pivotent un peu.
-	for (UStaticMeshComponent* Part : Parts)
+	for (USceneComponent* Part : Parts)
 	{
 		Rest.Add(Part->GetRelativeTransform());
 		const bool bHeavy = Part->ComponentHasTag(TEXT("Lourd"));
@@ -126,10 +180,10 @@ void ADRBarrier::Build(const FString& InName, float InHp, const FVector& Directi
 	}
 }
 
-UStaticMeshComponent* ADRBarrier::AddPart(UStaticMesh* Mesh, UMaterialInterface* Material, const FVector& Center, const FVector& Scale, const FRotator& Rotation, bool bHeavy)
+UStaticMeshComponent* ADRBarrier::AddPart(UStaticMesh* Mesh, UMaterialInterface* Material, const FVector& Center, const FVector& Scale, const FRotator& Rotation, bool bHeavy, USceneComponent* Parent)
 {
 	UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(this);
-	Part->SetupAttachment(RootComponent);
+	Part->SetupAttachment(Parent ? Parent : RootComponent.Get());
 	Part->SetStaticMesh(Mesh);
 	Part->SetMaterial(0, Material);
 	Part->SetRelativeTransform(FTransform(Rotation, Center, Scale / 100.0));
@@ -139,7 +193,10 @@ UStaticMeshComponent* ADRBarrier::AddPart(UStaticMesh* Mesh, UMaterialInterface*
 		Part->ComponentTags.Add(TEXT("Lourd"));
 	}
 	Part->RegisterComponent();
-	Parts.Add(Part);
+	if (!Parent)
+	{
+		Parts.Add(Part);
+	}
 	return Part;
 }
 
@@ -164,6 +221,10 @@ FVector ADRBarrier::ContactPoint(const FVector& Point) const
 
 void ADRBarrier::Repair(float Amount)
 {
+	if (bTemporary && !bAlive)
+	{
+		return; // une barricade cassée ne se relève pas
+	}
 	Hp = FMath::Min(MaxHp, Hp + Amount);
 	if (!bAlive && Hp >= GetRebuildHp())
 	{
@@ -215,11 +276,70 @@ void ADRBarrier::Break()
 	// Les débris ne bloquent plus le passage.
 	Blocker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 	DRLook::PlayAt(this, TEXT("barrier_break"), GetActorLocation() + FVector(0.0, 0.0, 100.0), 4.0f, 0.1f);
+	if (bTemporary)
+	{
+		if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+		{
+			Mode->Say(TEXT("La barricade a c\u00E9d\u00E9."));
+		}
+		Vanish(1.2f, 0.4f);
+	}
+}
+
+void ADRBarrier::Vanish(float Delay, float Duration)
+{
+	VanishDelay = Delay;
+	VanishDuration = FMath::Max(0.05f, Duration);
+	VanishAlpha = 0.0f;
 }
 
 void ADRBarrier::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (GrowAlpha < 1.0f)
+	{
+		// Barricade qu'on vient de poser : elle se déplie avec un petit dépassement (Godot : TRANS_BACK).
+		GrowAlpha = FMath::Min(1.0f, GrowAlpha + DeltaSeconds / 0.35f);
+		const float Back = 1.0f + 2.7f * FMath::Pow(GrowAlpha - 1.0f, 3.0f) + 1.7f * FMath::Pow(GrowAlpha - 1.0f, 2.0f);
+		SetActorScale3D(FVector(1.0, 1.0, 0.05 + 0.95 * Back));
+	}
+	if (bTemporary && bAlive)
+	{
+		LifeLeft -= DeltaSeconds;
+		if (LifeLeft <= 0.0f)
+		{
+			// Fin de la barricade : elle se replie sans s'effondrer.
+			LifeLeft = 0.0f;
+			bAlive = false;
+			FallAlpha = 1.0f;
+			Blocker->SetCollisionEnabled(ECollisionEnabled::NoCollision);
+			Vanish(0.0f, 0.5f);
+		}
+	}
+	if (VanishDelay >= 0.0f)
+	{
+		if (VanishDelay > 0.0f)
+		{
+			VanishDelay = FMath::Max(0.0f, VanishDelay - DeltaSeconds);
+		}
+		else
+		{
+			VanishAlpha += DeltaSeconds / VanishDuration;
+			SetActorScale3D(FVector(1.0, 1.0, FMath::Max(0.01, 1.0 - VanishAlpha)));
+			if (VanishAlpha >= 1.0f)
+			{
+				if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+				{
+					if (ADRChapter* Map = Mode->GetChapter())
+					{
+						Map->RemoveBarrier(this);
+					}
+				}
+				Destroy();
+				return;
+			}
+		}
+	}
 	if (!bAlive && FallAlpha < 1.0f)
 	{
 		// Effondrement en une demi-seconde, de plus en plus vite.

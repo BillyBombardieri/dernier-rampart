@@ -119,6 +119,19 @@ void ADRChapter::Build(int32 InChapter)
 	BuildProps(Data);
 }
 
+void ADRChapter::AddBarrier(ADRBarrier* Barrier)
+{
+	if (Barrier)
+	{
+		Barriers.AddUnique(Barrier);
+	}
+}
+
+void ADRChapter::RemoveBarrier(ADRBarrier* Barrier)
+{
+	Barriers.Remove(Barrier);
+}
+
 ADRCore* ADRChapter::GetCore() const
 {
 	return Core;

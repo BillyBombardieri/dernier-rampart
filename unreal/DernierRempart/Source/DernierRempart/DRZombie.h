@@ -6,6 +6,7 @@
 #include "DRZombie.generated.h"
 
 class ADRBarrier;
+class ADRDecoy;
 class ADRChapter;
 class UAnimSequence;
 class UPointLightComponent;
@@ -88,6 +89,8 @@ public:
 private:
 	void Think();
 	ADRBarrier* FindBlocker() const;
+	/** Leurre sonore actif à moins de 16 m, que rien ne sépare du zombie (Godot : _find_decoy). */
+	ADRDecoy* FindLure() const;
 	bool IsReachable(const FVector& Point) const;
 	FVector LanePoint(int32 Index) const;
 	double FlatDistance(const FVector& Point) const;
@@ -125,6 +128,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<AActor> StrikeTarget;
+
+	/** Leurre sonore qui l'attire (prioritaire sur tout le reste). */
+	TWeakObjectPtr<ADRDecoy> Lure;
 
 	UPROPERTY()
 	TMap<FString, TObjectPtr<UAnimSequence>> Animations;
