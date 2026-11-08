@@ -154,6 +154,7 @@ private:
 	void Gadget1Pressed();
 	void Gadget2Pressed();
 	void PausePressed();
+	void TutorialPressed();
 	void JumpPressed();
 	/** Menu principal ou pause : ni regard ni déplacement. */
 	bool IsMenuOpen() const;
@@ -249,6 +250,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInputAction> Gadget2Action;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> TutorialAction;
 
 	/** Multiplicateur de sensibilité de la souris (1 = comme le réglage par défaut de Godot). */
 	UPROPERTY(EditAnywhere, Category = "Joueur")

@@ -138,6 +138,10 @@ void ADRHUD::DrawHUD()
 		}
 	}
 	DrawMessages(PanelBottom + 12.0f * Scale);
+	if (Mode && Mode->IsTutorialActive())
+	{
+		DrawTutorial(Mode);
+	}
 
 	// Entrée pour ne pas attendre la fin du compte à rebours.
 	if (Mode && Mode->GetPhase() != EDRPhase::Assault)
@@ -382,7 +386,10 @@ void ADRHUD::DrawStructures()
 	switch (Mode->GetPhase())
 	{
 	case EDRPhase::Prep:
-		PhaseText = FString::Printf(TEXT("PR\u00C9PARATION  %d s"), FMath::CeilToInt(Mode->GetPhaseTime()));
+		// Pendant le tutoriel, le compte à rebours attend que le joueur lance la vague.
+		PhaseText = Mode->IsTutorialHolding()
+			? FString::Printf(TEXT("PR\u00C9PARATION  %d s  (en attente)"), FMath::CeilToInt(Mode->GetPhaseTime()))
+			: FString::Printf(TEXT("PR\u00C9PARATION  %d s"), FMath::CeilToInt(Mode->GetPhaseTime()));
 		PhaseFill = Mode->GetPhaseTime() / Mode->GetPhaseDuration();
 		break;
 	case EDRPhase::Assault:
@@ -640,6 +647,28 @@ void ADRHUD::DrawMessages(float Top)
 			DrawLabel(Lines[Index], FLinearColor(1.0f, 0.92f, 0.75f, Alpha), Canvas->ClipX * 0.5f, Y + Pad + LineHeight * Index, Size, 0.5f);
 		}
 		Y += Height + 6.0f * Scale;
+	}
+}
+
+void ADRHUD::DrawTutorial(const ADRGameMode* Mode)
+{
+	const float Width = 380.0f * Scale;
+	const float Pad = 14.0f * Scale;
+	const float Right = Canvas->ClipX - 24.0f * Scale;
+	const float Left = Right - Width;
+	const float Top = 16.0f * Scale;
+	const float Size = 0.55f;
+	const TArray<FString> Lines = Wrap(Mode->GetTutorialText(), Size, Width - 2.0f * Pad);
+	float LineWidth = 0.0f;
+	float LineHeight = 0.0f;
+	GetTextSize(TEXT("Ag"), LineWidth, LineHeight, Font, Size * Scale);
+	const float TitleHeight = 30.0f * Scale;
+	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Pad * 2.0f + TitleHeight + LineHeight * Lines.Num());
+	DrawLabel(FString::Printf(TEXT("TUTORIEL  %d / %d"), Mode->GetTutorialStep() + 1, ADRGameMode::GetTutorialStepCount()), DRHUDStyle::Accent, Left + Pad, Top + Pad, 0.5f);
+	DrawLabel(FString::Printf(TEXT("[%s] passer"), *DRHUDStyle::KeyOf(Mode, TEXT("passer"))), DRHUDStyle::Light, Right - Pad, Top + Pad, 0.45f, 1.0f);
+	for (int32 Index = 0; Index < Lines.Num(); ++Index)
+	{
+		DrawLabel(Lines[Index], FLinearColor::White, Left + Pad, Top + Pad + TitleHeight + LineHeight * Index, Size);
 	}
 }
 
@@ -1009,6 +1038,12 @@ void ADRHUD::DrawMainMenu(ADRGameMode* Mode)
 	if (Button(TEXT("AM\u00C9LIORATIONS"), Left, Y, Width, 50.0f * Scale, 0.8f))
 	{
 		bUpgradesPage = true;
+	}
+	Y += 62.0f * Scale;
+	// Revoir le tutoriel : il se relance au niveau 1-1.
+	if (Button(TEXT("TUTORIEL"), Left, Y, Width, 50.0f * Scale, 0.8f))
+	{
+		Mode->ReplayTutorial();
 	}
 	Y += 62.0f * Scale;
 	if (Button(TEXT("R\u00C9GLAGES"), Left, Y, Width, 50.0f * Scale, 0.8f))

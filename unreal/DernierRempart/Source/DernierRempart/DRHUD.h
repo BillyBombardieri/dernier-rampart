@@ -42,6 +42,8 @@ private:
 	void DrawFallen(const ADRCharacter* Player);
 	void DrawResources();
 	void DrawMessages(float Top);
+	/** Consigne du tutoriel, en haut à droite (Godot : hud.gd, set_objective). */
+	void DrawTutorial(const ADRGameMode* Mode);
 	void DrawEnd();
 	void DrawTowers(const ADRCharacter* Player);
 	/** Étiquette « Barricade  250 PV  20 s » au-dessus des barricades posées avec le gadget. */

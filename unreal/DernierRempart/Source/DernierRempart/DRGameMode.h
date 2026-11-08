@@ -238,7 +238,31 @@ public:
 	/** Utilise le gadget de l'emplacement 0 ou 1 ; vrai s'il a servi. */
 	bool UseGadget(int32 Slot, ADRCharacter* User);
 
+	/**
+	 * Tutoriel de la première partie (Godot : tutorial.gd) : 15 étapes, une à la fois, chacune validée
+	 * par ce que fait le joueur. Il fige le compte à rebours de la première préparation jusqu'à ce
+	 * que le joueur lance lui-même la vague. T pour le passer ; une fois fini ou passé, il ne revient
+	 * plus, sauf avec le bouton TUTORIEL du menu principal.
+	 */
+	bool IsTutorialActive() const { return TutorialStep >= 0; }
+	/** La première préparation attend le joueur. */
+	bool IsTutorialHolding() const { return IsTutorialActive() && Phase == EDRPhase::Prep && Wave == 1; }
+	int32 GetTutorialStep() const { return TutorialStep; }
+	static int32 GetTutorialStepCount() { return 15; }
+	/** Consigne de l'étape en cours, avec les touches choisies dans les réglages. */
+	FString GetTutorialText() const;
+	void SkipTutorial();
+	/** Bouton TUTORIEL du menu : relance le niveau 1-1 avec le tutoriel. */
+	void ReplayTutorial();
+	/** Le joueur a touché un zombie, ou ramassé de la ferraille (étapes du tutoriel). */
+	void NotePlayerHit() { ++TutorialHits; }
+	void NoteScrapPicked(int32 Amount) { TutorialPicked += Amount; }
+
 private:
+	void UpdateTutorial(float DeltaSeconds);
+	void StartTutorialStep();
+	bool IsTutorialStepDone();
+	void FinishTutorial();
 	bool PlaceBarricade(ADRCharacter* User);
 	bool ThrowDecoy(ADRCharacter* User);
 	bool LaunchDrone(ADRCharacter* User);
@@ -319,4 +343,16 @@ private:
 	TArray<FDRMessage> Messages;
 	TArray<FDRPopup> Popups;
 	TArray<FDRRing> Rings;
+
+	// Tutoriel (-1 : pas de tutoriel).
+	int32 TutorialStep = -1;
+	bool bTutorialPrimed = false; // le joueur était là au début de l'étape
+	float TutorialTimer = 0.0f;
+	FVector TutorialStart = FVector::ZeroVector;
+	float TutorialTurned = 0.0f; // radians
+	float TutorialLastYaw = 0.0f; // degrés
+	int32 TutorialHits = 0;
+	int32 TutorialPicked = 0;
+	bool bTutorialSeenOff = false;
+	bool bTutorialBench = false;
 };

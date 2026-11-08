@@ -538,6 +538,10 @@ void ADRCharacter::Shoot()
 		UGameplayStatics::ApplyPointDamage(Target, Amount, Direction, Hit, GetController(), this,
 			Weapon.bHeavy ? UDRHeavyDamage::StaticClass() : UDamageType::StaticClass());
 		HitMarkerAge = 0.0f;
+		if (ADRGameMode* Referee = GetWorld()->GetAuthGameMode<ADRGameMode>())
+		{
+			Referee->NotePlayerHit(); // étape « tire sur 3 zombies » du tutoriel
+		}
 		Params.AddIgnoredActor(Target);
 		++Hits;
 	}
@@ -1104,6 +1108,17 @@ void ADRCharacter::PausePressed()
 	}
 }
 
+void ADRCharacter::TutorialPressed()
+{
+	if (CanAct())
+	{
+		if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+		{
+			Mode->SkipTutorial();
+		}
+	}
+}
+
 void ADRCharacter::JumpPressed()
 {
 	if (CanAct())
@@ -1223,6 +1238,7 @@ void ADRCharacter::CreateInput()
 	MarkAction = NewAction(TEXT("Marquer"), EInputActionValueType::Boolean);
 	Gadget1Action = NewAction(TEXT("Gadget1"), EInputActionValueType::Boolean);
 	Gadget2Action = NewAction(TEXT("Gadget2"), EInputActionValueType::Boolean);
+	TutorialAction = NewAction(TEXT("PasserTutoriel"), EInputActionValueType::Boolean);
 	InteractAction->bTriggerWhenPaused = true; // pour refermer l'établi
 	PauseAction = NewAction(TEXT("Pause"), EInputActionValueType::Boolean);
 	PauseAction->bTriggerWhenPaused = true; // pour reprendre la partie et revenir en arrière dans les réglages
@@ -1287,6 +1303,8 @@ void ADRCharacter::ApplyBindings()
 	Bind(SkipAction, TEXT("vague"));
 	// Pause : P (modifiable) et Échap (fixe ; dans l'éditeur, Échap arrête la partie).
 	Bind(PauseAction, TEXT("pause"));
+	// T : passer le tutoriel de la première partie.
+	Bind(TutorialAction, TEXT("passer"));
 
 	// Touches fixes : la souris pour regarder, la molette pour l'arme ou la tour, Échap.
 	Mapping->MapKey(LookAction, EKeys::Mouse2D);
@@ -1353,6 +1371,7 @@ void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	EnhancedInput->BindAction(Gadget2Action, ETriggerEvent::Started, this, &ADRCharacter::Gadget2Pressed);
 	EnhancedInput->BindAction(SkipAction, ETriggerEvent::Started, this, &ADRCharacter::SkipPressed);
 	EnhancedInput->BindAction(PauseAction, ETriggerEvent::Started, this, &ADRCharacter::PausePressed);
+	EnhancedInput->BindAction(TutorialAction, ETriggerEvent::Started, this, &ADRCharacter::TutorialPressed);
 }
 
 void ADRCharacter::Move(const FInputActionValue& Value)

@@ -74,6 +74,7 @@ const TArray<FDRBinding>& UDRSave::Bindable()
 		{ TEXT("gadget2"), TEXT("Gadget 2"), EKeys::G },
 		{ TEXT("vague"), TEXT("Lancer la vague"), EKeys::Enter },
 		{ TEXT("pause"), TEXT("Pause"), EKeys::P },
+		{ TEXT("passer"), TEXT("Passer le tutoriel"), EKeys::T },
 	};
 	return List;
 }

@@ -25,7 +25,8 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 15 | Décor des chapitres 2 à 6 : mares, conteneurs, cuves, sapins, ruines, immeubles, réverbères, dunes, poteaux | à tester (8 nov.) |
 | 16 | Herbe qui ondule au vent et cailloux au sol | à tester (8 nov.) |
 | 17 | Météo (neige, pluie, cendres, poussière, lucioles) et vent | à tester (8 nov.) |
-| ensuite | Tutoriel, effets de feu et de glace, export Windows | à faire |
+| 18 | Tutoriel de la première partie | à tester (8 nov.) |
+| ensuite | Effets de feu et de glace, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
 
@@ -239,7 +240,14 @@ Pour voir un chapitre sans avoir gagné les précédents : pendant la partie, ap
 7. **La Route Brûlée** (`26`) : de la poussière file presque à l'horizontale au ras du sol, et le vent est plus fort.
 8. La météo te suit partout sur la carte. Le volume des réglages change aussi celui du vent et de la pluie.
 
-## 23. Si ça ne marche pas
+## 23. Tester l'étape 18 : le tutoriel
+
+1. Il se lance tout seul à ta première partie, en haut à droite : « TUTORIEL 1 / 15 ». Chaque étape passe à la suivante quand tu as fait ce qu'elle demande (te déplacer, regarder autour de toi, poser une Mitrailleuse puis une Cryo, éteindre et rallumer une tour, ouvrir l'établi, lancer la vague, toucher 3 zombies, en marquer un, utiliser un gadget, ramasser de la ferraille). Les étapes d'explication passent seules au bout de quelques secondes.
+2. Pendant le tutoriel, le compte à rebours de la première préparation attend (« PRÉPARATION 40 s (en attente) ») jusqu'à ce que tu lances la vague avec **Entrée**.
+3. **T** passe le tutoriel (touche modifiable dans les réglages : « Passer le tutoriel »). Fini ou passé, il ne revient plus.
+4. Pour le revoir : bouton **TUTORIEL** du menu principal ; il relance le niveau 1-1 avec le tutoriel.
+
+## 24. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

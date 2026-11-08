@@ -82,6 +82,7 @@ void ADRScrap::Tick(float DeltaSeconds)
 		if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
 		{
 			Mode->AddScrap(Value);
+			Mode->NoteScrapPicked(Value);
 		}
 		if (USoundBase* Sound = DRLook::Sound(TEXT("pickup")))
 		{

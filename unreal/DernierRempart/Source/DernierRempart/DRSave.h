@@ -83,6 +83,10 @@ public:
 	UPROPERTY()
 	bool bInvertY = false;
 
+	/** Tutoriel de la première partie fini ou passé : il ne se relance plus (Godot : tutorial_done). */
+	UPROPERTY()
+	bool bTutorialDone = false;
+
 	/** Touches changées par le joueur (les autres gardent leur touche par défaut). */
 	UPROPERTY()
 	TMap<FName, FKey> Keys;

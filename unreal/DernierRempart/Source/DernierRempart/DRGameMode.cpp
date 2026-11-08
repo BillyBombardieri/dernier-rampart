@@ -9,6 +9,7 @@
 #include "DRSave.h"
 #include "DRScrap.h"
 #include "DRStructures.h"
+#include "DRTower.h"
 #include "DRZombie.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
@@ -68,6 +69,12 @@ void ADRGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 	Progress = UDRSave::LoadOrCreate();
 	DRLook::SetMasterVolume(Progress->Volume);
 	LoadLevel(Options);
+	// Tutoriel de la première partie (pas devant le menu principal).
+	if (!bMenu && !Progress->bTutorialDone)
+	{
+		TutorialStep = 0;
+		StartTutorialStep();
+	}
 	LastWave = (int32)Rule(TEXT("partie"), TEXT("last_wave"), 10.0);
 	SiegeEvery = (int32)Rule(TEXT("vagues"), TEXT("siege_every"), 5.0);
 	// Gadgets de départ (Godot : Game.gadget_slots).
@@ -506,6 +513,7 @@ void ADRGameMode::OpenWorkbench()
 		return;
 	}
 	bWorkbenchOpen = true;
+	bTutorialBench = true;
 	UGameplayStatics::SetGamePaused(this, true);
 	PlaySfx2D(TEXT("ui_click"), -6.0f);
 }
@@ -1083,10 +1091,15 @@ void ADRGameMode::Tick(float DeltaSeconds)
 	{
 		return;
 	}
+	UpdateTutorial(DeltaSeconds);
 	switch (Phase)
 	{
 	case EDRPhase::Prep:
-		PhaseTime -= DeltaSeconds;
+		// Pendant le tutoriel, la première préparation attend que le joueur lance la vague.
+		if (!IsTutorialHolding())
+		{
+			PhaseTime -= DeltaSeconds;
+		}
 		if (PhaseTime <= 0.0f)
 		{
 			EnterPhase(EDRPhase::Assault, 0.0f);
@@ -1124,5 +1137,205 @@ void ADRGameMode::Tick(float DeltaSeconds)
 			EnterPhase(EDRPhase::Prep, (float)Rule(TEXT("vagues"), TEXT("prep_time"), 25.0));
 		}
 		break;
+	}
+}
+
+// ---------------------------------------------------------------- tutoriel
+
+FString ADRGameMode::GetTutorialText() const
+{
+	// Les touches affichées sont celles choisies dans les réglages.
+	auto Key = [this](const TCHAR* Id) { return Progress ? Progress->KeyName(Id) : UDRSave::KeyLabel(UDRSave::DefaultKey(Id)); };
+	const FString MoveKeys = Progress ? Progress->MoveKeysName() : FString(TEXT("ZQSD"));
+	switch (TutorialStep)
+	{
+	case 0:
+		return FString::Printf(TEXT("D\u00E9place-toi avec %s et cours avec %s."), *MoveKeys, *Key(TEXT("courir")));
+	case 1:
+		return TEXT("Regarde autour de toi avec la souris.");
+	case 2:
+		return TEXT("Les zombies arrivent du PORTAIL, la br\u00E8che \u00E9clair\u00E9e en rouge au bout du chemin de boue. Ils suivent ce chemin jusqu'au C\u0152UR, qu'il faut prot\u00E9ger.");
+	case 3:
+		return FString::Printf(TEXT("Le chemin est coup\u00E9 par la barri\u00E8re de l'Avant-poste (grillage, barbel\u00E9s et blocs de b\u00E9ton). Les zombies doivent la casser pour passer, pendant que tes tours tirent. Si elle tombe, maintiens %s dessus pour la relever. Une deuxi\u00E8me barri\u00E8re prot\u00E8ge la Muraille."), *Key(TEXT("interagir")));
+	case 4:
+		return FString::Printf(TEXT("Approche d'un ancrage (dalle de b\u00E9ton avec des rep\u00E8res orange) pr\u00E8s de la barri\u00E8re. La tour choisie s'affiche en bas : appuie sur %s pour poser une Mitrailleuse."), *Key(TEXT("interagir")));
+	case 5:
+		return FString::Printf(TEXT("Sur un autre ancrage, choisis la Cryo avec la molette ou %s, puis %s. Elle g\u00E8le les zombies. Il existe 6 tours : Mitrailleuse, Cryo, Lance-flammes, Arc \u00E9lectrique, Mortier et Phare."), *Key(TEXT("tour")), *Key(TEXT("interagir")));
+	case 6:
+		return FString::Printf(TEXT("Chaque tour allum\u00E9e consomme de l'\u00E9nergie (en haut \u00E0 gauche). Vise une tour et appuie sur %s pour l'\u00E9teindre et r\u00E9cup\u00E9rer son \u00E9nergie, puis rallume-la."), *Key(TEXT("allumer")));
+	case 7:
+		return FString::Printf(TEXT("Pr\u00E8s du C\u0153ur, l'\u00C9TABLI am\u00E9liore tes armes (canon, chargeur, munitions sp\u00E9ciales), choisit tes gadgets et renforce le g\u00E9n\u00E9rateur. Il s'utilise entre les vagues avec %s."), *Key(TEXT("interagir")));
+	case 8:
+		return FString::Printf(TEXT("Pr\u00EAt ? Appuie sur %s pour lancer la premi\u00E8re vague."), *Key(TEXT("vague")));
+	case 9:
+		return FString::Printf(TEXT("Vise avec %s et tire avec %s. Un tir \u00E0 la t\u00EAte fait x2 d\u00E9g\u00E2ts."), *Key(TEXT("viser")), *Key(TEXT("tirer")));
+	case 10:
+		return FString::Printf(TEXT("Vise un zombie et appuie sur %s pour le marquer : tes tours le ciblent en priorit\u00E9 (+25 %% de d\u00E9g\u00E2ts)."), *Key(TEXT("marquer")));
+	case 11:
+		return FString::Printf(TEXT("Gadgets : %s pose une barricade en travers du chemin, %s lance un leurre sonore qui attire les zombies. Leur recharge s'affiche en bas \u00E0 gauche."), *Key(TEXT("gadget1")), *Key(TEXT("gadget2")));
+	case 12:
+		return FString::Printf(TEXT("Combos : un tir de pistolet lourd (%s) sur un zombie gel\u00E9 le BRISE (x3). Un zombie charg\u00E9 par l'Arc \u00E9lectrique touch\u00E9 par une balle d\u00E9clenche une SURCHARGE. Un obus de Mortier sur un zombie en feu provoque un EMBRASEMENT."), *Key(TEXT("pistolet")));
+	case 13:
+		return TEXT("Les zombies laissent de la ferraille. Va la ramasser : elle sert \u00E0 construire, r\u00E9parer et am\u00E9liorer.");
+	default:
+		return FString::Printf(TEXT("Tutoriel termin\u00E9 ! Ta sant\u00E9 revient \u00E0 fond apr\u00E8s chaque vague repouss\u00E9e. Si une barri\u00E8re tombe, maintiens %s pr\u00E8s d'elle pour la relever. \u00C9chap ou %s met en pause. Bonne chance !"), *Key(TEXT("interagir")), *Key(TEXT("pause")));
+	}
+}
+
+void ADRGameMode::SkipTutorial()
+{
+	if (!IsTutorialActive())
+	{
+		return;
+	}
+	Say(TEXT("Tutoriel pass\u00E9."));
+	FinishTutorial();
+}
+
+void ADRGameMode::ReplayTutorial()
+{
+	if (Progress)
+	{
+		Progress->bTutorialDone = false;
+		Progress->Write();
+	}
+	PlayLevel(0);
+}
+
+void ADRGameMode::UpdateTutorial(float DeltaSeconds)
+{
+	if (!IsTutorialActive())
+	{
+		return;
+	}
+	TutorialTimer += DeltaSeconds;
+	if (const APawn* Pawn = UGameplayStatics::GetPlayerPawn(this, 0))
+	{
+		// Le joueur n'existe pas encore quand la partie se prépare : l'étape démarre à son arrivée.
+		if (!bTutorialPrimed)
+		{
+			StartTutorialStep();
+		}
+		const float Yaw = (float)Pawn->GetControlRotation().Yaw;
+		TutorialTurned += FMath::DegreesToRadians(FMath::Abs(FMath::FindDeltaAngleDegrees(TutorialLastYaw, Yaw)));
+		TutorialLastYaw = Yaw;
+	}
+	if (IsTutorialStepDone())
+	{
+		++TutorialStep;
+		if (TutorialStep >= GetTutorialStepCount())
+		{
+			FinishTutorial();
+			return;
+		}
+		StartTutorialStep();
+	}
+}
+
+void ADRGameMode::StartTutorialStep()
+{
+	TutorialTimer = 0.0f;
+	TutorialTurned = 0.0f;
+	TutorialHits = 0;
+	TutorialPicked = 0;
+	bTutorialSeenOff = false;
+	const APawn* Pawn = GetWorld() ? UGameplayStatics::GetPlayerPawn(this, 0) : nullptr;
+	bTutorialPrimed = Pawn != nullptr;
+	if (Pawn)
+	{
+		TutorialStart = Pawn->GetActorLocation();
+		TutorialLastYaw = (float)Pawn->GetControlRotation().Yaw;
+	}
+}
+
+bool ADRGameMode::IsTutorialStepDone()
+{
+	UWorld* World = GetWorld();
+	auto Built = [World](const TCHAR* TowerType)
+	{
+		for (TActorIterator<ADRTower> It(World); It; ++It)
+		{
+			if (It->GetType() == TowerType)
+			{
+				return true;
+			}
+		}
+		return false;
+	};
+	switch (TutorialStep)
+	{
+	case 0:
+	{
+		const APawn* Pawn = UGameplayStatics::GetPlayerPawn(this, 0);
+		return bTutorialPrimed && Pawn && FVector::Dist(Pawn->GetActorLocation(), TutorialStart) > 400.0;
+	}
+	case 1:
+		return TutorialTurned > 1.5f;
+	case 2:
+		return TutorialTimer > 7.0f;
+	case 3:
+		return TutorialTimer > 9.0f;
+	case 4:
+		return Built(TEXT("gun"));
+	case 5:
+		return Built(TEXT("cryo"));
+	case 6:
+	{
+		// Validé quand une tour a été éteinte puis rallumée (ou après un moment, pour ne pas bloquer).
+		bool bAllOn = true;
+		for (TActorIterator<ADRTower> It(World); It; ++It)
+		{
+			if (!It->IsPowered())
+			{
+				bTutorialSeenOff = true;
+				bAllOn = false;
+			}
+		}
+		return (bTutorialSeenOff && bAllOn) || TutorialTimer > 25.0f;
+	}
+	case 7:
+		return bTutorialBench || TutorialTimer > 14.0f;
+	case 8:
+		return Phase == EDRPhase::Assault;
+	case 9:
+		return TutorialHits >= 3;
+	case 10:
+	{
+		for (TActorIterator<ADRZombie> It(World); It; ++It)
+		{
+			if (It->IsMarked())
+			{
+				return true;
+			}
+		}
+		return TutorialTimer > 30.0f;
+	}
+	case 11:
+	{
+		for (const TPair<FName, float>& Cooldown : GadgetCooldowns)
+		{
+			if (Cooldown.Value > 0.0f)
+			{
+				return true;
+			}
+		}
+		return TutorialTimer > 20.0f;
+	}
+	case 12:
+		return TutorialTimer > 12.0f;
+	case 13:
+		return TutorialPicked > 0 || TutorialTimer > 40.0f;
+	default:
+		return TutorialTimer > 9.0f;
+	}
+}
+
+void ADRGameMode::FinishTutorial()
+{
+	TutorialStep = -1;
+	if (Progress)
+	{
+		Progress->bTutorialDone = true;
+		Progress->Write();
 	}
 }
