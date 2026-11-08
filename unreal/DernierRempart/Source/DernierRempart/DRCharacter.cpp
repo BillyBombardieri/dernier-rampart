@@ -139,6 +139,10 @@ void ADRCharacter::BeginPlay()
 	Hp = MaxHp;
 	MuzzleFlash->SetMaterial(0, DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.75f, 0.35f), 60.0f));
 	Tracer->SetMaterial(0, DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.85f, 0.6f), 40.0f));
+	TracerLooks.Add(TEXT("standard"), Tracer->GetMaterial(0));
+	TracerLooks.Add(TEXT("incendiaire"), DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.5f, 0.15f), 40.0f));
+	TracerLooks.Add(TEXT("electrique"), DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(0.65f, 0.6f, 1.0f), 40.0f));
+	TracerLooks.Add(TEXT("perforante"), DRLook::Textured(this, TEXT("metal"), 1.0f, FLinearColor(0.9f, 0.95f, 1.0f), 40.0f));
 	SelectWeapon(0);
 	SwitchAnim = 0.0f;
 	GunBasePosition = DRPlayer::HipPosition;
@@ -177,7 +181,7 @@ void ADRCharacter::ApplyImplants()
 float ADRCharacter::WeaponDamage(int32 Index) const
 {
 	// Godot : player.gd, weapon_damage. Main lourde : pistolet +50 % ; Sang froid : fusil -20 % ;
-	// Armurier : +5 % par rang. (L'établi viendra plus tard.)
+	// canon de l'établi : +20 % par niveau ; Armurier : +5 % par rang.
 	const FDRWeapon& Weapon = Weapons[Index];
 	const UWorld* World = GetWorld();
 	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
@@ -192,9 +196,39 @@ float ADRCharacter::WeaponDamage(int32 Index) const
 		{
 			Amount *= 0.8f;
 		}
-		Amount *= Mode->UpgradeMult(TEXT("armurier"));
+		Amount *= (1.0f + 0.2f * Mode->GetWeaponMods(Weapon.Id).Barrel) * Mode->UpgradeMult(TEXT("armurier"));
 	}
 	return Amount;
+}
+
+int32 ADRCharacter::MagSize(int32 Index) const
+{
+	const UWorld* World = GetWorld();
+	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+	const int32 Steps = Mode ? Mode->GetWeaponMods(Weapons[Index].Id).Mag : 0;
+	return FMath::RoundToInt(Weapons[Index].Mag * (1.0f + 0.3f * Steps));
+}
+
+FName ADRCharacter::GetAmmoType() const
+{
+	const UWorld* World = GetWorld();
+	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+	return Mode && Weapons.IsValidIndex(CurrentWeapon) ? Mode->GetWeaponMods(Weapons[CurrentWeapon].Id).Ammo : FName(TEXT("standard"));
+}
+
+void ADRCharacter::Refill(const FString& WeaponId)
+{
+	for (int32 Index = 0; Index < Weapons.Num(); ++Index)
+	{
+		if (Weapons[Index].Id == WeaponId)
+		{
+			Ammo[Index] = MagSize(Index);
+			if (Index == CurrentWeapon)
+			{
+				ReloadLeft = 0.0f;
+			}
+		}
+	}
 }
 
 float ADRCharacter::ReloadTime(int32 Index) const
@@ -421,7 +455,7 @@ void ADRCharacter::StopAim()
 
 void ADRCharacter::ReloadPressed()
 {
-	if (CanAct() && Weapons.IsValidIndex(CurrentWeapon) && ReloadLeft <= 0.0f && Ammo[CurrentWeapon] < Weapons[CurrentWeapon].Mag)
+	if (CanAct() && Weapons.IsValidIndex(CurrentWeapon) && ReloadLeft <= 0.0f && Ammo[CurrentWeapon] < MagSize(CurrentWeapon))
 	{
 		StartReload();
 	}
@@ -473,20 +507,39 @@ void ADRCharacter::Shoot()
 	const FRotator Offset(FMath::RadiansToDegrees(FMath::FRandRange(-Spread, Spread)), FMath::RadiansToDegrees(FMath::FRandRange(-Spread, Spread)), 0.0);
 	const FVector Direction = (FQuat(ViewRotation()) * FQuat(Offset)).Vector();
 	const FVector Start = Camera->GetComponentLocation();
-	FVector Impact = Start + Direction * DRPlayer::Range;
-	FHitResult Hit;
+	const FVector End = Start + Direction * DRPlayer::Range;
+	FVector Impact = End;
+	// Munitions de l'établi : incendiaires -10 % de dégâts ; perforantes : traversent jusqu'à 3
+	// zombies (30 % de moins à chaque fois), +25 % sur Brutes et Boss.
+	const FName AmmoType = GetAmmoType();
+	const bool bPiercing = AmmoType == FName(TEXT("perforante"));
+	const float ShotDamage = WeaponDamage(CurrentWeapon) * (AmmoType == FName(TEXT("incendiaire")) ? 0.9f : 1.0f);
 	FCollisionQueryParams Params(SCENE_QUERY_STAT(DRTir), true, this);
-	if (GetWorld()->LineTraceSingleByChannel(Hit, Start, Impact, ECC_Visibility, Params))
+	for (int32 Hits = 0; Hits < (bPiercing ? 3 : 1);)
 	{
+		FHitResult Hit;
+		if (!GetWorld()->LineTraceSingleByChannel(Hit, Start, End, ECC_Visibility, Params))
+		{
+			break;
+		}
 		Impact = Hit.ImpactPoint;
 		AActor* Target = Hit.GetActor();
-		if (Target && Target->CanBeDamaged() && Target->IsA<APawn>())
+		if (!Target || !Target->CanBeDamaged() || !Target->IsA<APawn>())
 		{
-			// Le pistolet lourd brise les zombies gelés (combo BRISÉ).
-			UGameplayStatics::ApplyPointDamage(Target, WeaponDamage(CurrentWeapon), Direction, Hit, GetController(), this,
-				Weapon.bHeavy ? UDRHeavyDamage::StaticClass() : UDamageType::StaticClass());
-			HitMarkerAge = 0.0f;
+			break;
 		}
+		float Amount = ShotDamage * FMath::Pow(0.7f, (float)Hits);
+		const ADRZombie* Zombie = Cast<ADRZombie>(Target);
+		if (bPiercing && Zombie && (Zombie->GetZombieType() == TEXT("brute") || Zombie->GetZombieType() == TEXT("boss")))
+		{
+			Amount *= 1.25f;
+		}
+		// Le pistolet lourd brise les zombies gelés (combo BRISÉ).
+		UGameplayStatics::ApplyPointDamage(Target, Amount, Direction, Hit, GetController(), this,
+			Weapon.bHeavy ? UDRHeavyDamage::StaticClass() : UDamageType::StaticClass());
+		HitMarkerAge = 0.0f;
+		Params.AddIgnoredActor(Target);
+		++Hits;
 	}
 
 	// Éclair, flamme, traçante et son.
@@ -500,6 +553,10 @@ void ADRCharacter::Shoot()
 	{
 		Tracer->SetWorldLocationAndRotation((From + Impact) * 0.5, (Impact - From).Rotation());
 		Tracer->SetWorldScale3D(FVector(Length / 100.0, 0.012, 0.012));
+		if (const TObjectPtr<UMaterialInterface>* TracerLook = TracerLooks.Find(AmmoType))
+		{
+			Tracer->SetMaterial(0, TracerLook->Get());
+		}
 		Tracer->SetVisibility(true);
 	}
 	PlaySfx(Weapon.Sound, -2.0f, 0.06f);
@@ -608,7 +665,7 @@ void ADRCharacter::Tick(float DeltaSeconds)
 		if (ReloadLeft <= 0.0f)
 		{
 			ReloadLeft = 0.0f;
-			Ammo[CurrentWeapon] = Weapons[CurrentWeapon].Mag;
+			Ammo[CurrentWeapon] = MagSize(CurrentWeapon);
 		}
 	}
 	bAiming = bAimHeld && ReloadLeft <= 0.0f;
@@ -711,6 +768,7 @@ void ADRCharacter::UpdateInteraction(float DeltaSeconds)
 {
 	Hint.Reset();
 	SightSocket = nullptr;
+	bBenchInSight = false;
 	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
 	const ADRChapter* Chapter = Mode ? Mode->GetChapter() : nullptr;
 	if (!Chapter)
@@ -761,6 +819,18 @@ void ADRCharacter::UpdateInteraction(float DeltaSeconds)
 			Hint = FString::Printf(TEXT("%s construire : %s (%d ferraille, %d \u00E9nergie)\nMolette ou %s : choisir une autre tour"), *KeyName(TEXT("interagir")), *Name,
 				(int32)DRData::Number(Stats, TEXT("cost"), 0.0), (int32)DRData::Number(Stats, TEXT("energy"), 0.0), *KeyName(TEXT("tour")));
 		}
+		return;
+	}
+
+	// L'établi, à côté du Cœur (Godot : player.gd, target is Workbench).
+	const FVector Bench = ADRChapter::WorkbenchPosition() + FVector(0.0, 0.0, 100.0);
+	const double BenchAlong = FVector::DotProduct(Bench - Eye, Aim);
+	if (BenchAlong > 0.0 && BenchAlong < 400.0 && FVector::Dist(Eye + Aim * BenchAlong, Bench) < 140.0)
+	{
+		bBenchInSight = true;
+		Hint = Mode->GetPhase() == EDRPhase::Assault
+			? FString(TEXT("\u00C9tabli : utilisable seulement entre les vagues"))
+			: FString::Printf(TEXT("%s ouvrir l'\u00E9tabli (armes, munitions, g\u00E9n\u00E9rateur)"), *KeyName(TEXT("interagir")));
 		return;
 	}
 
@@ -864,9 +934,20 @@ void ADRCharacter::Repair(float DeltaSeconds, ADRBarrier* Barrier, bool bCore)
 
 void ADRCharacter::InteractPressed()
 {
+	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	// L'établi ouvert se referme avec la même touche (elle marche aussi pendant la pause du jeu).
+	if (Mode && Mode->IsWorkbenchOpen())
+	{
+		Mode->CloseWorkbench();
+		return;
+	}
+	if (bBenchInSight && CanAct() && Mode)
+	{
+		Mode->OpenWorkbench();
+		return;
+	}
 	bInteractHeld = true;
 	ADRSocket* Socket = SightSocket.Get();
-	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
 	if (!CanAct() || !Socket || !Mode)
 	{
 		return;
@@ -1107,6 +1188,7 @@ void ADRCharacter::CreateInput()
 	CycleAction = NewAction(TEXT("ChoisirTour"), EInputActionValueType::Boolean);
 	PowerAction = NewAction(TEXT("AllumerTour"), EInputActionValueType::Boolean);
 	MarkAction = NewAction(TEXT("Marquer"), EInputActionValueType::Boolean);
+	InteractAction->bTriggerWhenPaused = true; // pour refermer l'établi
 	PauseAction = NewAction(TEXT("Pause"), EInputActionValueType::Boolean);
 	PauseAction->bTriggerWhenPaused = true; // pour reprendre la partie et revenir en arrière dans les réglages
 }

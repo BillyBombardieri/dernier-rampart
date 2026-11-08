@@ -31,6 +31,16 @@ struct FDRDifficulty
 	float Points = 1.0f; // multiplicateur des insignes gagnés
 };
 
+/** Améliorations d'une arme achetées à l'établi pendant la partie (Godot : Game.mods). */
+struct FDRWeaponMods
+{
+	int32 Barrel = 0; // canon : +20 % de dégâts par niveau
+	int32 Mag = 0;    // chargeur : +30 % de balles par niveau
+	FName Ammo = FName(TEXT("standard"));
+	TArray<FName> Owned; // munitions achetées (les standard sont toujours là)
+	bool Owns(FName Id) const { return Id == FName(TEXT("standard")) || Owned.Contains(Id); }
+};
+
 /** Texte qui monte et s'efface au-dessus d'un zombie (« TÊTE », « BRISÉ ! »...). */
 struct FDRPopup
 {
@@ -141,7 +151,7 @@ public:
 	/** Menu principal (pas de partie en cours) ou menu de pause ouvert : le joueur ne bouge pas. */
 	bool IsMainMenu() const { return bMenu; }
 	bool IsPauseMenu() const { return bPauseMenu; }
-	bool IsMenuOpen() const { return bMenu || bPauseMenu || bImplantChoice; }
+	bool IsMenuOpen() const { return bMenu || bPauseMenu || bImplantChoice || bWorkbenchOpen; }
 	UDRSave* GetProgress() const { return Progress; }
 	/** Nouveau record, ou niveau suivant débloqué, à la fin de la partie. */
 	bool IsNewRecord() const { return bNewRecord; }
@@ -186,6 +196,29 @@ public:
 	/** « name », « plus » ou « minus » d'un implant. */
 	FString GetImplantText(FName Id, const TCHAR* Field) const;
 	void ChooseImplant(FName Id);
+
+	/**
+	 * Établi près du Cœur (Godot : game.gd, section établi ; prix de jeu.json « etabli » et
+	 * « munitions ») : canon, chargeur et munitions de chaque arme, générateur. Utilisable
+	 * seulement entre les vagues ; la partie est figée tant qu'il est ouvert.
+	 */
+	bool IsWorkbenchOpen() const { return bWorkbenchOpen; }
+	void OpenWorkbench();
+	void CloseWorkbench();
+	static const TArray<FName>& GetAmmoIds();
+	/** « name » ou « desc » d'un type de munitions, et son prix en ferraille. */
+	FString GetAmmoText(FName Ammo, const TCHAR* Field) const;
+	int32 GetAmmoCost(FName Ammo) const;
+	FDRWeaponMods GetWeaponMods(const FString& WeaponId) const;
+	/** Prix du niveau suivant (« canon », « chargeur » ou « generateur »), -1 au maximum. */
+	int32 GetBenchCost(const TCHAR* Kind, int32 CurrentStep) const;
+	int32 GetBenchMax(const TCHAR* Kind) const;
+	bool BuyBarrel(const FString& WeaponId);
+	bool BuyMag(const FString& WeaponId);
+	/** Achète (si besoin) puis équipe un type de munitions sur une arme. */
+	bool ChooseAmmo(const FString& WeaponId, FName Ammo);
+	bool BuyGenerator();
+	int32 GetGenerator() const { return Generator; }
 
 private:
 	TSharedPtr<FJsonObject> GetUpgradeData(FName Id) const;
@@ -255,6 +288,9 @@ private:
 	bool bImplantChoice = false;
 	TArray<FName> Implants;
 	TArray<FName> ImplantOptions;
+	bool bWorkbenchOpen = false;
+	TMap<FString, FDRWeaponMods> WeaponMods;
+	int32 Generator = 0;
 	int32 EnergyUsed = 0;
 	TArray<FString> BuildOrder;
 	TArray<FDRMessage> Messages;

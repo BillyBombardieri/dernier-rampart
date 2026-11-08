@@ -46,6 +46,9 @@ public:
 	/** Le Cœur, au milieu de la base (Godot : CORE_POS). */
 	static FVector CorePosition() { return FVector(-3500.0, 0.0, 0.0); }
 
+	/** L'établi, à gauche du Cœur, plan de travail tourné vers lui (Godot : WORKBENCH_POS). */
+	static FVector WorkbenchPosition() { return FVector(-3300.0, -550.0, 0.0); }
+
 	/** Le joueur commence devant le Cœur, tourné vers le champ de bataille (Godot : (0, 0.2, 27)). */
 	static FTransform PlayerStart() { return FTransform(FRotator::ZeroRotator, FVector(-2700.0, 0.0, 110.0)); }
 
@@ -76,6 +79,7 @@ private:
 	void BuildPath(const TSharedPtr<FJsonObject>& Data);
 	void BuildPortal();
 	void BuildCore();
+	void BuildWorkbench();
 	void BuildRings(const TSharedPtr<FJsonObject>& Data);
 	void BuildSocket(const FVector& Position);
 	void BuildWalls(const TSharedPtr<FJsonObject>& Data);

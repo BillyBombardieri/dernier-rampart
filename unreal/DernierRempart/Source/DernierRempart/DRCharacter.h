@@ -90,6 +90,18 @@ public:
 	bool IsAiming() const { return bAiming; }
 	float GetSpread() const;
 	float GetHitMarkerAge() const { return HitMarkerAge; }
+	// Pour l'établi.
+	int32 GetWeaponCount() const { return Weapons.Num(); }
+	const FDRWeapon& GetWeaponAt(int32 Index) const { return Weapons[Index]; }
+	/** Dégâts d'une arme, implants, établi et améliorations compris. */
+	float WeaponDamage(int32 Index) const;
+	/** Balles par chargeur, avec les chargeurs agrandis à l'établi. */
+	int32 MagSize(int32 Index) const;
+	int32 GetMagSize() const { return MagSize(CurrentWeapon); }
+	/** Munitions de l'arme en main (« standard », « incendiaire », « perforante », « electrique »). */
+	FName GetAmmoType() const;
+	/** Recharge gratuitement une arme (après l'achat d'un plus grand chargeur). */
+	void Refill(const FString& WeaponId);
 
 protected:
 	virtual void BeginPlay() override;
@@ -121,8 +133,7 @@ private:
 	void PlaySfx(const FString& Name, float Decibels, float PitchJitter);
 	void SetSpeed(float Speed);
 	FRotator ViewRotation() const;
-	/** Dégâts et durée de rechargement d'une arme, implants et améliorations compris. */
-	float WeaponDamage(int32 Index) const;
+	/** Durée de rechargement d'une arme, implants compris. */
 	float ReloadTime(int32 Index) const;
 	void Die();
 	void Respawn();
@@ -169,6 +180,10 @@ private:
 
 	UPROPERTY(Transient)
 	TMap<FString, TObjectPtr<USoundBase>> Sounds;
+
+	/** Couleur de la traçante selon les munitions (Godot : _tracer_color). */
+	UPROPERTY(Transient)
+	TMap<FName, TObjectPtr<UMaterialInterface>> TracerLooks;
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInputMappingContext> Mapping;
@@ -244,6 +259,7 @@ private:
 
 	// Construction, améliorations et réparations (Godot : _handle_interaction).
 	TWeakObjectPtr<ADRSocket> SightSocket;
+	bool bBenchInSight = false;
 	FString Hint;
 	int32 BuildChoice = 0;
 	bool bInteractHeld = false;

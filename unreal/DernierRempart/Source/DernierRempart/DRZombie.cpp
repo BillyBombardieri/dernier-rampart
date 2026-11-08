@@ -473,6 +473,9 @@ float ADRZombie::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 	float Amount = DamageAmount;
 	const bool bFromPlayer = EventInstigator && EventInstigator->IsPlayerController();
 	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	// Munitions de l'arme du joueur (établi) : les dégâts sont appliqués pendant son tir.
+	const ADRCharacter* Shooter = bFromPlayer ? Cast<ADRCharacter>(EventInstigator->GetPawn()) : nullptr;
+	const FName AmmoType = Shooter ? Shooter->GetAmmoType() : FName(TEXT("standard"));
 	if (DamageEvent.IsOfType(FPointDamageEvent::ClassID))
 	{
 		const FPointDamageEvent& Point = static_cast<const FPointDamageEvent&>(DamageEvent);
@@ -504,8 +507,8 @@ float ADRZombie::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 			Mode->Popup(TEXT("BRIS\u00C9 !"), GetActorLocation() + FVector(0.0, 0.0, (220.0 - 95.0) * Size), FLinearColor(0.6f, 0.9f, 1.0f), 64.0f);
 		}
 	}
-	// Combo SURCHARGE : un tir sur un zombie chargé libère une onde électrique autour de lui.
-	if (bFromPlayer && ChargedTime > 0.0f)
+	// Combo SURCHARGE : un tir (pas électrique) sur un zombie chargé libère une onde électrique autour de lui.
+	if (bFromPlayer && ChargedTime > 0.0f && AmmoType != FName(TEXT("electrique")))
 	{
 		Amount += Surcharge();
 	}
@@ -514,6 +517,16 @@ float ADRZombie::TakeDamage(float DamageAmount, FDamageEvent const& DamageEvent,
 	if (Hp <= 0.0f)
 	{
 		Die();
+		return Amount;
+	}
+	// Munitions incendiaires : mettent le feu ; électriques : chargent la cible pour la SURCHARGE.
+	if (bFromPlayer && AmmoType == FName(TEXT("incendiaire")))
+	{
+		Ignite(3.0f, 6.0f * (Mode ? Mode->ComboScale() : 1.0f));
+	}
+	else if (bFromPlayer && AmmoType == FName(TEXT("electrique")))
+	{
+		Charge(3.0f);
 	}
 	return Amount;
 }

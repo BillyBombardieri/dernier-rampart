@@ -112,6 +112,7 @@ void ADRChapter::Build(int32 InChapter)
 		BuildPortal();
 	}
 	BuildCore();
+	BuildWorkbench();
 	BuildRings(Data);
 	BuildWalls(Data);
 	BuildLights(Data);
@@ -349,6 +350,44 @@ void ADRChapter::BuildCore()
 	// Ses points de vie et sa lumière bleue sont portés par ADRCore.
 	Core = GetWorld()->SpawnActor<ADRCore>(C + FVector(0.0, 0.0, 175.0), FRotator::ZeroRotator);
 	Blocked.Add(C);
+}
+
+void ADRChapter::BuildWorkbench()
+{
+	// Établi (Godot : workbench.gd) : plateau en bois sur pieds en acier, étagère, panneau à outils
+	// côté champ de bataille (+X), étau, arme en cours de montage, douilles et lampe d'atelier.
+	// Le plan de travail fait face au Cœur (-X). Le panneau « ÉTABLI » est dessiné par l'interface.
+	const FVector B = WorkbenchPosition();
+	UMaterialInterface* Wood = Look(TEXT("cloth"), 2.0f, FLinearColor(0.55f, 0.4f, 0.25f));
+	UMaterialInterface* Steel = Look(TEXT("metal"), 1.5f, FLinearColor(0.7f, 0.7f, 0.7f));
+	UMaterialInterface* Dark = Look(TEXT("metal"), 1.5f, FLinearColor(0.35f, 0.35f, 0.35f));
+	Box(Wood, B + FVector(0.0, 0.0, 95.0), FVector(100.0, 240.0, 10.0));
+	for (const double LegY : { -110.0, 110.0 })
+	{
+		for (const double LegX : { -42.0, 42.0 })
+		{
+			Box(Dark, B + FVector(LegX, LegY, 45.0), FVector(8.0, 8.0, 90.0), FRotator::ZeroRotator, false);
+		}
+	}
+	Box(Dark, B + FVector(0.0, 0.0, 30.0), FVector(85.0, 220.0, 5.0), FRotator::ZeroRotator, false);
+	Box(Wood, B + FVector(50.0, 0.0, 175.0), FVector(6.0, 240.0, 130.0));
+	for (int32 Index = 0; Index < 6; ++Index)
+	{
+		const double ToolHeight = Random.FRandRange(25.0f, 50.0f);
+		Box(Steel, B + FVector(45.0, 90.0 - Index * 36.0, 185.0), FVector(4.0, 5.0, ToolHeight), FRotator(0.0, 0.0, Random.FRandRange(-17.0f, 17.0f)), false);
+	}
+	Box(Dark, B + FVector(-10.0, 85.0, 110.0), FVector(30.0, 25.0, 20.0), FRotator::ZeroRotator, false);
+	Box(Plain(FLinearColor(0.12f, 0.12f, 0.13f)), B + FVector(-5.0, -20.0, 105.0), FVector(12.0, 70.0, 9.0), FRotator(0.0, -17.0, 0.0), false);
+	Box(Plain(FLinearColor(0.1f, 0.1f, 0.1f)), B + FVector(20.0, -55.0, 105.0), FVector(20.0, 5.0, 8.0), FRotator::ZeroRotator, false);
+	UMaterialInterface* Brass = Plain(FLinearColor(0.8f, 0.6f, 0.25f));
+	for (int32 Index = 0; Index < 3; ++Index)
+	{
+		Cylinder(Brass, B + FVector(-25.0, -70.0 - 5.0 * Index, 103.0), 1.5, 6.0, FRotator::ZeroRotator, false);
+	}
+	// Lampe d'atelier chaude au-dessus du plan de travail.
+	Box(Look(TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.85f, 0.6f), 20.0f), B + FVector(35.0, 0.0, 250.0), FVector(15.0, 30.0, 8.0), FRotator::ZeroRotator, false);
+	Flicker(B + FVector(10.0, 0.0, 230.0), FLinearColor(1.0f, 0.82f, 0.55f), 120.0f, 500.0f, 0.0f, 0.0f, true);
+	Blocked.Add(B);
 }
 
 void ADRChapter::BuildRings(const TSharedPtr<FJsonObject>& Data)

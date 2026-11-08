@@ -46,6 +46,24 @@ namespace DRHUDStyle
 
 	constexpr float ZombieBarRange = 4000.0f; // au-delà de 40 m, les barres seraient illisibles
 
+	// Couleur des munitions de l'établi (Godot : workbench_panel.gd, _ammo_color).
+	FLinearColor AmmoColor(FName Ammo)
+	{
+		if (Ammo == FName(TEXT("incendiaire")))
+		{
+			return FLinearColor(1.0f, 0.5f, 0.2f);
+		}
+		if (Ammo == FName(TEXT("perforante")))
+		{
+			return FLinearColor(0.85f, 0.85f, 0.9f);
+		}
+		if (Ammo == FName(TEXT("electrique")))
+		{
+			return FLinearColor(0.6f, 0.55f, 1.0f);
+		}
+		return Accent;
+	}
+
 	// Nom de la touche choisie pour une action, pour les textes d'aide.
 	FString KeyOf(const ADRGameMode* Mode, const TCHAR* Id)
 	{
@@ -134,6 +152,11 @@ void ADRHUD::DrawHUD()
 	if (Mode && Mode->IsChoosingImplant())
 	{
 		DrawImplants(Mode);
+		return;
+	}
+	if (Mode && Mode->IsWorkbenchOpen())
+	{
+		DrawWorkbench(Mode);
 		return;
 	}
 	if (Mode && Mode->IsPauseMenu())
@@ -445,11 +468,11 @@ void ADRHUD::DrawWeapon(const ADRCharacter* Player)
 	const FDRWeapon& Weapon = Player->GetWeapon();
 	const FString Ammo = Player->IsReloading()
 		? FString(TEXT("Rechargement..."))
-		: FString::Printf(TEXT("%d / %d"), Player->GetAmmo(), Weapon.Mag);
+		: FString::Printf(TEXT("%d / %d"), Player->GetAmmo(), Player->GetMagSize());
 	float Width = 0.0f;
 	float Height = 0.0f;
 	GetTextSize(Ammo, Width, Height, Font, 1.6f * Scale);
-	const FLinearColor AmmoColor = Player->GetAmmo() <= Weapon.Mag / 4 ? FLinearColor(1.0f, 0.45f, 0.3f) : FLinearColor::White;
+	const FLinearColor AmmoColor = Player->GetAmmo() <= Player->GetMagSize() / 4 ? FLinearColor(1.0f, 0.45f, 0.3f) : FLinearColor::White;
 	const float Right = Canvas->ClipX - 40.0f * Scale;
 	DrawLabel(Ammo, AmmoColor, Right, Canvas->ClipY - Height - 40.0f * Scale, 1.6f, 1.0f);
 	float NameWidth = 0.0f;
@@ -656,6 +679,13 @@ void ADRHUD::DrawTowers(const ADRCharacter* Player)
 	// Nom de chaque tour au-dessus d'elle, halo discret des Phares, portée de la tour ou de
 	// l'ancrage visés (Godot : Label3D et range_ring de tower.gd).
 	const ADRSocket* Sight = Player && Player->IsAlive() ? Player->GetSightSocket() : nullptr;
+	// Panneau vert de l'établi (Godot : Label3D « ÉTABLI » au-dessus du panneau à outils).
+	const FVector Sign = ADRChapter::WorkbenchPosition() + FVector(0.0, 0.0, 285.0);
+	if (IsInFront(Sign) && FVector::DistSquared(Sign, ViewEye) < FMath::Square(3000.0))
+	{
+		const FVector SignScreen = Project(Sign);
+		DrawLabel(TEXT("\u00C9TABLI"), FLinearColor(0.55f, 1.0f, 0.65f), SignScreen.X, SignScreen.Y, 0.7f, 0.5f);
+	}
 	for (TActorIterator<ADRTower> It(GetWorld()); It; ++It)
 	{
 		const ADRTower* Tower = *It;
@@ -1048,6 +1078,130 @@ void ADRHUD::DrawPause(ADRGameMode* Mode)
 		Mode->QuitGame();
 	}
 	DrawLabel(FString::Printf(TEXT("\u00C9chap ou %s : reprendre"), *DRHUDStyle::KeyOf(Mode, TEXT("pause"))), FLinearColor(1.0f, 1.0f, 1.0f, 0.5f), CenterX, Top + Height - 40.0f * Scale, 0.5f, 0.5f);
+}
+
+bool ADRHUD::BenchRow(const FString& Title, int32 Done, int32 Total, const FString& About, int32 Cost, int32 Scrap, float X, float Y, float Width)
+{
+	// Niveaux : une case orange par niveau acheté (comme les améliorations permanentes).
+	DrawLabel(Title, FLinearColor::White, X, Y, 0.6f);
+	float TitleWidth = 0.0f;
+	float TitleHeight = 0.0f;
+	GetTextSize(Title, TitleWidth, TitleHeight, Font, 0.6f * Scale);
+	const float Pip = 12.0f * Scale;
+	for (int32 Step = 0; Step < Total; ++Step)
+	{
+		DrawRect(Step < Done ? DRHUDStyle::Accent : FLinearColor(1.0f, 1.0f, 1.0f, 0.15f), X + TitleWidth + 12.0f * Scale + Step * (Pip + 5.0f * Scale), Y + 6.0f * Scale, Pip, Pip);
+	}
+	DrawLabel(About, FLinearColor(0.6f, 0.6f, 0.6f), X, Y + 24.0f * Scale, 0.42f);
+	const float ButtonWidth = 180.0f * Scale;
+	if (Cost < 0)
+	{
+		DrawLabel(TEXT("MAX"), DRHUDStyle::Accent, X + Width - ButtonWidth * 0.5f, Y + 10.0f * Scale, 0.6f, 0.5f);
+		return false;
+	}
+	return Button(FString::Printf(TEXT("Am\u00E9liorer (%d)"), Cost), X + Width - ButtonWidth, Y + 2.0f * Scale, ButtonWidth, 36.0f * Scale, 0.5f, Scrap >= Cost);
+}
+
+void ADRHUD::DrawWorkbench(ADRGameMode* Mode)
+{
+	// La partie est figée tant que l'établi est ouvert. Tout se paie en ferraille.
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
+	const ADRCharacter* Shooter = Cast<ADRCharacter>(GetOwningPawn());
+	const int32 Scrap = Mode->GetScrap();
+	const float Width = 980.0f * Scale;
+	const float Pad = 22.0f * Scale;
+	const float Gap = 12.0f * Scale;
+	const float CardPad = 14.0f * Scale;
+	const float WeaponHeight = 330.0f * Scale;
+	const float GeneratorHeight = 130.0f * Scale;
+	const float Height = Pad * 2.0f + 46.0f * Scale + 30.0f * Scale + WeaponHeight + Gap + GeneratorHeight + Gap + 44.0f * Scale;
+	const float Left = (Canvas->ClipX - Width) * 0.5f;
+	const float Top = FMath::Max(10.0f * Scale, (Canvas->ClipY - Height) * 0.5f);
+	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Height);
+	float Y = Top + Pad;
+	DrawLabel(TEXT("\u00C9TABLI"), DRHUDStyle::Accent, Left + Pad, Y, 1.2f);
+	DrawLabel(FString::Printf(TEXT("%d ferraille"), Scrap), DRHUDStyle::Accent, Left + Width - Pad, Y + 8.0f * Scale, 0.85f, 1.0f);
+	Y += 46.0f * Scale;
+	DrawLabel(TEXT("Tout se paie en ferraille. Les munitions achet\u00E9es restent \u00E0 toi : tu peux en changer gratuitement ensuite."), FLinearColor(0.6f, 0.6f, 0.6f), Left + Pad, Y, 0.45f);
+	Y += 30.0f * Scale;
+	bool bBought = false;
+
+	// Une carte par arme : canon, chargeur, munitions.
+	const int32 WeaponCount = Shooter ? FMath::Min(2, Shooter->GetWeaponCount()) : 0;
+	const float CardWidth = (Width - 2.0f * Pad - Gap) * 0.5f;
+	for (int32 Index = 0; Index < WeaponCount; ++Index)
+	{
+		const FDRWeapon& Weapon = Shooter->GetWeaponAt(Index);
+		const FDRWeaponMods Mods = Mode->GetWeaponMods(Weapon.Id);
+		const float CardLeft = Left + Pad + Index * (CardWidth + Gap);
+		const float Inner = CardWidth - 2.0f * CardPad;
+		const float X = CardLeft + CardPad;
+		float CardY = Y + CardPad;
+		DrawRect(FLinearColor(1.0f, 1.0f, 1.0f, 0.04f), CardLeft, Y, CardWidth, WeaponHeight);
+		DrawLabel(Weapon.Name.ToUpper(), FLinearColor::White, X, CardY, 0.7f);
+		CardY += 30.0f * Scale;
+		DrawLabel(FString::Printf(TEXT("%d d\u00E9g\u00E2ts par balle  \u00B7  %d balles  \u00B7  munitions %s"), FMath::RoundToInt(Shooter->WeaponDamage(Index)), Shooter->MagSize(Index),
+			*Mode->GetAmmoText(Mods.Ammo, TEXT("name")).ToLower()), FLinearColor(0.6f, 0.6f, 0.6f), X, CardY, 0.42f);
+		CardY += 28.0f * Scale;
+		if (BenchRow(TEXT("Canon"), Mods.Barrel, Mode->GetBenchMax(TEXT("canon")), TEXT("+20 % de d\u00E9g\u00E2ts par niveau"), Mode->GetBenchCost(TEXT("canon"), Mods.Barrel), Scrap, X, CardY, Inner))
+		{
+			bBought = Mode->BuyBarrel(Weapon.Id);
+		}
+		CardY += 50.0f * Scale;
+		if (BenchRow(TEXT("Chargeur"), Mods.Mag, Mode->GetBenchMax(TEXT("chargeur")), TEXT("+30 % de balles par niveau"), Mode->GetBenchCost(TEXT("chargeur"), Mods.Mag), Scrap, X, CardY, Inner))
+		{
+			bBought = Mode->BuyMag(Weapon.Id);
+		}
+		CardY += 52.0f * Scale;
+		DrawLabel(TEXT("Munitions"), DRHUDStyle::Accent, X, CardY, 0.52f);
+		CardY += 26.0f * Scale;
+		const TArray<FName>& AmmoIds = ADRGameMode::GetAmmoIds();
+		const float AmmoWidth = (Inner - 8.0f * Scale) * 0.5f;
+		for (int32 Slot = 0; Slot < AmmoIds.Num(); ++Slot)
+		{
+			const FName AmmoId = AmmoIds[Slot];
+			const bool bOwned = Mods.Owns(AmmoId);
+			const int32 AmmoCost = Mode->GetAmmoCost(AmmoId);
+			const FString Text = bOwned ? Mode->GetAmmoText(AmmoId, TEXT("name")) : FString::Printf(TEXT("%s  (%d)"), *Mode->GetAmmoText(AmmoId, TEXT("name")), AmmoCost);
+			const float AmmoX = X + (Slot % 2) * (AmmoWidth + 8.0f * Scale);
+			const float AmmoY = CardY + (Slot / 2) * 40.0f * Scale;
+			if (Button(Text, AmmoX, AmmoY, AmmoWidth, 34.0f * Scale, 0.48f, bOwned || Scrap >= AmmoCost, Mods.Ammo == AmmoId))
+			{
+				bBought = Mode->ChooseAmmo(Weapon.Id, AmmoId);
+			}
+		}
+		CardY += 2.0f * 40.0f * Scale + 4.0f * Scale;
+		const TArray<FString> Lines = Wrap(Mode->GetAmmoText(Mods.Ammo, TEXT("desc")), 0.42f, Inner);
+		const FLinearColor Tint = DRHUDStyle::AmmoColor(Mods.Ammo);
+		for (int32 Line = 0; Line < FMath::Min(2, Lines.Num()); ++Line)
+		{
+			DrawLabel(Lines[Line], Tint + (FLinearColor::White - Tint) * 0.4f, X, CardY + 20.0f * Scale * Line, 0.42f);
+		}
+	}
+	Y += WeaponHeight + Gap;
+
+	// Générateur : plus d'énergie = plus de tours allumées en même temps.
+	DrawRect(FLinearColor(1.0f, 1.0f, 1.0f, 0.04f), Left + Pad, Y, Width - 2.0f * Pad, GeneratorHeight);
+	const float GenX = Left + Pad + CardPad;
+	DrawLabel(TEXT("G\u00C9N\u00C9RATEUR"), FLinearColor::White, GenX, Y + CardPad, 0.7f);
+	DrawLabel(TEXT("Plus d'\u00E9nergie = plus de tours allum\u00E9es en m\u00EAme temps."), FLinearColor(0.6f, 0.6f, 0.6f), GenX, Y + CardPad + 30.0f * Scale, 0.42f);
+	if (BenchRow(TEXT("Niveau"), Mode->GetGenerator(), Mode->GetBenchMax(TEXT("generateur")), FString::Printf(TEXT("+2 \u00E9nergie par niveau  \u00B7  \u00E9nergie max %d"), Mode->GetEnergyCap()),
+		Mode->GetBenchCost(TEXT("generateur"), Mode->GetGenerator()), Scrap, GenX, Y + CardPad + 60.0f * Scale, Width - 2.0f * Pad - 2.0f * CardPad))
+	{
+		bBought = Mode->BuyGenerator();
+	}
+	Y += GeneratorHeight + Gap;
+
+	DrawLabel(FString::Printf(TEXT("%s ou \u00C9chap pour fermer"), *DRHUDStyle::KeyOf(Mode, TEXT("interagir"))), FLinearColor(0.6f, 0.6f, 0.6f),
+		Left + Width - Pad - 180.0f * Scale, Y + 12.0f * Scale, 0.45f, 1.0f);
+	if (Button(TEXT("FERMER"), Left + Width - Pad - 160.0f * Scale, Y, 160.0f * Scale, 40.0f * Scale, 0.6f, true, true))
+	{
+		Mode->CloseWorkbench();
+	}
+	if (bBought)
+	{
+		DRLook::PlayAt(this, TEXT("upgrade"), ViewEye, -4.0f, 0.05f);
+	}
 }
 
 void ADRHUD::DrawImplants(ADRGameMode* Mode)

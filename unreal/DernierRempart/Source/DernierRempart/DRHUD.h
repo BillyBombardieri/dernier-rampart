@@ -16,7 +16,7 @@ class UFont;
  * tours, choix de la tour à construire, ce qu'on peut faire avec ce qu'on vise, textes des combos,
  * écran rougi quand on est touché, message quand on tombe, fin de partie. Menus à la souris :
  * menu principal, choix du niveau et améliorations permanentes, pause, réglages et touches,
- * choix d'implant après un siège, boutons de fin de partie.
+ * choix d'implant après un siège, établi, boutons de fin de partie.
  */
 UCLASS()
 class DERNIERREMPART_API ADRHUD : public AHUD
@@ -59,6 +59,10 @@ private:
 	void DrawPause(ADRGameMode* Mode);
 	/** Choix d'implant après une Nuit de siège (Godot : hud.gd, show_implants). */
 	void DrawImplants(ADRGameMode* Mode);
+	/** Établi (Godot : workbench_panel.gd) : canon, chargeur et munitions des armes, générateur. */
+	void DrawWorkbench(ADRGameMode* Mode);
+	/** Ligne « Canon ●●○ » de l'établi avec son bouton ; vrai si on vient d'acheter. */
+	bool BenchRow(const FString& Title, int32 Done, int32 Total, const FString& About, int32 Cost, int32 Scrap, float X, float Y, float Width);
 	/** Réglages (Godot : settings_panel.gd) : souris, volume, champ de vision, qualité, touches. */
 	void DrawSettings(ADRGameMode* Mode);
 	/** Prend la touche ou le bouton de souris qu'on vient d'appuyer pour l'action choisie. */

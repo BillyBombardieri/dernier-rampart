@@ -20,6 +20,7 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 10 | Réglages (souris, son, champ de vision, qualité) et touches modifiables | à tester (8 nov.) |
 | 11 | Insignes et améliorations permanentes | à tester (8 nov.) |
 | 12 | Implants après les Nuits de siège | à tester (8 nov.) |
+| 13 | Établi : canon, chargeur, munitions spéciales, générateur | à tester (8 nov.) |
 | ensuite | Autres chapitres, gadgets, établi, implants, améliorations, sauvegarde, tutoriel, sons, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
@@ -185,7 +186,18 @@ Ils arrivent à partir de la vague 3 : **Entrée** lance chaque vague sans atten
    - **Main lourde** : pistolet +50 % de dégâts, mais rechargements 50 % plus lents.
 4. Les implants ne valent que pour la partie en cours.
 
-## 18. Si ça ne marche pas
+## 18. Tester l'étape 13 : l'établi
+
+1. L'**établi** est à gauche du Cœur quand on le regarde depuis le départ, avec « ÉTABLI » écrit en vert au-dessus. Approche-toi, vise-le : l'aide propose « E ouvrir l'établi ». Pendant l'assaut, il est fermé (« utilisable seulement entre les vagues »).
+2. **E** l'ouvre et fige la partie. **E**, **Échap**, **P** ou **FERMER** le referment.
+3. Pour chaque arme : **Canon** (+20 % de dégâts par niveau, 40 puis 80 ferraille), **Chargeur** (+30 % de balles, 30 puis 60 ; le nouveau chargeur arrive plein) et quatre **munitions** (60 ferraille chacune la première fois, gratuites ensuite) :
+   - **Incendiaires** : mettent le feu (-10 % de dégâts), traçante orange.
+   - **Perforantes** : traversent jusqu'à 3 zombies, +25 % sur Brutes et Boss.
+   - **Électriques** : chargent la cible ; un tir normal ensuite déclenche la SURCHARGE.
+4. **Générateur** : +2 énergie par niveau (50, 90, 140 ferraille), donc plus de tours allumées en même temps.
+5. Tout repart de zéro à chaque partie. Les gadgets de l'établi viendront à l'étape suivante.
+
+## 19. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

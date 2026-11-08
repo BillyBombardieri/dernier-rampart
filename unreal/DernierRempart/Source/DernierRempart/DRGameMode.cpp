@@ -197,8 +197,8 @@ bool ADRGameMode::TrySpend(int32 Amount)
 
 int32 ADRGameMode::GetEnergyCap() const
 {
-	// Le générateur de l'établi viendra plus tard. Implant Cœur de batterie : +2 ; « Dynamo » : +1 par rang.
-	return (int32)Rule(TEXT("partie"), TEXT("energy_base"), 6.0) + (HasImplant(TEXT("batterie")) ? 2 : 0) + (int32)UpgradeBonus(TEXT("dynamo"));
+	// Générateur de l'établi : +2 par niveau. Implant Cœur de batterie : +2 ; « Dynamo » : +1 par rang.
+	return (int32)Rule(TEXT("partie"), TEXT("energy_base"), 6.0) + 2 * Generator + (HasImplant(TEXT("batterie")) ? 2 : 0) + (int32)UpgradeBonus(TEXT("dynamo"));
 }
 
 bool ADRGameMode::RequestEnergy(int32 Amount)
@@ -481,6 +481,140 @@ void ADRGameMode::WaveCleared()
 	EnterPhase(EDRPhase::Harvest, (float)Rule(TEXT("vagues"), TEXT("harvest_time"), 12.0));
 }
 
+void ADRGameMode::OpenWorkbench()
+{
+	if (bMenu || bOver || bPauseMenu || bImplantChoice || bWorkbenchOpen || Phase == EDRPhase::Assault)
+	{
+		return;
+	}
+	bWorkbenchOpen = true;
+	UGameplayStatics::SetGamePaused(this, true);
+	PlaySfx2D(TEXT("ui_click"), -6.0f);
+}
+
+void ADRGameMode::CloseWorkbench()
+{
+	if (!bWorkbenchOpen)
+	{
+		return;
+	}
+	bWorkbenchOpen = false;
+	UGameplayStatics::SetGamePaused(this, false);
+}
+
+const TArray<FName>& ADRGameMode::GetAmmoIds()
+{
+	static const TArray<FName> Ids = { TEXT("standard"), TEXT("incendiaire"), TEXT("perforante"), TEXT("electrique") };
+	return Ids;
+}
+
+FString ADRGameMode::GetAmmoText(FName Ammo, const TCHAR* Field) const
+{
+	FString Text = Ammo.ToString();
+	const TSharedPtr<FJsonObject>* List = nullptr;
+	const TSharedPtr<FJsonObject>* Entry = nullptr;
+	if (GameData.IsValid() && GameData->TryGetObjectField(TEXT("munitions"), List) && (*List)->TryGetObjectField(Ammo.ToString(), Entry))
+	{
+		(*Entry)->TryGetStringField(Field, Text);
+	}
+	return Text;
+}
+
+int32 ADRGameMode::GetAmmoCost(FName Ammo) const
+{
+	const TSharedPtr<FJsonObject>* List = nullptr;
+	const TSharedPtr<FJsonObject>* Entry = nullptr;
+	if (GameData.IsValid() && GameData->TryGetObjectField(TEXT("munitions"), List) && (*List)->TryGetObjectField(Ammo.ToString(), Entry))
+	{
+		return (int32)DRData::Number(*Entry, TEXT("cost"), 60.0);
+	}
+	return 60;
+}
+
+FDRWeaponMods ADRGameMode::GetWeaponMods(const FString& WeaponId) const
+{
+	const FDRWeaponMods* Found = WeaponMods.Find(WeaponId);
+	return Found ? *Found : FDRWeaponMods();
+}
+
+int32 ADRGameMode::GetBenchMax(const TCHAR* Kind) const
+{
+	const TSharedPtr<FJsonObject>* Bench = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Costs = nullptr;
+	if (GameData.IsValid() && GameData->TryGetObjectField(TEXT("etabli"), Bench) && (*Bench)->TryGetArrayField(Kind, Costs))
+	{
+		return Costs->Num();
+	}
+	return 0;
+}
+
+int32 ADRGameMode::GetBenchCost(const TCHAR* Kind, int32 CurrentStep) const
+{
+	const TSharedPtr<FJsonObject>* Bench = nullptr;
+	const TArray<TSharedPtr<FJsonValue>>* Costs = nullptr;
+	if (GameData.IsValid() && GameData->TryGetObjectField(TEXT("etabli"), Bench) && (*Bench)->TryGetArrayField(Kind, Costs) && Costs->IsValidIndex(CurrentStep))
+	{
+		return (int32)(*Costs)[CurrentStep]->AsNumber();
+	}
+	return -1;
+}
+
+bool ADRGameMode::BuyBarrel(const FString& WeaponId)
+{
+	FDRWeaponMods& Mods = WeaponMods.FindOrAdd(WeaponId);
+	const int32 Cost = GetBenchCost(TEXT("canon"), Mods.Barrel);
+	if (Cost < 0 || !TrySpend(Cost))
+	{
+		return false;
+	}
+	++Mods.Barrel;
+	return true;
+}
+
+bool ADRGameMode::BuyMag(const FString& WeaponId)
+{
+	FDRWeaponMods& Mods = WeaponMods.FindOrAdd(WeaponId);
+	const int32 Cost = GetBenchCost(TEXT("chargeur"), Mods.Mag);
+	if (Cost < 0 || !TrySpend(Cost))
+	{
+		return false;
+	}
+	++Mods.Mag;
+	// Le plus grand chargeur arrive plein.
+	if (ADRCharacter* Player = Cast<ADRCharacter>(UGameplayStatics::GetPlayerPawn(this, 0)))
+	{
+		Player->Refill(WeaponId);
+	}
+	return true;
+}
+
+bool ADRGameMode::ChooseAmmo(const FString& WeaponId, FName Ammo)
+{
+	FDRWeaponMods& Mods = WeaponMods.FindOrAdd(WeaponId);
+	if (!Mods.Owns(Ammo))
+	{
+		if (!TrySpend(GetAmmoCost(Ammo)))
+		{
+			return false;
+		}
+		Mods.Owned.Add(Ammo);
+	}
+	Mods.Ammo = Ammo;
+	return true;
+}
+
+bool ADRGameMode::BuyGenerator()
+{
+	const int32 Cost = GetBenchCost(TEXT("generateur"), Generator);
+	if (Cost < 0 || !TrySpend(Cost))
+	{
+		return false;
+	}
+	++Generator;
+	Say(FString::Printf(TEXT("G\u00E9n\u00E9rateur am\u00E9lior\u00E9 : %d \u00E9nergie disponible."), GetEnergyCap()));
+	return true;
+}
+
 const TArray<FName>& ADRGameMode::GetImplantIds()
 {
 	static const TArray<FName> Ids = { TEXT("batterie"), TEXT("sang_froid"), TEXT("charognard"), TEXT("main_lourde") };
@@ -543,6 +677,12 @@ void ADRGameMode::SkipPhase()
 
 void ADRGameMode::TogglePause()
 {
+	// Échap ou P referment l'établi au lieu d'ouvrir la pause.
+	if (bWorkbenchOpen)
+	{
+		CloseWorkbench();
+		return;
+	}
 	if (bMenu || bOver || bImplantChoice)
 	{
 		return;
