@@ -25,6 +25,12 @@ namespace DRLook
 	/** Couleur unie (sRGB), sans texture. */
 	UMaterialInterface* Plain(UObject* Outer, const FLinearColor& ColorSRGB);
 
+	/**
+	 * Herbe qui ondule au vent (matériau M_Herbe du script d'import) : couleur du pied et de la pointe
+	 * (sRGB) et amplitude du balancement en mètres, comme dans Godot. Nul tant que le script n'a pas tourné.
+	 */
+	UMaterialInterface* Grass(UObject* Outer, const FLinearColor& BaseSRGB, const FLinearColor& TipSRGB, float Sway);
+
 	/** Son importé de assets/sounds (nom sans extension : « pistol », « reload »...), ou nul. */
 	USoundBase* Sound(const FString& Name);
 

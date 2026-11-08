@@ -23,7 +23,8 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 13 | Établi : canon, chargeur, munitions spéciales, générateur | à tester (8 nov.) |
 | 14 | Gadgets : barricade, leurre sonore, drone de récolte | à tester (8 nov.) |
 | 15 | Décor des chapitres 2 à 6 : mares, conteneurs, cuves, sapins, ruines, immeubles, réverbères, dunes, poteaux | à tester (8 nov.) |
-| ensuite | Herbe et cailloux au sol, météo (pluie, neige, cendres, poussière, lucioles), tutoriel, effets de feu et de glace, export Windows | à faire |
+| 16 | Herbe qui ondule au vent et cailloux au sol | à tester (8 nov.) |
+| ensuite | Météo (pluie, neige, cendres, poussière, lucioles), tutoriel, effets de feu et de glace, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
 
@@ -218,7 +219,15 @@ Pour voir un chapitre sans avoir gagné les précédents : pendant la partie, ap
 5. **La Route Brûlée** (26 à 30) : dunes de sable basses, poteaux télégraphiques penchés avec leurs câbles qui pendent, ruines.
 6. On ne traverse ni les immeubles, ni les ruines, ni les cuves, ni les conteneurs, ni les sapins.
 
-## 21. Si ça ne marche pas
+## 21. Tester l'étape 16 : l'herbe et les cailloux
+
+1. Relance d'abord le script d'import, comme à l'étape 2 (`py importer_ressources.py` dans la barre **Cmd**) : il crée en plus le matériau de l'herbe, **M_Herbe**. Sans lui, l'herbe s'affiche quand même, mais immobile et d'une seule couleur.
+2. De l'herbe sèche pousse en plaques sur toute la carte, plus foncée au pied qu'à la pointe, et elle ondule au vent. Il n'y en a ni sur le chemin, ni autour des ancrages et des barrières, ni dans la base autour du Cœur.
+3. De petits cailloux sont semés partout, plus serrés au bord du chemin, ce qui adoucit ses bords. Dans la Raffinerie et la Ville Morte, ce sont des éclats de béton anguleux.
+4. Chaque chapitre a son herbe : haute et vert sombre dans le Marais, courte et pâle sous la neige du Col Gelé, broussailles claires sur la Route Brûlée (console : `open Entry?Niveau=6`, `16` ou `26`, voir l'étape 15).
+5. On marche à travers sans être gêné. Au-delà de 85 m environ, l'herbe et les cailloux ne sont plus dessinés. Si le jeu rame depuis cette étape, dis-le dans le fil.
+
+## 22. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

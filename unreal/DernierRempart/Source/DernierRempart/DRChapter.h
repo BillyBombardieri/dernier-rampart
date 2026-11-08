@@ -19,7 +19,7 @@ class UStaticMesh;
  * zombies, brèche du portail, Cœur, barrières et ancrages des tours, murs anti-souffle, sacs de sable,
  * projecteurs, barils en feu et décor : rochers, arbres morts, carcasses de voitures, et selon le
  * chapitre mares et roseaux, conteneurs et cuves, sapins enneigés, ruines, immeubles éventrés,
- * réverbères, flaques, dunes et poteaux télégraphiques.
+ * réverbères, flaques, dunes et poteaux télégraphiques ; enfin l'herbe qui ondule et les cailloux.
  *
  * Les textures viennent de /Game/Importe (script Content/Python/importer_ressources.py). Tant qu'elles
  * ne sont pas importées, la carte s'affiche quand même, en couleurs unies.
@@ -111,6 +111,13 @@ private:
 	void Solid(const FVector& Center, const FVector& Size, const FRotator& Rotation);
 	/** Eau sombre et brillante des mares et des flaques. */
 	UMaterialInterface* Water();
+	/**
+	 * Herbe sèche qui ondule au vent et cailloux semés sur toute la carte, serrés au bord du chemin
+	 * (Godot : scripts/ground_cover.gd), loin des ancrages, des barrières et de la base.
+	 */
+	void BuildCover(const TSharedPtr<FJsonObject>& Data);
+	/** Un groupe par carré de 40 m, qui disparaît au loin comme dans Godot. */
+	void AddCoverChunks(UStaticMesh* Mesh, UMaterialInterface* Material, const TMap<FIntPoint, TArray<FTransform>>& Cells, bool bShadows);
 	bool IsFreeSpot(const FVector& Position, double Margin) const;
 
 	UPROPERTY()
@@ -124,6 +131,13 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> ConeMesh;
+
+	/** Touffe d'herbe et caillou, fabriqués au lancement (BuildCover). */
+	UPROPERTY()
+	TObjectPtr<UStaticMesh> TuftMesh;
+
+	UPROPERTY()
+	TObjectPtr<UStaticMesh> PebbleMesh;
 
 	UPROPERTY()
 	TArray<TObjectPtr<ADRBarrier>> Barriers;

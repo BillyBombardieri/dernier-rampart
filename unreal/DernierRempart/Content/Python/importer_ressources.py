@@ -13,7 +13,8 @@ envoyé sur GitHub : on peut le supprimer et relancer le script pour tout refair
 Ce que fait le script :
   1. importe les textures de assets/textures (couleur, relief, rugosité) dans /Game/Importe/Textures ;
   2. crée le matériau M_Surface, qui plaque ces textures selon la position dans le monde (comme le
-     « triplanar » de Godot), et un matériau MI_<nom> par jeu de textures (béton, brique, métal...) ;
+     « triplanar » de Godot), et un matériau MI_<nom> par jeu de textures (béton, brique, métal...),
+     puis le matériau M_Herbe des touffes d'herbe qui ondulent au vent ;
   3. importe les armes et les zombies (assets/models/*.gltf, avec leurs squelettes et leurs
      animations) dans /Game/Importe/Modeles/<nom> ;
   4. importe les sons (assets/sounds/*.wav) dans /Game/Importe/Sons.
@@ -41,6 +42,18 @@ if (a.z >= a.x && a.z >= a.y) { uv = P.xy; }
 else if (a.x >= a.y) { uv = float2(P.y, -P.z); }
 else { uv = float2(P.x, -P.z); }
 return uv * (Echelle / 100.0);"""
+
+# Herbe (Godot : scripts/ground_cover.gd). UV des brins : X = part de la couleur du pied dans la
+# pointe, Y = 0 au pied et 1 à la pointe. Le vent pousse surtout le haut des brins (Y au carré).
+CODE_HERBE_COULEUR = """float3 pointe = lerp(Pointe.rgb, Pied.rgb, UV.x);
+return lerp(Pied.rgb, pointe, UV.y);"""
+
+CODE_HERBE_VENT = """float t = Temps * 1.6 + P.x * 0.0035 + P.y * 0.0027;
+float rafale = sin(t) * 0.6 + sin(t * 2.3 + 1.7) * 0.4;
+float k = UV.y * UV.y * Balancement * 100.0;
+return float3(rafale * k, cos(t * 0.8) * 0.5 * k, 0.0);"""
+
+CODE_HERBE_OMBRE = "return lerp(0.75, 1.0, UV.y);"
 
 outils = unreal.AssetToolsHelpers.get_asset_tools()
 bibli = unreal.EditorAssetLibrary
@@ -117,6 +130,8 @@ def noeud(materiau, classe, x, y):
 def creer_materiau(defauts):
     materiau = charger_ou_creer("M_Surface", DOSSIER_MATERIAUX, unreal.Material, unreal.MaterialFactoryNew())
     mat_lib.delete_all_material_expressions(materiau)
+    # Le décor est posé en exemplaires (Instanced Static Mesh) : on le dit tout de suite au matériau.
+    materiau.set_editor_property("used_with_instanced_static_meshes", True)
 
     position = noeud(materiau, unreal.MaterialExpressionWorldPosition, -1400, 0)
     normale_monde = noeud(materiau, unreal.MaterialExpressionVertexNormalWS, -1400, 150)
@@ -195,6 +210,67 @@ def creer_materiau(defauts):
     return materiau
 
 
+def noeud_code(materiau, description, code, sortie, entrees, x, y):
+    """Nœud de code HLSL (Custom) ; entrees = [(nom, nœud branché, sortie du nœud)]."""
+    n = noeud(materiau, unreal.MaterialExpressionCustom, x, y)
+    n.set_editor_property("description", description)
+    n.set_editor_property("output_type", sortie)
+    n.set_editor_property("code", code)
+    liste = []
+    for nom, _, _ in entrees:
+        entree = unreal.CustomInput()
+        entree.set_editor_property("input_name", nom)
+        liste.append(entree)
+    n.set_editor_property("inputs", liste)
+    for nom, source, sortie_source in entrees:
+        mat_lib.connect_material_expressions(source, sortie_source, n, nom)
+    return n
+
+
+def creer_materiau_herbe():
+    materiau = charger_ou_creer("M_Herbe", DOSSIER_MATERIAUX, unreal.Material, unreal.MaterialFactoryNew())
+    mat_lib.delete_all_material_expressions(materiau)
+    materiau.set_editor_property("used_with_instanced_static_meshes", True)
+
+    uv = noeud(materiau, unreal.MaterialExpressionTextureCoordinate, -900, 0)
+    pied = noeud(materiau, unreal.MaterialExpressionVectorParameter, -900, -300)
+    pied.set_editor_property("parameter_name", "Pied")
+    pied.set_editor_property("default_value", unreal.LinearColor(0.06, 0.04, 0.013, 1.0))
+    pointe = noeud(materiau, unreal.MaterialExpressionVectorParameter, -900, -150)
+    pointe.set_editor_property("parameter_name", "Pointe")
+    pointe.set_editor_property("default_value", unreal.LinearColor(0.31, 0.23, 0.07, 1.0))
+    position = noeud(materiau, unreal.MaterialExpressionWorldPosition, -900, 200)
+    temps = noeud(materiau, unreal.MaterialExpressionTime, -900, 350)
+    balancement = noeud(materiau, unreal.MaterialExpressionScalarParameter, -900, 500)
+    balancement.set_editor_property("parameter_name", "Balancement")
+    balancement.set_editor_property("default_value", 0.12)
+
+    couleur = noeud_code(materiau, "Couleur des brins", CODE_HERBE_COULEUR, unreal.CustomMaterialOutputType.CMOT_FLOAT3,
+                         [("Pied", pied, ""), ("Pointe", pointe, ""), ("UV", uv, "")], -500, -200)
+    mat_lib.connect_material_property(couleur, "", unreal.MaterialProperty.MP_BASE_COLOR)
+
+    ombre = noeud_code(materiau, "Pied plus sombre", CODE_HERBE_OMBRE, unreal.CustomMaterialOutputType.CMOT_FLOAT1,
+                       [("UV", uv, "")], -500, 0)
+    mat_lib.connect_material_property(ombre, "", unreal.MaterialProperty.MP_AMBIENT_OCCLUSION)
+
+    vent = noeud_code(materiau, "Vent", CODE_HERBE_VENT, unreal.CustomMaterialOutputType.CMOT_FLOAT3,
+                      [("P", position, ""), ("UV", uv, ""), ("Temps", temps, ""), ("Balancement", balancement, "")], -500, 300)
+    mat_lib.connect_material_property(vent, "", unreal.MaterialProperty.MP_WORLD_POSITION_OFFSET)
+
+    rugosite = noeud(materiau, unreal.MaterialExpressionConstant, -300, 150)
+    rugosite.set_editor_property("r", 0.92)
+    mat_lib.connect_material_property(rugosite, "", unreal.MaterialProperty.MP_ROUGHNESS)
+    reflet = noeud(materiau, unreal.MaterialExpressionConstant, -300, 250)
+    reflet.set_editor_property("r", 0.2)
+    mat_lib.connect_material_property(reflet, "", unreal.MaterialProperty.MP_SPECULAR)
+
+    mat_lib.layout_material_expressions(materiau)
+    mat_lib.recompile_material(materiau)
+    bibli.save_loaded_asset(materiau)
+    unreal.log("DernierRempart : matériau M_Herbe créé")
+    return materiau
+
+
 def creer_instances(materiau, textures, defauts):
     for jeu, tex in textures.items():
         if "couleur" not in tex or "normal" not in tex:
@@ -244,6 +320,7 @@ def main():
     }
     materiau = creer_materiau(defauts)
     creer_instances(materiau, textures, defauts)
+    creer_materiau_herbe()
     importer_modeles(racine)
     importer_sons(racine)
     bibli.save_directory(DOSSIER, only_if_is_dirty=True, recursive=True)

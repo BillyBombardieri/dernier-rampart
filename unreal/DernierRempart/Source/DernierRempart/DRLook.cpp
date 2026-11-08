@@ -58,6 +58,20 @@ UMaterialInterface* DRLook::Plain(UObject* Outer, const FLinearColor& ColorSRGB)
 	return Material;
 }
 
+UMaterialInterface* DRLook::Grass(UObject* Outer, const FLinearColor& BaseSRGB, const FLinearColor& TipSRGB, float Sway)
+{
+	UMaterialInterface* Parent = LoadObject<UMaterialInterface>(nullptr, TEXT("/Game/Importe/Materiaux/M_Herbe.M_Herbe"), nullptr, LOAD_NoWarn);
+	if (!Parent)
+	{
+		return nullptr;
+	}
+	UMaterialInstanceDynamic* Material = UMaterialInstanceDynamic::Create(Parent, Outer);
+	Material->SetVectorParameterValue(TEXT("Pied"), DRData::ToLinear(BaseSRGB));
+	Material->SetVectorParameterValue(TEXT("Pointe"), DRData::ToLinear(TipSRGB));
+	Material->SetScalarParameterValue(TEXT("Balancement"), Sway);
+	return Material;
+}
+
 USoundBase* DRLook::Sound(const FString& Name)
 {
 	const FString AssetPath = FString::Printf(TEXT("/Game/Importe/Sons/%s.%s"), *Name, *Name);

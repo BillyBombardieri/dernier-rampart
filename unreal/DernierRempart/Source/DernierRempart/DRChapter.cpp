@@ -17,6 +17,8 @@
 #include "Engine/CollisionProfile.h"
 #include "Engine/Engine.h"
 #include "Engine/StaticMesh.h"
+#include "MeshDescription.h"
+#include "StaticMeshAttributes.h"
 #include "UObject/ConstructorHelpers.h"
 
 // Nommé (et pas anonyme) pour éviter les collisions quand Unreal regroupe les .cpp à la compilation.
@@ -42,6 +44,179 @@ namespace DRChapterLayout
 		const FVector2D AB = FVector2D(B.X, B.Y) - A2;
 		const double T = FMath::Clamp(FVector2D::DotProduct(P2 - A2, AB) / FMath::Max(AB.SizeSquared(), 1.0), 0.0, 1.0);
 		return FVector2D::Distance(P2, A2 + AB * T);
+	}
+}
+
+// Herbe et cailloux (Godot : scripts/ground_cover.gd) : petits maillages fabriqués au lancement,
+// puis posés par milliers en exemplaires, rangés par carrés de 40 m.
+namespace DRCoverMesh
+{
+	constexpr double ChunkSize = 4000.0;  // carrés de 40 m
+	constexpr double HalfSize = 8000.0;   // de -80 à +80 m autour du centre
+	constexpr int32 CullStart = 7500;     // l'herbe et les cailloux disparaissent entre 75 et 85 m
+	constexpr int32 CullEnd = 8500;
+
+	// Sommets, normales, UV et triangles (trois indices chacun) d'un petit maillage.
+	struct FParts
+	{
+		TArray<FVector3f> Corners;
+		TArray<FVector3f> Normals;
+		TArray<FVector2f> Coords;
+		TArray<int32> Triangles;
+
+		int32 Corner(const FVector3f& At, const FVector3f& Facing, const FVector2f& Coord)
+		{
+			Corners.Add(At);
+			Normals.Add(Facing);
+			Coords.Add(Coord);
+			return Corners.Num() - 1;
+		}
+
+		// Chaque triangle est mis dans les deux sens : visible des deux côtés, sans dépendre du sens
+		// de rotation des sommets, et avec la même normale des deux côtés (comme dans Godot).
+		void Face(int32 A, int32 B, int32 C)
+		{
+			Triangles.Append({ A, B, C, A, C, B });
+		}
+	};
+
+	UStaticMesh* Build(UObject* Outer, const FParts& Parts)
+	{
+		FMeshDescription Description;
+		FStaticMeshAttributes Attributes(Description);
+		Attributes.Register();
+		auto Positions = Attributes.GetVertexPositions();
+		auto InstanceNormals = Attributes.GetVertexInstanceNormals();
+		auto InstanceTangents = Attributes.GetVertexInstanceTangents();
+		auto InstanceSigns = Attributes.GetVertexInstanceBinormalSigns();
+		auto InstanceCoords = Attributes.GetVertexInstanceUVs();
+		const FPolygonGroupID Group = Description.CreatePolygonGroup();
+
+		TArray<FVertexInstanceID> Instances;
+		Instances.Reserve(Parts.Corners.Num());
+		for (int32 Index = 0; Index < Parts.Corners.Num(); ++Index)
+		{
+			const FVertexID Vertex = Description.CreateVertex();
+			Positions[Vertex] = Parts.Corners[Index];
+			const FVertexInstanceID Instance = Description.CreateVertexInstance(Vertex);
+			const FVector3f Facing = Parts.Normals[Index];
+			// Tangente quelconque perpendiculaire à la normale (pas de texture de relief sur ces pièces).
+			const FVector3f Helper = FMath::Abs(Facing.Z) < 0.9f ? FVector3f(0.0f, 0.0f, 1.0f) : FVector3f(1.0f, 0.0f, 0.0f);
+			InstanceNormals[Instance] = Facing;
+			InstanceTangents[Instance] = FVector3f::CrossProduct(Helper, Facing).GetSafeNormal();
+			InstanceSigns[Instance] = 1.0f;
+			InstanceCoords.Set(Instance, 0, Parts.Coords[Index]);
+			Instances.Add(Instance);
+		}
+		for (int32 Index = 0; Index + 2 < Parts.Triangles.Num(); Index += 3)
+		{
+			TArray<FVertexInstanceID> Three;
+			Three.Add(Instances[Parts.Triangles[Index]]);
+			Three.Add(Instances[Parts.Triangles[Index + 1]]);
+			Three.Add(Instances[Parts.Triangles[Index + 2]]);
+			Description.CreateTriangle(Group, Three);
+		}
+
+		UStaticMesh* Result = NewObject<UStaticMesh>(Outer);
+		Result->GetStaticMaterials().Add(FStaticMaterial());
+		UStaticMesh::FBuildMeshDescriptionsParams Params;
+		Params.bMarkPackageDirty = false;
+		Params.bBuildSimpleCollision = false;
+		Params.bCommitMeshDescription = false;
+		Params.bFastBuild = true;
+		TArray<const FMeshDescription*> Descriptions;
+		Descriptions.Add(&Description);
+		Result->BuildFromMeshDescriptions(Descriptions, Params);
+		return Result;
+	}
+
+	// Une touffe : 12 brins (triangles fins) de hauteur prise dans Heights (cm). UV : X = part de la
+	// couleur du pied dans la pointe (chaque brin un peu différent), Y = 0 au pied, 1 à la pointe.
+	UStaticMesh* Tuft(UObject* Outer, const FVector2D& Heights, FRandomStream& Rng)
+	{
+		FParts Leaves;
+		const FVector3f Up(0.0f, 0.0f, 1.0f); // normales vers le haut : l'herbe prend la lumière comme le sol
+		constexpr int32 BladeCount = 12;
+		for (int32 Blade = 0; Blade < BladeCount; ++Blade)
+		{
+			const double Angle = 2.0 * PI * Blade / BladeCount + Rng.FRandRange(-0.3, 0.3);
+			const double Spread = Rng.FRandRange(0.0, 16.0);
+			const FVector Out(FMath::Cos(Angle), FMath::Sin(Angle), 0.0);
+			const FVector Foot = Out * Spread;
+			const double Tall = Rng.FRandRange(Heights.X, Heights.Y);
+			const FVector Lean = Out * Tall * Rng.FRandRange(0.15, 0.45);
+			const FVector Across = FVector(-Out.Y, Out.X, 0.0) * Rng.FRandRange(2.5, 4.5);
+			const float Fade = Rng.FRandRange(0.0f, 0.35f);
+			const int32 A = Leaves.Corner(FVector3f(Foot - Across), Up, FVector2f(Fade, 0.0f));
+			const int32 B = Leaves.Corner(FVector3f(Foot + Across), Up, FVector2f(Fade, 0.0f));
+			const int32 C = Leaves.Corner(FVector3f(Foot + Lean + FVector(0.0, 0.0, Tall)), Up, FVector2f(Fade, 1.0f));
+			Leaves.Face(A, B, C);
+		}
+		return Build(Outer, Leaves);
+	}
+
+	// Un caillou : sphère de 7 côtés et 3 anneaux comme dans Godot, 1 m de diamètre comme la sphère
+	// du moteur (on la réduit en la posant).
+	UStaticMesh* Pebble(UObject* Outer)
+	{
+		FParts Stone;
+		constexpr int32 Sides = 7;
+		constexpr int32 Rows = 4; // du pôle du haut (0) au pôle du bas (4)
+		TArray<int32> Grid;
+		for (int32 Row = 0; Row <= Rows; ++Row)
+		{
+			const double Polar = PI * Row / Rows;
+			for (int32 Side = 0; Side < Sides; ++Side)
+			{
+				const double Around = 2.0 * PI * Side / Sides;
+				const FVector3f Facing((float)(FMath::Sin(Polar) * FMath::Cos(Around)), (float)(FMath::Sin(Polar) * FMath::Sin(Around)), (float)FMath::Cos(Polar));
+				Grid.Add(Stone.Corner(Facing * 50.0f, Facing, FVector2f((float)Side / Sides, (float)Row / Rows)));
+			}
+		}
+		for (int32 Row = 0; Row < Rows; ++Row)
+		{
+			for (int32 Side = 0; Side < Sides; ++Side)
+			{
+				const int32 Next = (Side + 1) % Sides;
+				const int32 A = Grid[Row * Sides + Side];
+				const int32 B = Grid[Row * Sides + Next];
+				const int32 C = Grid[(Row + 1) * Sides + Side];
+				const int32 D = Grid[(Row + 1) * Sides + Next];
+				if (Row > 0)
+				{
+					Stone.Face(A, B, C); // au pôle du haut, A et B sont au même endroit
+				}
+				if (Row < Rows - 1)
+				{
+					Stone.Face(B, D, C); // au pôle du bas, C et D sont au même endroit
+				}
+			}
+		}
+		return Build(Outer, Stone);
+	}
+
+	double Gauss(FRandomStream& Rng, double Sigma)
+	{
+		const double U1 = FMath::Max((double)Rng.FRand(), 1e-6);
+		const double U2 = Rng.FRand();
+		return Sigma * FMath::Sqrt(-2.0 * FMath::Loge(U1)) * FMath::Cos(2.0 * PI * U2);
+	}
+
+	double PathDistance(const FVector& P, const TArray<FVector>& Points)
+	{
+		double Best = TNumericLimits<double>::Max();
+		for (int32 Index = 0; Index + 1 < Points.Num(); ++Index)
+		{
+			Best = FMath::Min(Best, DRChapterLayout::DistanceToSegment2D(P, Points[Index], Points[Index + 1]));
+		}
+		return Best;
+	}
+
+	void AddToCell(TMap<FIntPoint, TArray<FTransform>>& Cells, const FTransform& Where)
+	{
+		const FVector At = Where.GetLocation();
+		const FIntPoint Key((int32)FMath::Floor(At.X / ChunkSize), (int32)FMath::Floor(At.Y / ChunkSize));
+		Cells.FindOrAdd(Key).Add(Where);
 	}
 }
 
@@ -121,6 +296,7 @@ void ADRChapter::Build(int32 InChapter)
 	BuildWalls(Data);
 	BuildLights(Data);
 	BuildProps(Data);
+	BuildCover(Data);
 }
 
 void ADRChapter::AddBarrier(ADRBarrier* Barrier)
@@ -1233,5 +1409,166 @@ void ADRChapter::BuildPost(const FVector& Position)
 		const FVector Top = Frame.TransformPosition(FVector(0.0, Side, Height - 50.0));
 		const FRotator Sway(0.0, 0.0, Random.FRandRange(-11.5, 11.5));
 		Cylinder(Cable, Top - Sway.RotateVector(FVector(0.0, 0.0, Hang * 0.5)), 1.2, Hang, Sway, false);
+	}
+}
+
+// ---------------------------------------------------------------- herbe et cailloux
+
+void ADRChapter::BuildCover(const TSharedPtr<FJsonObject>& Data)
+{
+	// Réglages du chapitre : {"grass": 10400, "grass_base": [...], "grass_tip": [...], "grass_h": [0.25, 0.6],
+	// "stones": 1800, "stone_tint": [...], "stone_shape": "box", "sway": 0.16} (hauteurs en mètres).
+	const TSharedPtr<FJsonObject>* CoverData = nullptr;
+	if (!Data->TryGetObjectField(TEXT("cover"), CoverData) || !CoverData->IsValid())
+	{
+		return;
+	}
+	const TSharedPtr<FJsonObject>& Cover = *CoverData;
+	FRandomStream Sow(77 + Chapter);
+
+	// Rien sur les ancrages (2,2 m), les barrières (3,5 m) ni dans la base autour du Cœur (9 m).
+	TArray<FVector> Clear; // (x, y, rayon), en cm
+	Clear.Add(FVector(CorePosition().X, CorePosition().Y, 900.0));
+	for (const ADRBarrier* Barrier : Barriers)
+	{
+		if (Barrier)
+		{
+			Clear.Add(FVector(Barrier->GetActorLocation().X, Barrier->GetActorLocation().Y, 350.0));
+		}
+	}
+	for (const ADRSocket* Socket : Sockets)
+	{
+		if (Socket)
+		{
+			Clear.Add(FVector(Socket->GetActorLocation().X, Socket->GetActorLocation().Y, 220.0));
+		}
+	}
+	auto IsClear = [&Clear](const FVector& Spot)
+	{
+		for (const FVector& Zone : Clear)
+		{
+			if (FVector2D::Distance(FVector2D(Spot.X, Spot.Y), FVector2D(Zone.X, Zone.Y)) < Zone.Z)
+			{
+				return false;
+			}
+		}
+		return true;
+	};
+
+	// Herbe : elle pousse en plaques, un centre puis 3 à 9 touffes serrées autour.
+	const int32 GrassWanted = (int32)DRData::Number(Cover, TEXT("grass"));
+	if (GrassWanted > 0)
+	{
+		const FLinearColor GrassBase = DRData::ColorSRGB(Cover, TEXT("grass_base"), FLinearColor(0.25f, 0.22f, 0.12f));
+		const FLinearColor GrassTip = DRData::ColorSRGB(Cover, TEXT("grass_tip"), FLinearColor(0.6f, 0.52f, 0.3f));
+		FVector2D Heights(25.0, 55.0);
+		const TArray<TSharedPtr<FJsonValue>>* HeightRange = nullptr;
+		if (Cover->TryGetArrayField(TEXT("grass_h"), HeightRange) && HeightRange->Num() >= 2)
+		{
+			Heights = FVector2D((*HeightRange)[0]->AsNumber() * 100.0, (*HeightRange)[1]->AsNumber() * 100.0);
+		}
+		TuftMesh = DRCoverMesh::Tuft(this, Heights, Sow);
+		UMaterialInterface* GrassLook = DRLook::Grass(this, GrassBase, GrassTip, (float)DRData::Number(Cover, TEXT("sway"), 0.12));
+		if (!GrassLook)
+		{
+			// Sans le matériau M_Herbe (script d'import pas encore relancé) : herbe immobile, couleur unie.
+			bMissingTextures = true;
+			GrassLook = Plain(GrassBase * 0.4f + GrassTip * 0.6f);
+		}
+		TMap<FIntPoint, TArray<FTransform>> GrassCells;
+		FVector Patch = FVector::ZeroVector;
+		int32 Left = 0;
+		int32 Placed = 0;
+		for (int32 Tries = 0; Placed < GrassWanted && Tries < GrassWanted * 4; ++Tries)
+		{
+			if (Left <= 0)
+			{
+				Patch = FVector(Sow.FRandRange(-DRCoverMesh::HalfSize, DRCoverMesh::HalfSize), Sow.FRandRange(-DRCoverMesh::HalfSize, DRCoverMesh::HalfSize), 0.0);
+				Left = Sow.RandRange(3, 9);
+			}
+			--Left;
+			const FVector Spot = Patch + FVector(DRCoverMesh::Gauss(Sow, 90.0), DRCoverMesh::Gauss(Sow, 90.0), 0.0);
+			if (DRCoverMesh::PathDistance(Spot, Path) < 270.0 || !IsClear(Spot))
+			{
+				continue;
+			}
+			++Placed;
+			const double Size = Sow.FRandRange(0.6, 1.25);
+			const FVector Stretch(Size, Size, Size * Sow.FRandRange(0.8, 1.3));
+			DRCoverMesh::AddToCell(GrassCells, FTransform(FRotator(0.0, Sow.FRandRange(0.0, 360.0), 0.0), Spot, Stretch));
+		}
+		AddCoverChunks(TuftMesh, GrassLook, GrassCells, false);
+	}
+
+	// Cailloux (ou éclats de béton) : partout, et serrés le long des bords du chemin.
+	const int32 StonesWanted = (int32)DRData::Number(Cover, TEXT("stones"));
+	if (StonesWanted > 0)
+	{
+		FString Shape;
+		Cover->TryGetStringField(TEXT("stone_shape"), Shape);
+		const bool bShards = Shape == TEXT("box");
+		if (!bShards)
+		{
+			PebbleMesh = DRCoverMesh::Pebble(this);
+		}
+		UStaticMesh* StoneMesh = bShards ? CubeMesh.Get() : PebbleMesh.Get();
+		// Godot : boîte de 12 x 7 x 9 cm ou sphère de 12 cm de large et 8 cm de haut.
+		const FVector StoneSize = bShards ? FVector(9.0, 12.0, 7.0) : FVector(12.0, 12.0, 8.0);
+		UMaterialInterface* StoneLook = Look(TEXT("concrete"), 2.0f, DRData::ColorSRGB(Cover, TEXT("stone_tint"), FLinearColor(0.5f, 0.48f, 0.45f)));
+		TMap<FIntPoint, TArray<FTransform>> StoneCells;
+		int32 Laid = 0;
+		for (int32 Attempt = 0; Laid < StonesWanted && Attempt < StonesWanted * 4; ++Attempt)
+		{
+			FVector Spot = FVector::ZeroVector;
+			if (Sow.FRand() < 0.45f && Path.Num() > 1)
+			{
+				const int32 Segment = Sow.RandRange(0, Path.Num() - 2);
+				const FVector A = Path[Segment];
+				const FVector B = Path[Segment + 1];
+				const FVector Along = A + (B - A) * (double)Sow.FRand();
+				const FVector Dir = (B - A).GetSafeNormal2D();
+				const double Offset = Sow.FRandRange(190.0, 320.0) * (Sow.FRand() < 0.5f ? 1.0 : -1.0);
+				Spot = FVector(Along.X - Dir.Y * Offset, Along.Y + Dir.X * Offset, 0.0);
+			}
+			else
+			{
+				Spot = FVector(Sow.FRandRange(-DRCoverMesh::HalfSize, DRCoverMesh::HalfSize), Sow.FRandRange(-DRCoverMesh::HalfSize, DRCoverMesh::HalfSize), 0.0);
+				if (DRCoverMesh::PathDistance(Spot, Path) < 220.0)
+				{
+					continue;
+				}
+			}
+			if (!IsClear(Spot))
+			{
+				continue;
+			}
+			++Laid;
+			const double Size = Sow.FRandRange(0.5, 2.4) * (Sow.FRand() < 0.06f ? 2.0 : 1.0);
+			const FRotator Tumble(Sow.FRandRange(-23.0, 23.0), Sow.FRandRange(0.0, 360.0), Sow.FRandRange(-23.0, 23.0));
+			const FVector Stretch = StoneSize / 100.0 * FVector(Size, Size * Sow.FRandRange(0.7, 1.3), Size * Sow.FRandRange(0.5, 0.9));
+			DRCoverMesh::AddToCell(StoneCells, FTransform(Tumble, Spot - FVector(0.0, 0.0, 2.0 * Size), Stretch));
+		}
+		AddCoverChunks(StoneMesh, StoneLook, StoneCells, true);
+	}
+}
+
+void ADRChapter::AddCoverChunks(UStaticMesh* Mesh, UMaterialInterface* Material, const TMap<FIntPoint, TArray<FTransform>>& Cells, bool bShadows)
+{
+	if (!Mesh)
+	{
+		return;
+	}
+	for (const TPair<FIntPoint, TArray<FTransform>>& Cell : Cells)
+	{
+		UInstancedStaticMeshComponent* Chunk = NewPart<UInstancedStaticMeshComponent>(TEXT("Couverture"), EComponentMobility::Static);
+		Chunk->SetStaticMesh(Mesh);
+		Chunk->SetMaterial(0, Material);
+		Chunk->SetCollisionProfileName(UCollisionProfile::NoCollision_ProfileName);
+		Chunk->SetCanEverAffectNavigation(false);
+		Chunk->SetCastShadow(bShadows);
+		Chunk->bAffectDistanceFieldLighting = false; // trop petits pour l'éclairage global
+		Chunk->SetCullDistances(DRCoverMesh::CullStart, DRCoverMesh::CullEnd);
+		FinishPart(Chunk);
+		Chunk->AddInstances(Cell.Value, false, true);
 	}
 }
