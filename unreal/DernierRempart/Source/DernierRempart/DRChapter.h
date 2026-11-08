@@ -17,7 +17,9 @@ class UStaticMesh;
  * Carte d'un chapitre, construite au lancement de la partie d'après Content/Data/chapitres.json
  * (exporté de scripts/main.gd dans la version Godot) : ciel, soleil et brouillard, sol, chemin des
  * zombies, brèche du portail, Cœur, barrières et ancrages des tours, murs anti-souffle, sacs de sable,
- * projecteurs, barils en feu et décor (rochers, arbres morts, carcasses de voitures).
+ * projecteurs, barils en feu et décor : rochers, arbres morts, carcasses de voitures, et selon le
+ * chapitre mares et roseaux, conteneurs et cuves, sapins enneigés, ruines, immeubles éventrés,
+ * réverbères, flaques, dunes et poteaux télégraphiques.
  *
  * Les textures viennent de /Game/Importe (script Content/Python/importer_ressources.py). Tant qu'elles
  * ne sont pas importées, la carte s'affiche quand même, en couleurs unies.
@@ -93,6 +95,22 @@ private:
 	void BuildRock(const FVector& Position);
 	void BuildDeadTree(const FVector& Position);
 	void BuildWreck(const FVector& Position);
+	// Décors propres aux chapitres 2 à 6 (Godot : main.gd, _pool, _reeds... et buildings.gd).
+	void BuildPool(const FVector& Position);
+	void BuildReeds(const FVector& Position);
+	void BuildContainer(const FVector& Position);
+	void BuildTank(const FVector& Position);
+	void BuildPine(const FVector& Position);
+	void BuildRuin(const FVector& Position);
+	void BuildBuilding(const FVector& Position);
+	void BuildLamp(const FVector& Position);
+	void BuildPuddle(const FVector& Position);
+	void BuildDune(const FVector& Position);
+	void BuildPost(const FVector& Position);
+	/** Boîte de collision invisible (une seule pour tout un bâtiment, comme dans Godot). */
+	void Solid(const FVector& Center, const FVector& Size, const FRotator& Rotation);
+	/** Eau sombre et brillante des mares et des flaques. */
+	UMaterialInterface* Water();
 	bool IsFreeSpot(const FVector& Position, double Margin) const;
 
 	UPROPERTY()
@@ -103,6 +121,9 @@ private:
 
 	UPROPERTY()
 	TObjectPtr<UStaticMesh> CylinderMesh;
+
+	UPROPERTY()
+	TObjectPtr<UStaticMesh> ConeMesh;
 
 	UPROPERTY()
 	TArray<TObjectPtr<ADRBarrier>> Barriers;
@@ -131,6 +152,7 @@ private:
 	int32 Chapter = 0;
 	FString ChapterName;
 	FString ChapterPlace;
+	FString Weather; // « snow », « rain », « fireflies »... (vide au chapitre 1)
 	bool bMissingTextures = false;
 	float Time = 0.0f;
 };

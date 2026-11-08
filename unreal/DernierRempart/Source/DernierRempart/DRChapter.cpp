@@ -27,6 +27,7 @@ namespace DRChapterLayout
 	constexpr float SunLuxPerEnergy = 10.0f;   // 10 lux = soleil par défaut d'Unreal
 	constexpr float SpotCandelas = 2000.0f;
 	constexpr float BarrelCandelas = 200.0f;
+	constexpr float LampCandelas = 130.0f; // réverbère de la Ville Morte (Godot : énergie 1,6)
 	constexpr float PortalCandelas = 300.0f;
 
 	FRotator YawOf(const FVector& Direction)
@@ -55,9 +56,11 @@ ADRChapter::ADRChapter()
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cube(TEXT("/Engine/BasicShapes/Cube.Cube"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Sphere(TEXT("/Engine/BasicShapes/Sphere.Sphere"));
 	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cyl(TEXT("/Engine/BasicShapes/Cylinder.Cylinder"));
+	static ConstructorHelpers::FObjectFinder<UStaticMesh> Cone(TEXT("/Engine/BasicShapes/Cone.Cone"));
 	CubeMesh = Cube.Object;
 	SphereMesh = Sphere.Object;
 	CylinderMesh = Cyl.Object;
+	ConeMesh = Cone.Object;
 }
 
 template <class T>
@@ -94,6 +97,7 @@ void ADRChapter::Build(int32 InChapter)
 	Random.Initialize(2026 + Chapter);
 	Data->TryGetStringField(TEXT("name"), ChapterName);
 	Data->TryGetStringField(TEXT("place"), ChapterPlace);
+	Data->TryGetStringField(TEXT("weather"), Weather);
 	const TArray<TSharedPtr<FJsonValue>>* Points = nullptr;
 	if (Data->TryGetArrayField(TEXT("path"), Points))
 	{
@@ -659,7 +663,6 @@ void ADRChapter::BuildProps(const TSharedPtr<FJsonObject>& Data)
 			}
 			Roll -= Entry.Value;
 		}
-		// Les autres décors (cuves, conteneurs, sapins, ruines...) viendront avec les autres chapitres.
 		if (Kind == TEXT("rock"))
 		{
 			BuildRock(Position);
@@ -672,6 +675,50 @@ void ADRChapter::BuildProps(const TSharedPtr<FJsonObject>& Data)
 		{
 			BuildWreck(Position);
 		}
+		else if (Kind == TEXT("pool"))
+		{
+			BuildPool(Position);
+		}
+		else if (Kind == TEXT("reeds"))
+		{
+			BuildReeds(Position);
+		}
+		else if (Kind == TEXT("container"))
+		{
+			BuildContainer(Position);
+		}
+		else if (Kind == TEXT("tank"))
+		{
+			BuildTank(Position);
+		}
+		else if (Kind == TEXT("pine"))
+		{
+			BuildPine(Position);
+		}
+		else if (Kind == TEXT("ruin"))
+		{
+			BuildRuin(Position);
+		}
+		else if (Kind == TEXT("building"))
+		{
+			BuildBuilding(Position);
+		}
+		else if (Kind == TEXT("lamp"))
+		{
+			BuildLamp(Position);
+		}
+		else if (Kind == TEXT("puddle"))
+		{
+			BuildPuddle(Position);
+		}
+		else if (Kind == TEXT("dune"))
+		{
+			BuildDune(Position);
+		}
+		else if (Kind == TEXT("post"))
+		{
+			BuildPost(Position);
+		}
 	}
 }
 
@@ -680,12 +727,15 @@ void ADRChapter::BuildRock(const FVector& Position)
 	const double Size = Random.FRandRange(60.0, 220.0);
 	const FVector Scale(Size * 2.0 * Random.FRandRange(0.8, 1.4), Size * 2.0 * Random.FRandRange(0.8, 1.4), Size * 1.3 * Random.FRandRange(0.5, 0.9));
 	const FRotator Yaw(0.0, Random.FRandRange(0.0, 360.0), 0.0);
-	Add(SphereMesh, Look(TEXT("concrete"), 0.6f, FLinearColor(0.5f, 0.48f, 0.45f)), FTransform(Yaw, Position + FVector(0.0, 0.0, Size * 0.2), Scale / 100.0), true);
+	// Rochers plus gris et froids sous la neige (Godot : rock_mat).
+	const FLinearColor Tint = Weather == TEXT("snow") ? FLinearColor(0.62f, 0.64f, 0.68f) : FLinearColor(0.5f, 0.48f, 0.45f);
+	Add(SphereMesh, Look(TEXT("concrete"), 0.6f, Tint), FTransform(Yaw, Position + FVector(0.0, 0.0, Size * 0.2), Scale / 100.0), true);
 }
 
 void ADRChapter::BuildDeadTree(const FVector& Position)
 {
-	UMaterialInterface* Bark = Look(TEXT("mud"), 0.8f, FLinearColor(0.45f, 0.4f, 0.35f));
+	// Écorce verdâtre et mouillée dans le Marais (Godot : bark).
+	UMaterialInterface* Bark = Look(TEXT("mud"), 0.8f, Weather == TEXT("fireflies") ? FLinearColor(0.3f, 0.32f, 0.24f) : FLinearColor(0.45f, 0.4f, 0.35f));
 	const double Height = Random.FRandRange(500.0, 900.0);
 	Cylinder(Bark, Position + FVector(0.0, 0.0, Height * 0.5), 19.0, Height);
 	const int32 Branches = Random.RandRange(3, 6);
@@ -716,5 +766,472 @@ void ADRChapter::BuildWreck(const FVector& Position)
 		{
 			Cylinder(Tyre, Center + Yaw.RotateVector(FVector(Along, Across, -30.0)), 38.0, 30.0, WheelTurn, false);
 		}
+	}
+}
+
+// ---------------------------------------------------------------- décors des chapitres 2 à 6
+
+void ADRChapter::Solid(const FVector& Center, const FVector& Size, const FRotator& Rotation)
+{
+	UBoxComponent* Block = NewPart<UBoxComponent>(TEXT("Collision"), EComponentMobility::Static);
+	Block->SetBoxExtent(Size * 0.5);
+	Block->SetRelativeLocationAndRotation(Center, Rotation);
+	Block->SetCollisionProfileName(UCollisionProfile::BlockAll_ProfileName);
+	FinishPart(Block);
+}
+
+UMaterialInterface* ADRChapter::Water()
+{
+	// Godot : eau presque noire, métallique et lisse. Ici, le métal très sombre et étiré reflète le ciel.
+	return Look(TEXT("metal"), 0.15f, FLinearColor(0.05f, 0.065f, 0.06f));
+}
+
+void ADRChapter::BuildPool(const FVector& Position)
+{
+	// Mare d'eau noire (Marais), avec une touffe de roseaux sur le bord.
+	const double Radius = Random.FRandRange(180.0, 320.0);
+	const FVector Scale(Radius / 50.0 * Random.FRandRange(1.0, 1.7), Radius / 50.0 * Random.FRandRange(0.8, 1.2), 0.02);
+	Add(CylinderMesh, Water(), FTransform(FRotator(0.0, Random.FRandRange(0.0, 360.0), 0.0), Position + FVector(0.0, 0.0, 3.0), Scale), false);
+	BuildReeds(Position + FVector(Radius * 0.9, 0.0, 0.0));
+}
+
+void ADRChapter::BuildReeds(const FVector& Position)
+{
+	// Touffe de roseaux secs : de fines tiges effilées, un peu penchées.
+	UMaterialInterface* Dry = Plain(FLinearColor(0.32f, 0.3f, 0.2f));
+	const int32 Count = Random.RandRange(7, 13);
+	for (int32 Index = 0; Index < Count; ++Index)
+	{
+		const double Height = Random.FRandRange(80.0, 190.0);
+		const FVector Center = Position + FVector(Random.FRandRange(-50.0, 50.0), Random.FRandRange(-50.0, 50.0), Height * 0.5);
+		const FRotator Lean(Random.FRandRange(-14.0, 14.0), 0.0, Random.FRandRange(-14.0, 14.0));
+		Add(ConeMesh, Dry, FTransform(Lean, Center, FVector(0.05, 0.05, Height / 100.0)), false);
+	}
+}
+
+void ADRChapter::BuildContainer(const FVector& Position)
+{
+	// Conteneur maritime rouillé (Raffinerie), parfois deux empilés, avec les nervures de la tôle.
+	const FLinearColor Paints[] = { FLinearColor(0.45f, 0.16f, 0.1f), FLinearColor(0.15f, 0.25f, 0.35f), FLinearColor(0.4f, 0.35f, 0.12f), FLinearColor(0.2f, 0.3f, 0.2f) };
+	const int32 Stack = Random.FRand() < 0.3f ? 2 : 1;
+	const double Yaw = Random.FRandRange(0.0, 360.0);
+	for (int32 Tier = 0; Tier < Stack; ++Tier)
+	{
+		UMaterialInterface* Steel = Look(TEXT("metal"), 0.6f, Paints[Random.RandHelper(4)]);
+		const FRotator Turn(0.0, Yaw + (Tier > 0 ? Random.FRandRange(-11.5, 11.5) : 0.0), 0.0);
+		const FVector Center = Position + FVector(0.0, 0.0, 130.0 + Tier * 260.0);
+		Box(Steel, Center, FVector(600.0, 240.0, 260.0), Turn, true);
+		for (int32 Rib = 0; Rib < 7; ++Rib)
+		{
+			Box(Steel, Center + Turn.RotateVector(FVector(-270.0 + Rib * 90.0, 0.0, 0.0)), FVector(8.0, 246.0, 250.0), Turn, false);
+		}
+	}
+}
+
+void ADRChapter::BuildTank(const FVector& Position)
+{
+	// Cuve de stockage (Raffinerie) avec son échelle et un feu rouge au sommet.
+	const double Radius = Random.FRandRange(200.0, 300.0);
+	const double Height = Random.FRandRange(400.0, 700.0);
+	const FRotator Turn(0.0, Random.FRandRange(0.0, 360.0), 0.0);
+	Cylinder(Look(TEXT("metal"), 0.4f, FLinearColor(0.55f, 0.53f, 0.5f)), Position + FVector(0.0, 0.0, Height * 0.5), Radius, Height);
+	UMaterialInterface* Dark = Plain(FLinearColor(0.12f, 0.12f, 0.12f));
+	const double Ladder = Height + 80.0;
+	for (const double Side : { -25.0, 25.0 })
+	{
+		Cylinder(Dark, Position + Turn.RotateVector(FVector(Radius + 25.0, Side, 0.0)) + FVector(0.0, 0.0, Ladder * 0.5), 4.0, Ladder, FRotator::ZeroRotator, false);
+	}
+	const FRotator Rung = (FQuat(Turn) * FQuat(FRotator(0.0, 0.0, 90.0))).Rotator();
+	for (double Z = 30.0; Z < Ladder - 10.0; Z += 35.0)
+	{
+		Cylinder(Dark, Position + Turn.RotateVector(FVector(Radius + 25.0, 0.0, 0.0)) + FVector(0.0, 0.0, Z), 2.0, 50.0, Rung, false);
+	}
+	Box(Look(TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.25f, 0.15f), 4.0f), Position + FVector(0.0, 0.0, Height + 10.0), FVector(20.0, 20.0, 20.0), FRotator::ZeroRotator, false);
+}
+
+void ADRChapter::BuildPine(const FVector& Position)
+{
+	// Sapin enneigé (Col Gelé) : tronc et quatre étages de branches coniques, la neige sur le dessus.
+	const double Height = Random.FRandRange(600.0, 1100.0);
+	Cylinder(Look(TEXT("mud"), 0.8f, FLinearColor(0.3f, 0.24f, 0.2f)), Position + FVector(0.0, 0.0, Height * 0.175), 20.0, Height * 0.35);
+	UMaterialInterface* Needles = Plain(FLinearColor(0.06f, 0.11f, 0.08f));
+	UMaterialInterface* Snow = Plain(FLinearColor(0.82f, 0.85f, 0.9f));
+	const FRotator Turn(0.0, Random.FRandRange(0.0, 360.0), 0.0);
+	for (int32 Tier = 0; Tier < 4; ++Tier)
+	{
+		const double Spread = FMath::Lerp(230.0, 80.0, Tier / 4.0) * Height / 900.0; // rayon du bas de l'étage
+		const double TierHeight = Height * 0.32;
+		const double Z = Height * (0.22 + 0.2 * Tier);
+		Add(ConeMesh, Needles, FTransform(Turn, Position + FVector(0.0, 0.0, Z), FVector(Spread / 50.0, Spread / 50.0, TierHeight / 100.0)), false);
+		Add(ConeMesh, Snow, FTransform(Turn, Position + FVector(0.0, 0.0, Z + TierHeight * 0.25), FVector(Spread * 0.75 / 50.0, Spread * 0.75 / 50.0, TierHeight * 0.55 / 100.0)), false);
+	}
+	// Les branches arrêtent le joueur et les balles comme un tronc plus large (Godot : rayon 0,4 m).
+	Solid(Position + FVector(0.0, 0.0, Height * 0.5), FVector(80.0, 80.0, Height), FRotator::ZeroRotator);
+}
+
+void ADRChapter::BuildRuin(const FVector& Position)
+{
+	// Maison en ruine (Col Gelé, Route Brûlée ; Godot : Buildings.ruin) : deux ou trois murs dont le
+	// haut s'est effondré en escalier, une fenêtre béante avec son linteau, une poutre tombée, des gravats.
+	const double Size = Random.FRandRange(500.0, 700.0);
+	const FTransform Frame(FRotator(0.0, Random.FRandRange(0.0, 360.0), 0.0), Position);
+	UMaterialInterface* WallLook = Random.FRand() < 0.5f ? Look(TEXT("brick"), 0.8f, FLinearColor(0.8f, 0.78f, 0.76f)) : Look(TEXT("plaster"), 0.35f, FLinearColor(0.72f, 0.7f, 0.66f));
+	UMaterialInterface* Wood = Look(TEXT("plaster"), 0.6f, FLinearColor(0.3f, 0.22f, 0.15f));
+	UMaterialInterface* Stone = Look(TEXT("beton"), 0.5f, FLinearColor(0.6f, 0.59f, 0.57f));
+	// Pièce posée dans un repère (centre et taille en cm dans ce repère).
+	auto Piece = [this](UMaterialInterface* Material, const FTransform& Space, const FVector& Center, const FVector& Extent, const FRotator& Rotation)
+	{
+		Box(Material, Space.TransformPosition(Center), Extent, (Space.GetRotation() * FQuat(Rotation)).Rotator(), false);
+	};
+	// Repère de chaque mur : X à travers le mur, Y le long du mur.
+	const FTransform Spots[] = {
+		FTransform(FRotator::ZeroRotator, FVector(Size * 0.5, 0.0, 0.0)),
+		FTransform(FRotator(0.0, 90.0, 0.0), FVector(0.0, -Size * 0.5, 0.0)),
+		FTransform(FRotator(0.0, 90.0, 0.0), FVector(0.0, Size * 0.5, 0.0)),
+	};
+	const int32 Walls = Random.RandRange(2, 3);
+	for (int32 Index = 0; Index < Walls; ++Index)
+	{
+		const FTransform Space = Spots[Index] * Frame;
+		const double Top = Random.FRandRange(220.0, 380.0);
+		const double Length = Size * Random.FRandRange(0.6, 1.0);
+		// Le mur est fait de colonnes de 40 cm ; leur hauteur tombe vers les bouts cassés.
+		const double Peak = Random.FRandRange(-0.3, 0.3) * Length;
+		const bool bOpen = Random.FRand() < 0.6f && Length > 350.0;
+		const double Gap = Random.FRandRange(-0.2, 0.2) * Length;
+		const int32 Columns = FMath::Max(1, (int32)(Length / 40.0));
+		const double ColumnWidth = Length / Columns;
+		double Total = 0.0;
+		for (int32 Column = 0; Column < Columns; ++Column)
+		{
+			const double Along = -Length * 0.5 + (Column + 0.5) * ColumnWidth;
+			const double Fall = FMath::Clamp(1.15 - FMath::Abs(Along - Peak) / Length * Random.FRandRange(0.8, 1.4), 0.15, 1.0);
+			const double ColumnHeight = FMath::Max(30.0, FMath::GridSnap(Top * Fall + Random.FRandRange(-20.0, 20.0), 20.0));
+			Total += ColumnHeight;
+			if (bOpen && FMath::Abs(Along - Gap) < 60.0 && ColumnHeight > 100.0)
+			{
+				// Fenêtre : allège en bas, et le mur reprend au-dessus du linteau.
+				Piece(WallLook, Space, FVector(0.0, Along, 45.0), FVector(50.0, ColumnWidth, 90.0), FRotator::ZeroRotator);
+				if (ColumnHeight > 240.0)
+				{
+					Piece(WallLook, Space, FVector(0.0, Along, (220.0 + ColumnHeight) * 0.5), FVector(50.0, ColumnWidth, ColumnHeight - 220.0), FRotator::ZeroRotator);
+				}
+			}
+			else
+			{
+				Piece(WallLook, Space, FVector(0.0, Along, ColumnHeight * 0.5), FVector(50.0, ColumnWidth, ColumnHeight), FRotator::ZeroRotator);
+			}
+		}
+		if (bOpen)
+		{
+			Piece(Wood, Space, FVector(0.0, Gap, 215.0), FVector(40.0, 160.0, 18.0), FRotator::ZeroRotator);
+		}
+		const double Average = Total / Columns;
+		Solid(Space.TransformPosition(FVector(0.0, 0.0, Average * 0.5)), FVector(50.0, Length, Average), Space.Rotator());
+	}
+	// Poutre du toit tombée en travers, gravats au pied des murs.
+	Piece(Wood, Frame, FVector(Random.FRandRange(-100.0, 50.0), Random.FRandRange(-100.0, 100.0), 80.0), FVector(Size * 0.8, 22.0, 22.0),
+		FRotator(17.0, Random.FRandRange(0.0, 360.0), 6.0));
+	const int32 Rubble = Random.RandRange(8, 14);
+	for (int32 Index = 0; Index < Rubble; ++Index)
+	{
+		const FVector Center(Random.FRandRange(-Size, Size) * 0.5, Random.FRandRange(-Size, Size) * 0.5, 8.0);
+		const FVector Extent(Random.FRandRange(20.0, 45.0), Random.FRandRange(20.0, 55.0), Random.FRandRange(12.0, 30.0));
+		const FRotator Tumble(Random.FRandRange(-23.0, 23.0), Random.FRandRange(0.0, 360.0), Random.FRandRange(-23.0, 23.0));
+		Piece(Random.FRand() < 0.6f ? WallLook : Stone, Frame, Center, Extent, Tumble);
+	}
+}
+
+void ADRChapter::BuildBuilding(const FVector& Position)
+{
+	// Immeuble éventré (Ville Morte ; Godot : Buildings.city_building) de 2 à 4 niveaux : vraies
+	// fenêtres en creux, vitres cassées ou condamnées, rideaux de fer, balcons, corniche, toit arraché.
+	constexpr double FloorHeight = 320.0;
+	constexpr double GroundHeight = 360.0; // rez-de-chaussée plus haut (boutiques)
+	constexpr double WallThickness = 30.0;
+	const double Width = Random.FRandRange(700.0, 1100.0);  // le long de Y
+	const double Depth = Random.FRandRange(600.0, 900.0);   // le long de X
+	const int32 Floors = Random.RandRange(2, 4);
+	const double Height = GroundHeight + (Floors - 1) * FloorHeight;
+	const FTransform Frame(FRotator(0.0, Random.RandRange(0, 3) * 90.0 + Random.FRandRange(-8.6, 8.6), 0.0), Position);
+
+	const FLinearColor Tints[] = { FLinearColor(0.92f, 0.86f, 0.74f), FLinearColor(0.78f, 0.78f, 0.76f), FLinearColor(0.9f, 0.78f, 0.66f), FLinearColor(0.7f, 0.72f, 0.7f) };
+	UMaterialInterface* WallLook = Random.FRand() < 0.4f ? Look(TEXT("brick"), 0.8f, FLinearColor(0.9f, 0.85f, 0.82f)) : Look(TEXT("plaster"), 0.35f, Tints[Random.RandHelper(4)]);
+	UMaterialInterface* Trim = Look(TEXT("beton"), 0.5f, FLinearColor(0.85f, 0.84f, 0.8f));
+	UMaterialInterface* Plinth = Look(TEXT("beton"), 0.5f, FLinearColor(0.55f, 0.54f, 0.52f));
+	UMaterialInterface* Inside = Look(TEXT("plaster"), 0.35f, FLinearColor(0.3f, 0.29f, 0.28f));
+	UMaterialInterface* Slab = Look(TEXT("beton"), 0.5f, FLinearColor(0.6f, 0.59f, 0.57f));
+	UMaterialInterface* Glass = Look(TEXT("metal"), 0.2f, FLinearColor(0.05f, 0.06f, 0.07f));
+	UMaterialInterface* Joinery = Plain(FLinearColor(0.12f, 0.11f, 0.1f));
+	UMaterialInterface* Wood = Look(TEXT("plaster"), 0.6f, FLinearColor(0.42f, 0.3f, 0.2f));
+	UMaterialInterface* Steel = Look(TEXT("metal"), 0.7f, FLinearColor(0.62f, 0.6f, 0.56f));
+	UMaterialInterface* Lit = Look(TEXT("plaster"), 0.35f, FLinearColor(0.9f, 0.55f, 0.28f), 1.5f);
+	UMaterialInterface* Dark = Plain(FLinearColor(0.025f, 0.025f, 0.03f));
+
+	// Pièce dans le repère d'une façade : X vers l'extérieur (le mur va de -30 à 0), Y le long du mur,
+	// Z vers le haut ; Roll la penche dans le plan du mur.
+	auto Put = [this](UMaterialInterface* Material, const FTransform& Space, double Along, double Up, double Out, double SizeAlong, double SizeUp, double SizeOut, double Roll)
+	{
+		Box(Material, Space.TransformPosition(FVector(Out, Along, Up)), FVector(SizeOut, SizeAlong, SizeUp), (Space.GetRotation() * FQuat(FRotator(0.0, 0.0, Roll))).Rotator(), false);
+	};
+	// Pans de mur entre les ouvertures d'une rangée, de Bottom à Bottom + OpeningHeight.
+	auto Piers = [&](UMaterialInterface* Material, const FTransform& Space, double Length, double Bottom, double OpeningHeight, int32 Bays, double OpeningWidth)
+	{
+		const double Bay = Length / Bays;
+		double Start = -Length * 0.5;
+		for (int32 Index = 0; Index <= Bays; ++Index)
+		{
+			const double End = Index == Bays ? Length * 0.5 : -Length * 0.5 + (Index + 0.5) * Bay - OpeningWidth * 0.5;
+			if (End - Start > 1.0)
+			{
+				Put(Material, Space, (Start + End) * 0.5, Bottom + OpeningHeight * 0.5, -WallThickness * 0.5, End - Start, OpeningHeight, WallThickness, 0.0);
+			}
+			Start = End + OpeningWidth;
+		}
+	};
+	// Fenêtre en creux : appui, cadre et traverse ; vitre, éclat de vitre brisée, planches, ou lueur.
+	auto Window = [&](const FTransform& Space, double Center, double Bottom, double OpeningWidth, double OpeningHeight)
+	{
+		const double Back = -WallThickness * 0.65;
+		const double Bar = 6.0;
+		Put(Trim, Space, Center, Bottom - 4.0, 3.0, OpeningWidth + 24.0, 8.0, 16.0, 0.0);
+		Put(Joinery, Space, Center, Bottom + Bar * 0.5, Back, OpeningWidth, Bar, 8.0, 0.0);
+		Put(Joinery, Space, Center, Bottom + OpeningHeight - Bar * 0.5, Back, OpeningWidth, Bar, 8.0, 0.0);
+		Put(Joinery, Space, Center - OpeningWidth * 0.5 + Bar * 0.5, Bottom + OpeningHeight * 0.5, Back, Bar, OpeningHeight, 8.0, 0.0);
+		Put(Joinery, Space, Center + OpeningWidth * 0.5 - Bar * 0.5, Bottom + OpeningHeight * 0.5, Back, Bar, OpeningHeight, 8.0, 0.0);
+		Put(Joinery, Space, Center, Bottom + OpeningHeight * 0.62, Back, OpeningWidth, 5.0, 7.0, 0.0);
+		const float Roll = Random.FRand();
+		if (Roll < 0.06f)
+		{
+			// Une lueur chaude derrière un rideau tiré à moitié : quelqu'un, encore ?
+			Put(Lit, Space, Center, Bottom + OpeningHeight * 0.5, Back - 30.0, OpeningWidth - Bar, OpeningHeight - Bar, 1.0, 0.0);
+			Put(Wood, Space, Center - OpeningWidth * 0.22, Bottom + OpeningHeight * 0.5, Back - 12.0, OpeningWidth * 0.5, OpeningHeight - Bar, 2.0, 0.0);
+		}
+		else if (Roll < 0.42f)
+		{
+			Put(Glass, Space, Center, Bottom + OpeningHeight * 0.5, Back, OpeningWidth - Bar, OpeningHeight - Bar, 1.0, 0.0);
+		}
+		else if (Roll < 0.58f)
+		{
+			// Planches clouées en travers.
+			const int32 Boards = Random.RandRange(2, 4);
+			for (int32 Board = 0; Board < Boards; ++Board)
+			{
+				Put(Wood, Space, Center + Random.FRandRange(-5.0, 5.0), Bottom + OpeningHeight * (0.2 + 0.22 * Board), 3.0, OpeningWidth + 30.0, 16.0, 3.0, Random.FRandRange(-14.3, 14.3));
+			}
+		}
+		else
+		{
+			// Vitre brisée : il ne reste qu'un éclat dans un coin, le noir derrière.
+			Put(Glass, Space, Center - OpeningWidth * 0.3, Bottom + OpeningHeight * 0.2, Back, OpeningWidth * 0.35, OpeningHeight * 0.18, 1.0, Random.FRandRange(28.6, 57.3));
+		}
+	};
+	// Vitrine du rez-de-chaussée : rideau de fer (parfois à moitié levé sur le noir) ou vitrine éventrée.
+	auto Shop = [&](const FTransform& Space, double Center, double OpeningWidth, double OpeningHeight)
+	{
+		Put(Steel, Space, Center, OpeningHeight + 17.0, -5.0, OpeningWidth + 10.0, 34.0, 36.0, 0.0);
+		if (Random.FRand() < 0.65f)
+		{
+			const double Lift = Random.FRand() < 0.6f ? 0.0 : Random.FRandRange(60.0, 140.0);
+			const double Shutter = OpeningHeight - 50.0 - Lift;
+			Put(Steel, Space, Center, 50.0 + Lift + Shutter * 0.5, -10.0, OpeningWidth, Shutter, 3.0, 0.0);
+			for (double Slat = 50.0 + Lift + 6.0; Slat < OpeningHeight - 5.0; Slat += 11.0)
+			{
+				Put(Joinery, Space, Center, Slat, -8.0, OpeningWidth, 2.5, 2.0, 0.0);
+			}
+			if (Lift > 0.0)
+			{
+				Put(Dark, Space, Center, 50.0 + Lift * 0.5, -WallThickness - 60.0, OpeningWidth, Lift, 5.0, 0.0);
+			}
+		}
+		else
+		{
+			Put(Dark, Space, Center, (OpeningHeight + 50.0) * 0.5, -WallThickness - 60.0, OpeningWidth, OpeningHeight - 50.0, 5.0, 0.0);
+			Put(Joinery, Space, Center, 55.0, -12.0, OpeningWidth, 10.0, 10.0, 0.0);
+			Put(Joinery, Space, Center - OpeningWidth * 0.5 + 5.0, (OpeningHeight + 50.0) * 0.5, -12.0, 10.0, OpeningHeight - 50.0, 10.0, 0.0);
+			Put(Joinery, Space, Center + OpeningWidth * 0.5 - 5.0, (OpeningHeight + 50.0) * 0.5, -12.0, 10.0, OpeningHeight - 50.0, 10.0, 0.0);
+			Put(Glass, Space, Center - OpeningWidth * 0.3, 90.0, -12.0, OpeningWidth * 0.3, 60.0, 1.0, 0.0);
+		}
+	};
+	// Balcon : dalle en saillie et garde-corps à barreaux.
+	auto Balcony = [&](const FTransform& Space, double Center, double Bottom, double OpeningWidth)
+	{
+		const double Span = OpeningWidth + 70.0;
+		Put(Slab, Space, Center, Bottom - 8.0, 45.0, Span, 16.0, 90.0, 0.0);
+		Put(Joinery, Space, Center, Bottom + 100.0, 86.0, Span, 5.0, 5.0, 0.0);
+		for (const double Side : { -1.0, 1.0 })
+		{
+			Put(Joinery, Space, Center + Side * Span * 0.5, Bottom + 100.0, 45.0, 5.0, 5.0, 85.0, 0.0);
+		}
+		for (double Rail = -Span * 0.5; Rail <= Span * 0.5 + 1.0; Rail += 13.0)
+		{
+			Put(Joinery, Space, Center + Rail, Bottom + 50.0, 86.0, 2.5, 100.0, 2.5, 0.0);
+		}
+	};
+
+	// Quatre façades : devant et derrière sur toute la largeur (avec boutiques), les côtés entre les deux.
+	struct FFacade
+	{
+		FTransform Space;
+		double Length;
+		bool bShops;
+	};
+	const FFacade Facades[] = {
+		{ FTransform(FRotator::ZeroRotator, FVector(Depth * 0.5, 0.0, 0.0)) * Frame, Width, true },
+		{ FTransform(FRotator(0.0, 180.0, 0.0), FVector(-Depth * 0.5, 0.0, 0.0)) * Frame, Width, true },
+		{ FTransform(FRotator(0.0, 90.0, 0.0), FVector(0.0, Width * 0.5, 0.0)) * Frame, Depth - 2.0 * WallThickness, false },
+		{ FTransform(FRotator(0.0, -90.0, 0.0), FVector(0.0, -Width * 0.5, 0.0)) * Frame, Depth - 2.0 * WallThickness, false },
+	};
+	for (const FFacade& Facade : Facades)
+	{
+		const FTransform& Space = Facade.Space;
+		const double Length = Facade.Length;
+		// Soubassement en béton, puis le rez-de-chaussée.
+		Put(Plinth, Space, 0.0, 25.0, -WallThickness * 0.5 + 2.0, Length, 50.0, WallThickness + 4.0, 0.0);
+		if (Facade.bShops)
+		{
+			const int32 Bays = FMath::Max(1, (int32)(Length / 360.0));
+			const double Bay = Length / Bays;
+			const double OpeningWidth = Bay - 80.0;
+			const double OpeningHeight = 280.0;
+			Piers(WallLook, Space, Length, 50.0, OpeningHeight - 50.0, Bays, OpeningWidth);
+			Put(WallLook, Space, 0.0, (OpeningHeight + GroundHeight) * 0.5, -WallThickness * 0.5, Length, GroundHeight - OpeningHeight, WallThickness, 0.0);
+			for (int32 Index = 0; Index < Bays; ++Index)
+			{
+				Shop(Space, -Length * 0.5 + (Index + 0.5) * Bay, OpeningWidth, OpeningHeight);
+			}
+		}
+		else
+		{
+			Put(WallLook, Space, 0.0, (50.0 + GroundHeight) * 0.5, -WallThickness * 0.5, Length, GroundHeight - 50.0, WallThickness, 0.0);
+		}
+		Put(Trim, Space, 0.0, GroundHeight, 3.0, Length, 22.0, 8.0, 0.0);
+		// Étages : allège, trumeaux entre les fenêtres, linteau.
+		const int32 Bays = FMath::Max(1, (int32)(Length / 260.0));
+		const double Bay = Length / Bays;
+		const double OpeningWidth = FMath::Min(130.0, Bay - 90.0);
+		const double OpeningHeight = 160.0;
+		const double Sill = 85.0;
+		for (int32 Storey = 1; Storey < Floors; ++Storey)
+		{
+			const double Bottom = GroundHeight + (Storey - 1) * FloorHeight;
+			const double Top = Bottom + Sill + OpeningHeight;
+			Put(WallLook, Space, 0.0, Bottom + Sill * 0.5, -WallThickness * 0.5, Length, Sill, WallThickness, 0.0);
+			Put(WallLook, Space, 0.0, (Top + Bottom + FloorHeight) * 0.5, -WallThickness * 0.5, Length, Bottom + FloorHeight - Top, WallThickness, 0.0);
+			Piers(WallLook, Space, Length, Bottom + Sill, OpeningHeight, Bays, OpeningWidth);
+			if (Storey > 1)
+			{
+				Put(Trim, Space, 0.0, Bottom, 3.0, Length, 16.0, 6.0, 0.0);
+			}
+			for (int32 Index = 0; Index < Bays; ++Index)
+			{
+				const double Center = -Length * 0.5 + (Index + 0.5) * Bay;
+				Window(Space, Center, Bottom + Sill, OpeningWidth, OpeningHeight);
+				if (Facade.bShops && Storey >= 2 && Random.FRand() < 0.25f)
+				{
+					Balcony(Space, Center, Bottom, OpeningWidth);
+				}
+			}
+		}
+		// Corniche, et acrotère cassé par endroits.
+		Put(Trim, Space, 0.0, Height + 15.0, 5.0, Length + 20.0, 30.0, 45.0, 0.0);
+		for (double Along = -Length * 0.5; Along < Length * 0.5 - 50.0;)
+		{
+			const double Segment = FMath::Min(Random.FRandRange(150.0, 400.0), Length * 0.5 - Along);
+			if (Random.FRand() < 0.8f)
+			{
+				const double Parapet = Random.FRandRange(70.0, 100.0);
+				Put(WallLook, Space, Along + Segment * 0.5, Height + 30.0 + Parapet * 0.5, -15.0, Segment, Parapet, 25.0, 0.0);
+			}
+			Along += Segment;
+		}
+	}
+
+	// Dedans (repère du bâtiment) : planchers, un refend qui coupe la vue, toit en partie arraché.
+	auto Inner = [this, &Frame](UMaterialInterface* Material, const FVector& Center, const FVector& Extent, const FRotator& Rotation)
+	{
+		Box(Material, Frame.TransformPosition(Center), Extent, (Frame.GetRotation() * FQuat(Rotation)).Rotator(), false);
+	};
+	const double InnerDepth = Depth - 2.0 * WallThickness;
+	const double InnerWidth = Width - 2.0 * WallThickness;
+	for (int32 Storey = 1; Storey < Floors; ++Storey)
+	{
+		Inner(Slab, FVector(0.0, 0.0, GroundHeight + (Storey - 1) * FloorHeight - 12.0), FVector(InnerDepth, InnerWidth, 25.0), FRotator::ZeroRotator);
+	}
+	Inner(Inside, FVector(0.0, 0.0, Height * 0.5), FVector(20.0, InnerWidth, Height), FRotator::ZeroRotator);
+	const double Roof = InnerDepth * Random.FRandRange(0.35, 0.8);
+	Inner(Slab, FVector(InnerDepth * 0.5 - Roof * 0.5, 0.0, Height - 12.0), FVector(Roof, InnerWidth, 25.0), FRotator::ZeroRotator);
+	// Un pan du toit pend dans le vide.
+	Inner(Slab, FVector(InnerDepth * 0.5 - Roof - 60.0, Random.FRandRange(-Width, Width) * 0.2, Height - 100.0), FVector(220.0, Width * 0.4, 22.0), FRotator(Random.FRandRange(23.0, 46.0), 0.0, 0.0));
+	// Gouttière, climatiseurs sur le toit, gravats au pied des façades.
+	Inner(Joinery, FVector(-Depth * 0.5 - 8.0, -Width * 0.5 + 25.0, Height * 0.5), FVector(10.0, 10.0, Height), FRotator::ZeroRotator);
+	const int32 Coolers = Random.RandRange(1, 2);
+	for (int32 Index = 0; Index < Coolers; ++Index)
+	{
+		Inner(Steel, FVector(Depth * 0.35 - Index * 140.0, Random.FRandRange(-Width, Width) * 0.3, Height + 35.0), FVector(70.0, 110.0, 70.0), FRotator::ZeroRotator);
+	}
+	const int32 Rubble = Random.RandRange(5, 10);
+	for (int32 Index = 0; Index < Rubble; ++Index)
+	{
+		const double Side = Random.FRand() < 0.5f ? 1.0 : -1.0;
+		const FVector Center(Side * (Depth * 0.5 + Random.FRandRange(30.0, 160.0)), Random.FRandRange(-Width, Width) * 0.5, 10.0);
+		const FVector Extent(Random.FRandRange(30.0, 80.0), Random.FRandRange(30.0, 90.0), Random.FRandRange(15.0, 45.0));
+		const FRotator Tumble(Random.FRandRange(-17.0, 17.0), Random.FRandRange(0.0, 360.0), Random.FRandRange(-17.0, 17.0));
+		Inner(Random.FRand() < 0.6f ? Trim : WallLook, Center, Extent, Tumble);
+	}
+	// Une seule boîte de collision pour tout l'immeuble.
+	Solid(Frame.TransformPosition(FVector(0.0, 0.0, Height * 0.5)), FVector(Depth, Width, Height), Frame.Rotator());
+}
+
+void ADRChapter::BuildLamp(const FVector& Position)
+{
+	// Réverbère (Ville Morte). Un sur trois éclaire encore, en grésillant ; les autres sont morts.
+	UMaterialInterface* Steel = Look(TEXT("metal"), 1.0f, FLinearColor(0.2f, 0.21f, 0.22f));
+	const FRotator Turn(0.0, Random.FRandRange(0.0, 360.0), 0.0);
+	Cylinder(Steel, Position + FVector(0.0, 0.0, 300.0), 8.0, 600.0);
+	Box(Steel, Position + Turn.RotateVector(FVector(75.0, 0.0, 595.0)), FVector(160.0, 8.0, 8.0), Turn, false);
+	const bool bLit = Random.FRand() < 0.34f;
+	UMaterialInterface* Head = bLit ? Look(TEXT("metal"), 1.0f, FLinearColor(1.0f, 0.68f, 0.35f), 3.0f) : Plain(FLinearColor(0.15f, 0.15f, 0.15f));
+	Box(Head, Position + Turn.RotateVector(FVector(150.0, 0.0, 585.0)), FVector(60.0, 35.0, 12.0), Turn, false);
+	if (bLit)
+	{
+		Flicker(Position + Turn.RotateVector(FVector(150.0, 0.0, 550.0)), FLinearColor(1.0f, 0.66f, 0.34f), DRChapterLayout::LampCandelas, 1100.0f, 9.0f, 0.15f, false);
+	}
+}
+
+void ADRChapter::BuildPuddle(const FVector& Position)
+{
+	// Flaque d'eau de pluie sur l'asphalte : un miroir sombre et mince.
+	const double Radius = Random.FRandRange(120.0, 260.0);
+	const FVector Scale(Radius / 50.0 * Random.FRandRange(1.0, 1.8), Radius / 50.0 * Random.FRandRange(0.6, 1.0), 0.01);
+	Add(CylinderMesh, Water(), FTransform(FRotator(0.0, Random.FRandRange(0.0, 360.0), 0.0), Position + FVector(0.0, 0.0, 2.0), Scale), false);
+}
+
+void ADRChapter::BuildDune(const FVector& Position)
+{
+	// Bosse de sable (Route Brûlée) : large et très basse (moins d'un mètre), sans collision.
+	const double Radius = Random.FRandRange(400.0, 800.0);
+	const double Rise = Random.FRandRange(40.0, 80.0);
+	const FVector Scale(Radius / 50.0 * Random.FRandRange(0.6, 1.0), Radius / 50.0, Rise / 50.0);
+	Add(SphereMesh, Look(TEXT("ground"), 0.12f, FLinearColor(0.95f, 0.76f, 0.55f)), FTransform(FRotator(0.0, Random.FRandRange(0.0, 360.0), 0.0), Position - FVector(0.0, 0.0, 15.0), Scale), false);
+}
+
+void ADRChapter::BuildPost(const FVector& Position)
+{
+	// Poteau télégraphique en bois (Route Brûlée), un peu penché, avec deux bouts de câble qui pendent.
+	UMaterialInterface* Wood = Look(TEXT("mud"), 0.8f, FLinearColor(0.42f, 0.33f, 0.24f));
+	UMaterialInterface* Cable = Plain(FLinearColor(0.05f, 0.05f, 0.05f));
+	const double Height = Random.FRandRange(600.0, 750.0);
+	const FTransform Frame(FRotator(Random.FRandRange(-6.9, 6.9), Random.FRandRange(0.0, 360.0), Random.FRandRange(-6.9, 6.9)), Position);
+	const FQuat Turn = Frame.GetRotation();
+	Add(CylinderMesh, Wood, FTransform(Turn, Frame.TransformPosition(FVector(0.0, 0.0, Height * 0.5)), FVector(13.0 / 50.0, 13.0 / 50.0, Height / 100.0)), true);
+	Box(Wood, Frame.TransformPosition(FVector(0.0, 0.0, Height - 50.0)), FVector(12.0, 180.0, 12.0), Turn.Rotator(), false);
+	for (const double Side : { -75.0, 75.0 })
+	{
+		const double Hang = Random.FRandRange(150.0, 350.0);
+		// Le câble pend tout droit sous la traverse, à peine écarté par le vent.
+		const FVector Top = Frame.TransformPosition(FVector(0.0, Side, Height - 50.0));
+		const FRotator Sway(0.0, 0.0, Random.FRandRange(-11.5, 11.5));
+		Cylinder(Cable, Top - Sway.RotateVector(FVector(0.0, 0.0, Hang * 0.5)), 1.2, Hang, Sway, false);
 	}
 }

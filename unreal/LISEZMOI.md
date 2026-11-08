@@ -22,7 +22,8 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 12 | Implants après les Nuits de siège | à tester (8 nov.) |
 | 13 | Établi : canon, chargeur, munitions spéciales, générateur | à tester (8 nov.) |
 | 14 | Gadgets : barricade, leurre sonore, drone de récolte | à tester (8 nov.) |
-| ensuite | Décor complet des chapitres 2 à 6, tutoriel, effets de feu et de glace, export Windows | à faire |
+| 15 | Décor des chapitres 2 à 6 : mares, conteneurs, cuves, sapins, ruines, immeubles, réverbères, dunes, poteaux | à tester (8 nov.) |
+| ensuite | Herbe et cailloux au sol, météo (pluie, neige, cendres, poussière, lucioles), tutoriel, effets de feu et de glace, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
 
@@ -157,7 +158,7 @@ Ils arrivent à partir de la vague 3 : **Entrée** lance chaque vague sans atten
 3. En partie, **P** (ou **Échap** dans le jeu exporté ; dans l'éditeur, Échap arrête la partie) met en **pause** : REPRENDRE, RECOMMENCER LE NIVEAU, MENU PRINCIPAL, QUITTER LE JEU. Tout est figé pendant la pause.
 4. En fin de partie, deux boutons : NIVEAU SUIVANT (ou RECOMMENCER) et MENU PRINCIPAL, avec « Nouveau record ! » ou « Niveau suivant débloqué ! » quand c'est le cas.
 5. La progression et le record sont sauvegardés sur ton PC (dossier `Saved/SaveGames` du projet) : ferme Unreal, rouvre-le, ils doivent être encore là. Pour repartir de zéro, supprime le fichier `Progression.sav`.
-6. Les chapitres 2 à 6 utilisent leur propre carte, mais une partie de leur décor (cuves, conteneurs, ruines...) n'est pas encore portée : ils peuvent paraître vides.
+6. Les chapitres 2 à 6 utilisent leur propre carte ; leur décor arrive à l'étape 15.
 
 ## 15. Tester l'étape 10 : réglages et touches
 
@@ -206,7 +207,18 @@ Ils arrivent à partir de la vague 3 : **Entrée** lance chaque vague sans atten
 4. **Drone de récolte** : à choisir à l'établi (carte **GADGETS**, un bouton par gadget pour chaque touche ; mettre le même gadget sur les deux touches les échange). Il décolle au-dessus de toi, va chercher la ferraille à moins de 25 m pendant 25 s (un « + » vert s'affiche à chaque pièce ramassée), puis revient et disparaît. Recharge : 45 s.
 5. Les touches **A** et **G** se changent dans les réglages, comme les autres.
 
-## 20. Si ça ne marche pas
+## 20. Tester l'étape 15 : le décor des autres chapitres
+
+Pour voir un chapitre sans avoir gagné les précédents : pendant la partie, appuie sur **²** (ou **F10**) pour ouvrir la console en bas de l'écran, tape `open Entry?Niveau=21` puis **Entrée**. Le nombre est le niveau : 6 = chapitre 2, 11 = chapitre 3, 16 = chapitre 4, 21 = chapitre 5, 26 = chapitre 6. Ta progression n'est pas changée.
+
+1. **Le Marais** (niveaux 6 à 10) : mares d'eau noire qui reflètent le ciel, touffes de roseaux secs, arbres morts à l'écorce verdâtre.
+2. **La Raffinerie** (11 à 15) : conteneurs maritimes rouillés (parfois deux empilés), grandes cuves avec une échelle et un feu rouge au sommet.
+3. **Le Col Gelé** (16 à 20) : sapins couverts de neige, maisons en ruine aux murs effondrés en escalier, rochers plus gris.
+4. **La Ville Morte** (21 à 25) : immeubles éventrés de 2 à 4 niveaux (fenêtres cassées ou condamnées, rideaux de fer, balcons, toit arraché), réverbères dont un sur trois grésille encore, flaques.
+5. **La Route Brûlée** (26 à 30) : dunes de sable basses, poteaux télégraphiques penchés avec leurs câbles qui pendent, ruines.
+6. On ne traverse ni les immeubles, ni les ruines, ni les cuves, ni les conteneurs, ni les sapins.
+
+## 21. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.
