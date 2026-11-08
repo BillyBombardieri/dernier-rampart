@@ -7,6 +7,7 @@
 class ADRChapter;
 class ADRZombie;
 class FJsonObject;
+class UDRSave;
 class UMaterialInterface;
 class USoundAttenuation;
 
@@ -60,7 +61,8 @@ struct FDRMessage
  * Mode de jeu de Dernier Rempart (Godot : game.gd et wave_manager.gd). Construit la carte du
  * chapitre du niveau choisi, enchaîne les vagues (préparation, assaut, récolte), compte la
  * ferraille et les points, et termine la partie : victoire après la vague 10, défaite si le Cœur
- * tombe. « ?Niveau=N » dans les options de lancement choisit le niveau (1 à 30, 1 par défaut).
+ * tombe. « ?Niveau=N » dans les options de lancement choisit le niveau (1 à 30) ; sans option,
+ * c'est le menu principal (choix du niveau parmi ceux débloqués), devant la carte du dernier chapitre ouvert.
  */
 UCLASS()
 class DERNIERREMPART_API ADRGameMode : public AGameModeBase
@@ -86,6 +88,12 @@ public:
 
 	/** Entrée : lance la vague, passe la récolte, ou relance la partie quand elle est finie. */
 	void SkipPhase();
+	/** Échap ou P : met la partie en pause (menu) ou la reprend. */
+	void TogglePause();
+	/** Lance un niveau (0 = 1-1), revient au menu principal, ou quitte le jeu. */
+	void PlayLevel(int32 LevelIndex);
+	void OpenMainMenu();
+	void QuitGame();
 	void AddScrap(int32 Amount);
 	/** Dépense de la ferraille, ou dit qu'il en manque et renvoie faux. */
 	bool TrySpend(int32 Amount);
@@ -128,6 +136,18 @@ public:
 	bool IsOver() const { return bOver; }
 	bool IsVictory() const { return bVictory; }
 	bool HasNextLevel() const { return Level + 1 < LevelCount; }
+	int32 GetLevelCount() const { return LevelCount; }
+	/** Menu principal (pas de partie en cours) ou menu de pause ouvert : le joueur ne bouge pas. */
+	bool IsMainMenu() const { return bMenu; }
+	bool IsPauseMenu() const { return bPauseMenu; }
+	bool IsMenuOpen() const { return bMenu || bPauseMenu; }
+	UDRSave* GetProgress() const { return Progress; }
+	/** Nouveau record, ou niveau suivant débloqué, à la fin de la partie. */
+	bool IsNewRecord() const { return bNewRecord; }
+	bool HasUnlockedNext() const { return bUnlockedNext; }
+	/** Nom, lieu et description d'un chapitre (chapitres.json), pour le choix du niveau. */
+	int32 GetChapterCount() const;
+	FString GetChapterText(int32 Index, const TCHAR* Field) const;
 	const TArray<FDRMessage>& GetMessages() const { return Messages; }
 	const TArray<FDRPopup>& GetPopups() const { return Popups; }
 	const TArray<FDRRing>& GetRings() const { return Rings; }
@@ -156,7 +176,11 @@ private:
 	UPROPERTY()
 	TObjectPtr<UMaterialInterface> ScrapGlint;
 
+	UPROPERTY()
+	TObjectPtr<UDRSave> Progress;
+
 	TSharedPtr<FJsonObject> GameData;
+	TSharedPtr<FJsonObject> ChapterData;
 
 	// Niveau joué.
 	int32 Level = 0;
@@ -187,6 +211,10 @@ private:
 	bool bOver = false;
 	bool bVictory = false;
 	bool bStarted = false;
+	bool bMenu = false;
+	bool bPauseMenu = false;
+	bool bNewRecord = false;
+	bool bUnlockedNext = false;
 	int32 EnergyUsed = 0;
 	TArray<FString> BuildOrder;
 	TArray<FDRMessage> Messages;

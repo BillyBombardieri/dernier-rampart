@@ -483,6 +483,12 @@ void ADRCharacter::Tick(float DeltaSeconds)
 	Super::Tick(DeltaSeconds);
 	Hurt = DRPlayer::MoveToward(Hurt, 0.0f, DeltaSeconds * 0.8f);
 	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	if (Mode && Mode->IsMainMenu())
+	{
+		// Menu principal : pas d'arme à l'écran, rien d'autre à faire.
+		GunRoot->SetVisibility(false, true);
+		return;
+	}
 	if (Mode && Mode->IsOver())
 	{
 		// Partie finie : on ne tire plus, on ne revient plus au Cœur.
@@ -879,7 +885,30 @@ bool ADRCharacter::CanAct() const
 {
 	const UWorld* World = GetWorld();
 	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
-	return bAlive && !(Mode && Mode->IsOver());
+	return bAlive && !(Mode && (Mode->IsOver() || Mode->IsMenuOpen()));
+}
+
+bool ADRCharacter::IsMenuOpen() const
+{
+	const UWorld* World = GetWorld();
+	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+	return Mode && Mode->IsMenuOpen();
+}
+
+void ADRCharacter::PausePressed()
+{
+	if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
+	{
+		Mode->TogglePause();
+	}
+}
+
+void ADRCharacter::JumpPressed()
+{
+	if (CanAct())
+	{
+		Jump();
+	}
 }
 
 void ADRCharacter::SkipPressed()
@@ -985,6 +1014,8 @@ void ADRCharacter::CreateInput()
 	CycleAction = NewAction(TEXT("ChoisirTour"), EInputActionValueType::Boolean);
 	PowerAction = NewAction(TEXT("AllumerTour"), EInputActionValueType::Boolean);
 	MarkAction = NewAction(TEXT("Marquer"), EInputActionValueType::Boolean);
+	PauseAction = NewAction(TEXT("Pause"), EInputActionValueType::Boolean);
+	PauseAction->bTriggerWhenPaused = true; // pour reprendre la partie
 
 	Mapping = NewObject<UInputMappingContext>(this, TEXT("CommandesJoueur"));
 	// ZQSD en AZERTY. L'action donne (droite, avant) : Z et S passent sur l'axe avant, S et Q sont inversés.
@@ -1025,6 +1056,9 @@ void ADRCharacter::CreateInput()
 	Mapping->MapKey(CycleAction, EKeys::C);
 	Mapping->MapKey(PowerAction, EKeys::X);
 	Mapping->MapKey(MarkAction, EKeys::F);
+	// Pause : Échap (dans l'éditeur, Échap arrête la partie, d'où P aussi).
+	Mapping->MapKey(PauseAction, EKeys::Escape);
+	Mapping->MapKey(PauseAction, EKeys::P);
 	// Entrée : lancer la vague sans attendre, passer la récolte, recommencer en fin de partie.
 	Mapping->MapKey(SkipAction, EKeys::Enter);
 }
@@ -1051,7 +1085,7 @@ void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	}
 	EnhancedInput->BindAction(MoveAction, ETriggerEvent::Triggered, this, &ADRCharacter::Move);
 	EnhancedInput->BindAction(LookAction, ETriggerEvent::Triggered, this, &ADRCharacter::Look);
-	EnhancedInput->BindAction(JumpAction, ETriggerEvent::Started, this, &ACharacter::Jump);
+	EnhancedInput->BindAction(JumpAction, ETriggerEvent::Started, this, &ADRCharacter::JumpPressed);
 	EnhancedInput->BindAction(JumpAction, ETriggerEvent::Completed, this, &ACharacter::StopJumping);
 	EnhancedInput->BindAction(SprintAction, ETriggerEvent::Started, this, &ADRCharacter::StartSprint);
 	EnhancedInput->BindAction(SprintAction, ETriggerEvent::Completed, this, &ADRCharacter::StopSprint);
@@ -1070,6 +1104,7 @@ void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 	EnhancedInput->BindAction(PowerAction, ETriggerEvent::Started, this, &ADRCharacter::PowerPressed);
 	EnhancedInput->BindAction(MarkAction, ETriggerEvent::Started, this, &ADRCharacter::MarkPressed);
 	EnhancedInput->BindAction(SkipAction, ETriggerEvent::Started, this, &ADRCharacter::SkipPressed);
+	EnhancedInput->BindAction(PauseAction, ETriggerEvent::Started, this, &ADRCharacter::PausePressed);
 }
 
 void ADRCharacter::Move(const FInputActionValue& Value)
@@ -1087,7 +1122,7 @@ void ADRCharacter::Move(const FInputActionValue& Value)
 
 void ADRCharacter::Look(const FInputActionValue& Value)
 {
-	if (!Controller)
+	if (!Controller || IsMenuOpen())
 	{
 		return;
 	}

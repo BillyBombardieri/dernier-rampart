@@ -5,6 +5,7 @@
 #include "DRData.h"
 #include "DRHUD.h"
 #include "DRLook.h"
+#include "DRSave.h"
 #include "DRScrap.h"
 #include "DRStructures.h"
 #include "DRZombie.h"
@@ -12,6 +13,7 @@
 #include "EngineUtils.h"
 #include "GameFramework/PlayerStart.h"
 #include "Kismet/GameplayStatics.h"
+#include "Kismet/KismetSystemLibrary.h"
 #include "Sound/SoundAttenuation.h"
 #include "Sound/SoundBase.h"
 
@@ -46,6 +48,8 @@ void ADRGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 {
 	Super::InitGame(MapName, Options, ErrorMessage);
 	GameData = DRData::Load(TEXT("jeu.json"));
+	ChapterData = DRData::Load(TEXT("chapitres.json"));
+	Progress = UDRSave::LoadOrCreate();
 	LoadLevel(Options);
 	LastWave = (int32)Rule(TEXT("partie"), TEXT("last_wave"), 10.0);
 	SiegeEvery = (int32)Rule(TEXT("vagues"), TEXT("siege_every"), 5.0);
@@ -86,7 +90,9 @@ void ADRGameMode::LoadLevel(const FString& Options)
 	}
 	const int32 AskedLevel = UGameplayStatics::GetIntOption(Options, TEXT("Niveau"), 0);
 	const int32 AskedChapter = UGameplayStatics::GetIntOption(Options, TEXT("Chapitre"), 0);
-	Level = AskedLevel > 0 ? AskedLevel - 1 : (AskedChapter > 0 ? (AskedChapter - 1) * 5 : 0);
+	// Sans niveau demandé : menu principal, devant la carte du dernier niveau débloqué.
+	bMenu = AskedLevel <= 0 && AskedChapter <= 0;
+	Level = AskedLevel > 0 ? AskedLevel - 1 : (AskedChapter > 0 ? (AskedChapter - 1) * 5 : (Progress ? Progress->UnlockedLevel : 0));
 	Level = FMath::Clamp(Level, 0, LevelCount - 1);
 	ChapterIndex = Level / 5;
 	LevelShort = FString::Printf(TEXT("%d-%d"), ChapterIndex + 1, Level % 5 + 1);
@@ -446,17 +452,79 @@ void ADRGameMode::WaveCleared()
 
 void ADRGameMode::SkipPhase()
 {
+	if (bMenu)
+	{
+		// Menu principal : Entrée lance le dernier niveau débloqué.
+		PlayLevel(Level);
+		return;
+	}
+	if (bPauseMenu)
+	{
+		return;
+	}
 	if (bOver)
 	{
 		// Victoire : niveau suivant ; défaite : on recommence le même niveau.
-		const int32 Next = bVictory && HasNextLevel() ? Level + 1 : Level;
-		UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)), true, FString::Printf(TEXT("Niveau=%d"), Next + 1));
+		PlayLevel(bVictory && HasNextLevel() ? Level + 1 : Level);
 		return;
 	}
 	if (Phase == EDRPhase::Prep || Phase == EDRPhase::Harvest)
 	{
 		PhaseTime = 0.0f;
 	}
+}
+
+void ADRGameMode::TogglePause()
+{
+	if (bMenu || bOver)
+	{
+		return;
+	}
+	bPauseMenu = !bPauseMenu;
+	UGameplayStatics::SetGamePaused(this, bPauseMenu);
+}
+
+void ADRGameMode::PlayLevel(int32 LevelIndex)
+{
+	UGameplayStatics::SetGamePaused(this, false);
+	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)), true,
+		FString::Printf(TEXT("Niveau=%d"), FMath::Clamp(LevelIndex, 0, LevelCount - 1) + 1));
+}
+
+void ADRGameMode::OpenMainMenu()
+{
+	UGameplayStatics::SetGamePaused(this, false);
+	UGameplayStatics::OpenLevel(this, FName(*UGameplayStatics::GetCurrentLevelName(this, true)), true, FString());
+}
+
+void ADRGameMode::QuitGame()
+{
+	UKismetSystemLibrary::QuitGame(this, UGameplayStatics::GetPlayerController(this, 0), EQuitPreference::Quit, false);
+}
+
+int32 ADRGameMode::GetChapterCount() const
+{
+	const TArray<TSharedPtr<FJsonValue>>* Chapters = nullptr;
+	if (ChapterData.IsValid() && ChapterData->TryGetArrayField(TEXT("chapitres"), Chapters))
+	{
+		return FMath::Min(Chapters->Num(), (LevelCount + 4) / 5);
+	}
+	return (LevelCount + 4) / 5;
+}
+
+FString ADRGameMode::GetChapterText(int32 Index, const TCHAR* Field) const
+{
+	FString Text;
+	const TArray<TSharedPtr<FJsonValue>>* Chapters = nullptr;
+	if (ChapterData.IsValid() && ChapterData->TryGetArrayField(TEXT("chapitres"), Chapters) && Chapters->IsValidIndex(Index))
+	{
+		const TSharedPtr<FJsonObject> Entry = (*Chapters)[Index]->AsObject();
+		if (Entry.IsValid())
+		{
+			Entry->TryGetStringField(Field, Text);
+		}
+	}
+	return Text;
 }
 
 void ADRGameMode::CoreDestroyed()
@@ -477,11 +545,22 @@ void ADRGameMode::EndGame(bool bWon)
 	}
 	bOver = true;
 	bVictory = bWon;
+	// Sauvegarde : record, niveau gagné, niveau suivant débloqué.
+	if (Progress)
+	{
+		bNewRecord = Progress->SubmitScore(Score, Wave);
+		bUnlockedNext = Progress->FinishLevel(Level, bWon, LevelCount);
+		Progress->Write();
+	}
 }
 
 void ADRGameMode::Tick(float DeltaSeconds)
 {
 	Super::Tick(DeltaSeconds);
+	if (bMenu)
+	{
+		return;
+	}
 	if (!bStarted)
 	{
 		bStarted = true;

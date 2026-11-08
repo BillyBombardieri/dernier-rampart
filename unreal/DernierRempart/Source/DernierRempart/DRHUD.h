@@ -5,6 +5,7 @@
 #include "DRHUD.generated.h"
 
 class ADRCharacter;
+class ADRGameMode;
 class UFont;
 
 /**
@@ -13,7 +14,8 @@ class UFont;
  * dispersion, marque de touche, arme et munitions, vie du joueur, barres de vie au-dessus des
  * zombies blessés et leurs états (marqué, gelé, en feu, chargé, étourdi), noms et portée des
  * tours, choix de la tour à construire, ce qu'on peut faire avec ce qu'on vise, textes des combos,
- * écran rougi quand on est touché, message quand on tombe, fin de partie.
+ * écran rougi quand on est touché, message quand on tombe, fin de partie. Menus à la souris :
+ * menu principal et choix du niveau, pause, boutons de fin de partie.
  */
 UCLASS()
 class DERNIERREMPART_API ADRHUD : public AHUD
@@ -41,6 +43,13 @@ private:
 	void DrawHint(const ADRCharacter* Player);
 	void DrawPopups();
 	void DrawRings();
+	/** Souris visible dans les menus ; clic gauche de cette image. */
+	void UpdateMouse(const ADRGameMode* Mode);
+	/** Bouton cliquable ; vrai s'il vient d'être cliqué. */
+	bool Button(const FString& Text, float X, float Y, float Width, float Height, float TextSize, bool bEnabled = true, bool bHighlight = false, bool bDone = false);
+	void DrawMainMenu(ADRGameMode* Mode);
+	void DrawLevels(ADRGameMode* Mode);
+	void DrawPause(ADRGameMode* Mode);
 	/** Anneau au sol (portée d'une tour), dessiné trait par trait. */
 	void DrawRing(const FVector& Center, float Radius, const FLinearColor& Color, float Thickness);
 	bool IsInFront(const FVector& Point) const;
@@ -54,4 +63,11 @@ private:
 	float PanelBottom = 0.0f; // bas du panneau du haut, où commencent les messages
 	FVector ViewEye = FVector::ZeroVector;
 	FVector ViewForward = FVector::ForwardVector;
+	float MouseX = -1.0f;
+	float MouseY = -1.0f;
+	bool bClick = false;
+	bool bCursorShown = false;
+	bool bMouseSynced = false;
+	/** Menu principal : choix du niveau ouvert (sinon l'accueil). */
+	bool bLevelsPage = false;
 };

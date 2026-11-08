@@ -16,7 +16,8 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 6 | Vagues, ferraille, points, victoire et défaite | à tester (8 nov.) |
 | 7 | Tours, énergie, marquage, combos, réparation des barrières et du Cœur | à tester (8 nov.) |
 | 8 | Talents des zombies spéciaux : crachat du Cracheur, cri du Hurleur, terrier du Fouisseur | à tester (8 nov.) |
-| 9 | Interface, menu, réglages et touches modifiables | à faire |
+| 9 | Menu principal, choix du niveau, pause, sauvegarde de la progression | à tester (8 nov.) |
+| 10 | Réglages (souris, son, qualité) et touches modifiables | à faire |
 | ensuite | Autres chapitres, gadgets, établi, implants, améliorations, sauvegarde, tutoriel, sons, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
@@ -91,7 +92,7 @@ Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, 
 ## 8. Tester l'étape 3 : la carte du chapitre 1
 
 1. Fais d'abord l'étape 2 (l'import). Sans elle, la carte s'affiche quand même, mais en couleurs unies, avec un message orange en haut à gauche (sous le panneau de la ferraille).
-2. Clique sur **▶ Play** (ou **Alt + P**), puis clique dans l'image.
+2. Clique sur **▶ Play** (ou **Alt + P**) : depuis l'étape 9, le menu principal s'affiche d'abord. Appuie sur **Entrée** (ou clique sur **JOUER**, puis sur **1**) pour lancer le niveau 1-1, puis clique dans l'image.
 3. Tu dois te retrouver dans « La Brèche », au crépuscule, juste devant le **Cœur**, qui est dans ton dos (le bunker de béton avec sa porte blindée et deux voyants bleus), comme au début d'une partie Godot. En haut, un message rappelle le nom du chapitre.
 4. Regarde autour de toi : le sol de terre, le chemin boueux qui serpente jusqu'à la **brèche** au loin (un mur d'enceinte avec une lampe rouge qui vacille), les deux **barrières** sur le chemin (blocs de béton, poteaux, barrière rayée rouge et blanc), les **dalles rondes** des tours avec leurs repères orangés, les **murs anti-souffle** et les **sacs de sable** autour du Cœur, quatre **projecteurs** sur leurs poteaux, quatre **barils** aux braises rougeoyantes qui éclairent en vacillant, et des rochers, des arbres morts et des carcasses de voitures.
 5. Dis-moi ce qui te paraît trop sombre, trop clair ou mal placé : les lumières sont réglées à l'estime (Godot et Unreal ne mesurent pas la lumière de la même façon). Pas encore d'herbe, de flammes ni de grillage : ils viendront plus tard.
@@ -121,7 +122,7 @@ Ce dossier **Importe** ne part pas sur GitHub : si un jour il y a un problème, 
 3. Chaque zombie abattu rapporte des points et laisse un petit tas de **ferraille** doré : passe dessus (elle vient à toi à moins de 2,5 m). La ferraille et les points sont en haut à gauche. Elle disparaît au bout de 30 s.
 4. Vague repoussée : ta santé revient au maximum, tu reçois une prime de ferraille, puis 12 s de **récolte** pour ramasser le reste (Entrée pour passer).
 5. Les messages de la partie (vague qui arrive, nouveau type de zombie...) s'affichent quelques secondes sous le panneau du haut.
-6. **Défaite** si le Cœur tombe, **victoire** après la vague 10. Entrée recommence le niveau, ou passe au suivant après une victoire (c'est pour l'instant la seule façon de changer de niveau ; le menu arrive à l'étape 9).
+6. **Défaite** si le Cœur tombe, **victoire** après la vague 10. Entrée recommence le niveau, ou passe au suivant après une victoire (ou clique sur les boutons ; le menu principal arrive à l'étape 9).
 7. Le choix d'implant après les nuits de siège n'est pas encore là. La ferraille sert aux tours et aux réparations (étape 7, juste en dessous).
 
 ## 12. Tester l'étape 7 : les tours
@@ -145,7 +146,16 @@ Ils arrivent à partir de la vague 3 : **Entrée** lance chaque vague sans atten
 4. Le **boss** des nuits de siège ne se laisse pas étourdir (Mortier, SURCHARGE).
 5. Dis-moi si un zombie spécial reste bloqué, s'enterre dans un mur ou ressort sous le sol.
 
-## 14. Si ça ne marche pas
+## 14. Tester l'étape 9 : menu, choix du niveau et pause
+
+1. **▶ Play** ouvre le **menu principal**, devant la carte : JOUER, QUITTER, ton record et les niveaux débloqués. La souris est libre.
+2. **JOUER** ouvre le choix du niveau : six chapitres, cinq niveaux chacun. Au début, seul le **1** du chapitre 1 est ouvert (en orange). Gagner un niveau le met en vert et ouvre le suivant ; gagner le 5e ouvre le chapitre suivant. **Entrée**, dans le menu, lance directement le dernier niveau ouvert.
+3. En partie, **P** (ou **Échap** dans le jeu exporté ; dans l'éditeur, Échap arrête la partie) met en **pause** : REPRENDRE, RECOMMENCER LE NIVEAU, MENU PRINCIPAL, QUITTER LE JEU. Tout est figé pendant la pause.
+4. En fin de partie, deux boutons : NIVEAU SUIVANT (ou RECOMMENCER) et MENU PRINCIPAL, avec « Nouveau record ! » ou « Niveau suivant débloqué ! » quand c'est le cas.
+5. La progression et le record sont sauvegardés sur ton PC (dossier `Saved/SaveGames` du projet) : ferme Unreal, rouvre-le, ils doivent être encore là. Pour repartir de zéro, supprime le fichier `Progression.sav`.
+6. Les chapitres 2 à 6 utilisent leur propre carte, mais une partie de leur décor (cuves, conteneurs, ruines...) n'est pas encore portée : ils peuvent paraître vides.
+
+## 15. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

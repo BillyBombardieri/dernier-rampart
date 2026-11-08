@@ -46,7 +46,7 @@ struct FDRWeapon
  * avec dispersion, recul de la vue, visée, rechargement, flash, traçante et sons.
  * 100 PV : à terre, on revient au Cœur après quelques secondes pendant que les tours défendent.
  * Touches par défaut en AZERTY : ZQSD, Espace, Maj, clic gauche, clic droit, R, & et é (ou molette), E construire, améliorer ou réparer, C choisir la tour, X allumer ou
- * éteindre une tour, F marquer un zombie, Entrée pour lancer la vague.
+ * éteindre une tour, F marquer un zombie, Entrée pour lancer la vague, Échap ou P pour la pause.
  */
 UCLASS()
 class DERNIERREMPART_API ADRCharacter : public ACharacter
@@ -125,6 +125,10 @@ private:
 	void CycleBuild(int32 Step);
 	void PowerPressed();
 	void MarkPressed();
+	void PausePressed();
+	void JumpPressed();
+	/** Menu principal ou pause : ni regard ni déplacement. */
+	bool IsMenuOpen() const;
 	/** Vivant et partie pas finie : on peut bouger, tirer, recharger. */
 	bool CanAct() const;
 
@@ -200,6 +204,9 @@ private:
 
 	UPROPERTY(Transient)
 	TObjectPtr<UInputAction> MarkAction;
+
+	UPROPERTY(Transient)
+	TObjectPtr<UInputAction> PauseAction;
 
 	/** Multiplicateur de sensibilité de la souris (1 = comme le réglage par défaut de Godot). */
 	UPROPERTY(EditAnywhere, Category = "Joueur")

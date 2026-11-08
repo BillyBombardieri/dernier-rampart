@@ -5,6 +5,8 @@
 #include "DRCharacter.h"
 #include "DRData.h"
 #include "DRGameMode.h"
+#include "DRLook.h"
+#include "DRSave.h"
 #include "DRStructures.h"
 #include "DRTower.h"
 #include "DRZombie.h"
@@ -57,8 +59,14 @@ void ADRHUD::DrawHUD()
 		Font = GEngine->GetLargeFont();
 	}
 	const ADRCharacter* Player = Cast<ADRCharacter>(GetOwningPawn());
-	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
 	const bool bOver = Mode && Mode->IsOver();
+	UpdateMouse(Mode);
+	if (Mode && Mode->IsMainMenu())
+	{
+		DrawMainMenu(Mode);
+		return;
+	}
 	if (APlayerController* PlayerController = GetOwningPlayerController())
 	{
 		FRotator View;
@@ -105,10 +113,15 @@ void ADRHUD::DrawHUD()
 		DrawLabel(Hint, DRHUDStyle::Accent, Canvas->ClipX * 0.5f, Canvas->ClipY - 110.0f * Scale, 0.7f, 0.5f);
 	}
 
+	if (Mode && Mode->IsPauseMenu())
+	{
+		DrawPause(Mode);
+		return;
+	}
 	// Rappel des touches pendant les premières secondes, en bas au milieu.
 	if (GetWorld()->GetTimeSeconds() < 20.0)
 	{
-		DrawLabel(TEXT("ZQSD bouger   Maj courir   Espace sauter   Clic gauche tirer   Clic droit viser   R recharger   & / \u00E9 ou molette : arme   \u00C9chap quitter"),
+		DrawLabel(TEXT("ZQSD bouger   Maj courir   Espace sauter   Clic gauche tirer   Clic droit viser   R recharger   & / \u00E9 ou molette : arme   \u00C9chap ou P pause"),
 			FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), Canvas->ClipX * 0.5f, Canvas->ClipY - 70.0f * Scale, 0.75f, 0.5f);
 		DrawLabel(TEXT("E construire / am\u00E9liorer (maintenir : r\u00E9parer)   C ou molette : choisir la tour   X allumer / \u00E9teindre   F marquer   Entr\u00E9e lancer la vague"),
 			FLinearColor(1.0f, 1.0f, 1.0f, 0.65f), Canvas->ClipX * 0.5f, Canvas->ClipY - 46.0f * Scale, 0.65f, 0.5f);
@@ -511,14 +524,14 @@ void ADRHUD::DrawMessages(float Top)
 void ADRHUD::DrawEnd()
 {
 	// Fin de partie : victoire après la dernière vague, défaite si le Cœur tombe.
-	const ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
+	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
 	if (!Mode)
 	{
 		return;
 	}
 	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.45f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
 	const float Width = 760.0f * Scale;
-	const float Height = 300.0f * Scale;
+	const float Height = 380.0f * Scale;
 	const float Left = (Canvas->ClipX - Width) * 0.5f;
 	const float Top = (Canvas->ClipY - Height) * 0.5f;
 	const float CenterX = Canvas->ClipX * 0.5f;
@@ -531,8 +544,39 @@ void ADRHUD::DrawEnd()
 	DrawLabel(Summary, FLinearColor::White, CenterX, Top + 115.0f * Scale, 0.8f, 0.5f);
 	DrawLabel(FString::Printf(TEXT("Score : %d points  \u00B7  %d zombies abattus"), Mode->GetScore(), Mode->GetKills()),
 		FLinearColor(0.9f, 0.9f, 0.9f), CenterX, Top + 160.0f * Scale, 0.7f, 0.5f);
-	const TCHAR* Next = bWon && Mode->HasNextLevel() ? TEXT("[Entr\u00E9e]  niveau suivant") : TEXT("[Entr\u00E9e]  recommencer");
-	DrawLabel(Next, DRHUDStyle::Accent, CenterX, Top + Height - 60.0f * Scale, 0.8f, 0.5f);
+	// Record et niveau débloqué (sauvegardés sur le PC).
+	FString News;
+	if (Mode->IsNewRecord())
+	{
+		News = TEXT("Nouveau record !");
+	}
+	if (Mode->HasUnlockedNext())
+	{
+		if (!News.IsEmpty())
+		{
+			News += TEXT("  \u00B7  ");
+		}
+		News += (Mode->GetLevel() + 1) % 5 == 0 ? TEXT("Chapitre suivant d\u00E9bloqu\u00E9 !") : TEXT("Niveau suivant d\u00E9bloqu\u00E9 !");
+	}
+	if (!News.IsEmpty())
+	{
+		DrawLabel(News, DRHUDStyle::Accent, CenterX, Top + 200.0f * Scale, 0.7f, 0.5f);
+	}
+	// Boutons : niveau suivant ou recommencer, et menu principal. Entrée marche toujours.
+	const float ButtonWidth = 260.0f * Scale;
+	const float ButtonHeight = 50.0f * Scale;
+	const float ButtonY = Top + Height - 110.0f * Scale;
+	const bool bNext = bWon && Mode->HasNextLevel();
+	if (Button(bNext ? TEXT("NIVEAU SUIVANT") : TEXT("RECOMMENCER"), CenterX - ButtonWidth - 10.0f * Scale, ButtonY, ButtonWidth, ButtonHeight, 0.75f, true, true))
+	{
+		Mode->PlayLevel(bNext ? Mode->GetLevel() + 1 : Mode->GetLevel());
+	}
+	if (Button(TEXT("MENU PRINCIPAL"), CenterX + 10.0f * Scale, ButtonY, ButtonWidth, ButtonHeight, 0.75f))
+	{
+		Mode->OpenMainMenu();
+	}
+	const TCHAR* Next = bNext ? TEXT("[Entr\u00E9e]  niveau suivant") : TEXT("[Entr\u00E9e]  recommencer");
+	DrawLabel(Next, FLinearColor(1.0f, 1.0f, 1.0f, 0.55f), CenterX, Top + Height - 45.0f * Scale, 0.55f, 0.5f);
 }
 
 // ---------------------------------------------------------------- tours
@@ -716,4 +760,214 @@ void ADRHUD::DrawRings()
 		const float Grow = 1.0f - FMath::Square(1.0f - Age);
 		DrawRing(Ring.Location, FMath::Max(20.0f, Ring.Radius * Grow), DRHUDStyle::WithAlpha(Ring.Color, 1.0f - Age), 3.0f * Scale);
 	}
+}
+
+// ---------------------------------------------------------------- menus
+
+void ADRHUD::UpdateMouse(const ADRGameMode* Mode)
+{
+	// Dans les menus et en fin de partie, la souris est libre et sert à cliquer sur les boutons.
+	bClick = false;
+	APlayerController* PlayerController = GetOwningPlayerController();
+	if (!PlayerController)
+	{
+		return;
+	}
+	const bool bWanted = Mode && (Mode->IsMenuOpen() || Mode->IsOver());
+	// Le réglage de la souris reste d'un niveau à l'autre : on l'applique dès la première image.
+	if (!bMouseSynced || bWanted != bCursorShown)
+	{
+		bMouseSynced = true;
+		bCursorShown = bWanted;
+		PlayerController->bShowMouseCursor = bWanted;
+		if (bWanted)
+		{
+			FInputModeGameAndUI InputMode;
+			InputMode.SetHideCursorDuringCapture(false);
+			InputMode.SetLockMouseToViewportBehavior(EMouseLockMode::DoNotLock);
+			PlayerController->SetInputMode(InputMode);
+		}
+		else
+		{
+			PlayerController->SetInputMode(FInputModeGameOnly());
+		}
+	}
+	if (bWanted && PlayerController->GetMousePosition(MouseX, MouseY))
+	{
+		bClick = PlayerController->WasInputKeyJustPressed(EKeys::LeftMouseButton);
+	}
+	else
+	{
+		MouseX = -1.0f;
+		MouseY = -1.0f;
+	}
+}
+
+bool ADRHUD::Button(const FString& Text, float X, float Y, float Width, float Height, float TextSize, bool bEnabled, bool bHighlight, bool bDone)
+{
+	const bool bHover = bEnabled && MouseX >= X && MouseX <= X + Width && MouseY >= Y && MouseY <= Y + Height;
+	FLinearColor Fill(1.0f, 1.0f, 1.0f, bEnabled ? 0.07f : 0.025f);
+	if (bDone)
+	{
+		Fill = FLinearColor(0.3f, 0.75f, 0.35f, 0.3f);
+	}
+	if (bHighlight)
+	{
+		Fill = FLinearColor(1.0f, 0.72f, 0.25f, 0.28f);
+	}
+	if (bHover)
+	{
+		Fill.A = FMath::Min(1.0f, Fill.A + 0.15f);
+	}
+	DrawRect(Fill, X, Y, Width, Height);
+	const FLinearColor Edge = bHighlight ? DRHUDStyle::Accent : FLinearColor(1.0f, 1.0f, 1.0f, bHover ? 0.5f : 0.15f);
+	DrawLine(X, Y, X + Width, Y, Edge, 1.0f);
+	DrawLine(X, Y + Height, X + Width, Y + Height, Edge, 1.0f);
+	DrawLine(X, Y, X, Y + Height, Edge, 1.0f);
+	DrawLine(X + Width, Y, X + Width, Y + Height, Edge, 1.0f);
+	float TextWidth = 0.0f;
+	float TextHeight = 0.0f;
+	GetTextSize(Text, TextWidth, TextHeight, Font, TextSize * Scale);
+	DrawLabel(Text, bEnabled ? FLinearColor::White : FLinearColor(1.0f, 1.0f, 1.0f, 0.3f), X + Width * 0.5f, Y + (Height - TextHeight) * 0.5f, TextSize, 0.5f);
+	if (bHover && bClick)
+	{
+		bClick = false; // un seul bouton par clic
+		DRLook::PlayAt(this, TEXT("ui_click"), ViewEye, -10.0f, 0.05f);
+		return true;
+	}
+	return false;
+}
+
+void ADRHUD::DrawMainMenu(ADRGameMode* Mode)
+{
+	// Menu principal (Godot : menu.gd), devant la carte du dernier chapitre ouvert.
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.5f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
+	if (bLevelsPage)
+	{
+		DrawLevels(Mode);
+		return;
+	}
+	const UDRSave* Progress = Mode->GetProgress();
+	const float CenterX = Canvas->ClipX * 0.5f;
+	float Y = Canvas->ClipY * 0.5f - 290.0f * Scale;
+	DrawLabel(TEXT("DERNIER REMPART"), FLinearColor(0.95f, 0.92f, 0.88f), CenterX, Y, 3.0f, 0.5f);
+	Y += 105.0f * Scale;
+	DrawLabel(FString::Printf(TEXT("Tiens la base face aux zombies. %d chapitres, %d niveaux. Aucun renfort."), Mode->GetChapterCount(), Mode->GetLevelCount()),
+		FLinearColor(0.85f, 0.75f, 0.65f), CenterX, Y, 0.7f, 0.5f);
+	Y += 70.0f * Scale;
+	const float Width = 420.0f * Scale;
+	const float Left = CenterX - Width * 0.5f;
+	if (Button(TEXT("JOUER"), Left, Y, Width, 56.0f * Scale, 0.95f, true, true))
+	{
+		bLevelsPage = true;
+	}
+	Y += 68.0f * Scale;
+	if (Button(TEXT("QUITTER"), Left, Y, Width, 50.0f * Scale, 0.8f))
+	{
+		Mode->QuitGame();
+	}
+	Y += 82.0f * Scale;
+	const FString Record = Progress && Progress->BestScore > 0
+		? FString::Printf(TEXT("Record : %d points  \u00B7  vague %d atteinte"), Progress->BestScore, Progress->BestWave)
+		: FString(TEXT("Pas encore de record : \u00E0 toi de jouer."));
+	DrawLabel(Record, DRHUDStyle::Accent, CenterX, Y, 0.6f, 0.5f);
+	Y += 32.0f * Scale;
+	DrawLabel(FString::Printf(TEXT("Niveaux d\u00E9bloqu\u00E9s : %d / %d   \u00B7   [Entr\u00E9e] jouer le niveau %s"),
+		(Progress ? Progress->UnlockedLevel : 0) + 1, Mode->GetLevelCount(), *Mode->GetLevelShort()),
+		FLinearColor(0.85f, 0.85f, 0.85f), CenterX, Y, 0.55f, 0.5f);
+	DrawLabel(TEXT("Portage Unreal Engine 5 en cours  \u00B7  clavier AZERTY"), FLinearColor(1.0f, 1.0f, 1.0f, 0.4f), 16.0f * Scale, Canvas->ClipY - 34.0f * Scale, 0.45f);
+}
+
+void ADRHUD::DrawLevels(ADRGameMode* Mode)
+{
+	// Choix du niveau (Godot : level_panel.gd) : un chapitre par ligne, 5 niveaux chacun.
+	const UDRSave* Progress = Mode->GetProgress();
+	const int32 Unlocked = Progress ? Progress->UnlockedLevel : 0;
+	const int32 Chapters = Mode->GetChapterCount();
+	const float Width = 940.0f * Scale;
+	const float Pad = 22.0f * Scale;
+	const float RowHeight = FMath::Min(96.0f * Scale, (Canvas->ClipY - 230.0f * Scale) / FMath::Max(1, Chapters) - 8.0f * Scale);
+	const float Height = Pad * 2.0f + 86.0f * Scale + Chapters * (RowHeight + 8.0f * Scale) + 56.0f * Scale;
+	const float Left = (Canvas->ClipX - Width) * 0.5f;
+	const float Top = FMath::Max(10.0f * Scale, (Canvas->ClipY - Height) * 0.5f);
+	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Height);
+	float Y = Top + Pad;
+	DrawLabel(TEXT("CHOISIS TON NIVEAU"), DRHUDStyle::Accent, Left + Pad, Y, 1.1f);
+	Y += 48.0f * Scale;
+	DrawLabel(TEXT("5 niveaux par chapitre, chacun plus dur que le pr\u00E9c\u00E9dent. Gagne le 5e pour ouvrir le chapitre suivant."), FLinearColor(0.7f, 0.7f, 0.7f), Left + Pad, Y, 0.5f);
+	Y += 38.0f * Scale;
+	const float ButtonSize = FMath::Min(52.0f * Scale, RowHeight - 16.0f * Scale);
+	const float ButtonGap = 6.0f * Scale;
+	const FLinearColor Dim(1.0f, 1.0f, 1.0f, 0.35f);
+	for (int32 Index = 0; Index < Chapters; ++Index)
+	{
+		const int32 First = Index * 5;
+		const bool bOpen = First <= Unlocked;
+		DrawRect(FLinearColor(1.0f, 1.0f, 1.0f, bOpen ? 0.04f : 0.015f), Left + Pad, Y, Width - 2.0f * Pad, RowHeight);
+		DrawLabel(FString::Printf(TEXT("CHAPITRE %d \u00B7 %s"), Index + 1, *Mode->GetChapterText(Index, TEXT("name")).ToUpper()), bOpen ? FLinearColor::White : Dim, Left + Pad + 14.0f * Scale, Y + 10.0f * Scale, 0.62f);
+		const FString About = bOpen
+			? Mode->GetChapterText(Index, TEXT("place")) + TEXT(". ") + Mode->GetChapterText(Index, TEXT("desc"))
+			: FString::Printf(TEXT("Gagne le niveau 5 de \u00AB %s \u00BB pour l'ouvrir."), *Mode->GetChapterText(Index - 1, TEXT("name")));
+		const TArray<FString> Lines = Wrap(About, 0.45f, 520.0f * Scale);
+		for (int32 Line = 0; Line < FMath::Min(2, Lines.Num()); ++Line)
+		{
+			DrawLabel(Lines[Line], bOpen ? FLinearColor(0.7f, 0.7f, 0.7f) : Dim, Left + Pad + 14.0f * Scale, Y + (40.0f + 20.0f * Line) * Scale, 0.45f);
+		}
+		float ButtonX = Left + Width - Pad - 14.0f * Scale - 5.0f * ButtonSize - 4.0f * ButtonGap;
+		for (int32 Step = 0; Step < 5; ++Step)
+		{
+			const int32 LevelIndex = First + Step;
+			const bool bWon = Progress && Progress->HasWon(LevelIndex);
+			const bool bEnabled = LevelIndex <= Unlocked && LevelIndex < Mode->GetLevelCount();
+			if (Button(FString::FromInt(Step + 1), ButtonX, Y + (RowHeight - ButtonSize) * 0.5f, ButtonSize, ButtonSize, 0.75f, bEnabled, LevelIndex == Unlocked && !bWon, bWon))
+			{
+				Mode->PlayLevel(LevelIndex);
+			}
+			ButtonX += ButtonSize + ButtonGap;
+		}
+		Y += RowHeight + 8.0f * Scale;
+	}
+	DrawLabel(TEXT("Vert : gagn\u00E9   \u00B7   orange : le prochain \u00E0 gagner"), FLinearColor(0.6f, 0.6f, 0.6f), Left + Pad, Y + 18.0f * Scale, 0.45f);
+	if (Button(TEXT("RETOUR"), Left + Width - Pad - 170.0f * Scale, Y + 8.0f * Scale, 170.0f * Scale, 42.0f * Scale, 0.6f))
+	{
+		bLevelsPage = false;
+	}
+}
+
+void ADRHUD::DrawPause(ADRGameMode* Mode)
+{
+	// Pause (Godot : pause_menu.gd) : la partie est figée.
+	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
+	const float Width = 460.0f * Scale;
+	const float Height = 470.0f * Scale;
+	const float Left = (Canvas->ClipX - Width) * 0.5f;
+	const float Top = (Canvas->ClipY - Height) * 0.5f;
+	const float CenterX = Canvas->ClipX * 0.5f;
+	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Height);
+	DrawLabel(TEXT("PAUSE"), DRHUDStyle::Accent, CenterX, Top + 24.0f * Scale, 1.5f, 0.5f);
+	DrawLabel(FString::Printf(TEXT("%s  \u00B7  vague %d / %d"), *Mode->GetLevelTitle(), Mode->GetWave(), Mode->GetLastWave()), FLinearColor(0.8f, 0.8f, 0.8f), CenterX, Top + 90.0f * Scale, 0.55f, 0.5f);
+	const float ButtonWidth = Width - 80.0f * Scale;
+	const float ButtonHeight = 50.0f * Scale;
+	const float ButtonLeft = Left + 40.0f * Scale;
+	float Y = Top + 135.0f * Scale;
+	if (Button(TEXT("REPRENDRE"), ButtonLeft, Y, ButtonWidth, ButtonHeight, 0.8f, true, true))
+	{
+		Mode->TogglePause();
+	}
+	Y += ButtonHeight + 12.0f * Scale;
+	if (Button(TEXT("RECOMMENCER LE NIVEAU"), ButtonLeft, Y, ButtonWidth, ButtonHeight, 0.7f))
+	{
+		Mode->PlayLevel(Mode->GetLevel());
+	}
+	Y += ButtonHeight + 12.0f * Scale;
+	if (Button(TEXT("MENU PRINCIPAL"), ButtonLeft, Y, ButtonWidth, ButtonHeight, 0.7f))
+	{
+		Mode->OpenMainMenu();
+	}
+	Y += ButtonHeight + 12.0f * Scale;
+	if (Button(TEXT("QUITTER LE JEU"), ButtonLeft, Y, ButtonWidth, ButtonHeight, 0.7f))
+	{
+		Mode->QuitGame();
+	}
+	DrawLabel(TEXT("\u00C9chap ou P : reprendre"), FLinearColor(1.0f, 1.0f, 1.0f, 0.5f), CenterX, Top + Height - 40.0f * Scale, 0.5f, 0.5f);
 }
