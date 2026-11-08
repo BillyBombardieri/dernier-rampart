@@ -40,8 +40,11 @@ namespace DRLook
 	 */
 	TMap<FString, UAnimSequence*> Animations(const FString& Model);
 
-	/** Volume en décibels (comme dans Godot) -> multiplicateur de volume d'Unreal. */
+	/** Volume en décibels (comme dans Godot) -> multiplicateur de volume d'Unreal, volume général compris. */
 	float Volume(float Decibels);
+
+	/** Volume général des réglages (0 à 1, 0,8 par défaut comme dans Godot). */
+	void SetMasterVolume(float Linear);
 
 	/** Joue un son dans le monde, plus faible avec la distance (Godot : Sfx.play_at). Distances en cm. */
 	void PlayAt(const UObject* WorldContext, const FString& Name, const FVector& Location, float Decibels, float PitchJitter, float MaxDistance = 8000.0f);

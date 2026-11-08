@@ -15,7 +15,7 @@ class UFont;
  * zombies blessés et leurs états (marqué, gelé, en feu, chargé, étourdi), noms et portée des
  * tours, choix de la tour à construire, ce qu'on peut faire avec ce qu'on vise, textes des combos,
  * écran rougi quand on est touché, message quand on tombe, fin de partie. Menus à la souris :
- * menu principal et choix du niveau, pause, boutons de fin de partie.
+ * menu principal et choix du niveau, pause, réglages et touches, boutons de fin de partie.
  */
 UCLASS()
 class DERNIERREMPART_API ADRHUD : public AHUD
@@ -24,6 +24,10 @@ class DERNIERREMPART_API ADRHUD : public AHUD
 
 public:
 	virtual void DrawHUD() override;
+
+	/** Échap : annule l'attente d'une touche, ferme les réglages ou le choix du niveau. Vrai si c'était le cas. */
+	bool Back();
+	bool IsInSettings() const { return bSettingsOpen; }
 
 private:
 	void DrawBar(float X, float Y, float Width, float Height, float Fill, const FLinearColor& Color);
@@ -50,6 +54,10 @@ private:
 	void DrawMainMenu(ADRGameMode* Mode);
 	void DrawLevels(ADRGameMode* Mode);
 	void DrawPause(ADRGameMode* Mode);
+	/** Réglages (Godot : settings_panel.gd) : souris, volume, champ de vision, qualité, touches. */
+	void DrawSettings(ADRGameMode* Mode);
+	/** Prend la touche ou le bouton de souris qu'on vient d'appuyer pour l'action choisie. */
+	void PollRebind(ADRGameMode* Mode);
 	/** Anneau au sol (portée d'une tour), dessiné trait par trait. */
 	void DrawRing(const FVector& Center, float Radius, const FLinearColor& Color, float Thickness);
 	bool IsInFront(const FVector& Point) const;
@@ -70,4 +78,10 @@ private:
 	bool bMouseSynced = false;
 	/** Menu principal : choix du niveau ouvert (sinon l'accueil). */
 	bool bLevelsPage = false;
+	/** Réglages ouverts, depuis le menu principal ou la pause. */
+	bool bSettingsOpen = false;
+	/** Action dont on attend la nouvelle touche (aucune sinon). */
+	FName WaitingKey;
+	/** Moment (temps réel) du dernier changement de touche. */
+	double RebindTime = -10.0;
 };

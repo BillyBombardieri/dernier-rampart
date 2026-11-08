@@ -50,6 +50,7 @@ void ADRGameMode::InitGame(const FString& MapName, const FString& Options, FStri
 	GameData = DRData::Load(TEXT("jeu.json"));
 	ChapterData = DRData::Load(TEXT("chapitres.json"));
 	Progress = UDRSave::LoadOrCreate();
+	DRLook::SetMasterVolume(Progress->Volume);
 	LoadLevel(Options);
 	LastWave = (int32)Rule(TEXT("partie"), TEXT("last_wave"), 10.0);
 	SiegeEvery = (int32)Rule(TEXT("vagues"), TEXT("siege_every"), 5.0);
@@ -285,7 +286,8 @@ void ADRGameMode::EnterPhase(EDRPhase NewPhase, float Duration)
 	case EDRPhase::Prep:
 	{
 		const FString Label = IsSiege(Wave) ? FString(TEXT("NUIT DE SI\u00C8GE")) : FString::Printf(TEXT("Vague %d"), Wave);
-		Say(FString::Printf(TEXT("%s dans %d s. Construis tes d\u00E9fenses (Entr\u00E9e pour lancer)."), *Label, FMath::RoundToInt(Duration)));
+		Say(FString::Printf(TEXT("%s dans %d s. Construis tes d\u00E9fenses (%s pour lancer)."), *Label, FMath::RoundToInt(Duration),
+			Progress ? *Progress->KeyName(TEXT("vague")) : TEXT("Entr\u00E9e")));
 		break;
 	}
 	case EDRPhase::Assault:

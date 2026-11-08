@@ -15,6 +15,7 @@
 #include "Engine/Font.h"
 #include "Engine/World.h"
 #include "EngineUtils.h"
+#include "GameFramework/GameUserSettings.h"
 #include "GameFramework/PlayerController.h"
 
 namespace DRHUDStyle
@@ -44,6 +45,13 @@ namespace DRHUDStyle
 	}
 
 	constexpr float ZombieBarRange = 4000.0f; // au-delà de 40 m, les barres seraient illisibles
+
+	// Nom de la touche choisie pour une action, pour les textes d'aide.
+	FString KeyOf(const ADRGameMode* Mode, const TCHAR* Id)
+	{
+		const UDRSave* Progress = Mode ? Mode->GetProgress() : nullptr;
+		return Progress ? Progress->KeyName(Id) : UDRSave::KeyLabel(UDRSave::DefaultKey(Id));
+	}
 }
 
 void ADRHUD::DrawHUD()
@@ -62,6 +70,11 @@ void ADRHUD::DrawHUD()
 	ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>();
 	const bool bOver = Mode && Mode->IsOver();
 	UpdateMouse(Mode);
+	if (!Mode || !Mode->IsMenuOpen())
+	{
+		bSettingsOpen = false;
+		WaitingKey = NAME_None;
+	}
 	if (Mode && Mode->IsMainMenu())
 	{
 		DrawMainMenu(Mode);
@@ -109,7 +122,11 @@ void ADRHUD::DrawHUD()
 	// Entrée pour ne pas attendre la fin du compte à rebours.
 	if (Mode && Mode->GetPhase() != EDRPhase::Assault)
 	{
-		const TCHAR* Hint = Mode->GetPhase() == EDRPhase::Prep ? TEXT("[Entr\u00E9e]  lancer la vague maintenant") : TEXT("[Entr\u00E9e]  passer \u00E0 la vague suivante");
+		// (Unreal veut un texte fixe comme modèle de Printf : un modèle par cas.)
+		const FString SkipKey = DRHUDStyle::KeyOf(Mode, TEXT("vague"));
+		const FString Hint = Mode->GetPhase() == EDRPhase::Prep
+			? FString::Printf(TEXT("[%s]  lancer la vague maintenant"), *SkipKey)
+			: FString::Printf(TEXT("[%s]  passer \u00E0 la vague suivante"), *SkipKey);
 		DrawLabel(Hint, DRHUDStyle::Accent, Canvas->ClipX * 0.5f, Canvas->ClipY - 110.0f * Scale, 0.7f, 0.5f);
 	}
 
@@ -119,11 +136,17 @@ void ADRHUD::DrawHUD()
 		return;
 	}
 	// Rappel des touches pendant les premières secondes, en bas au milieu.
-	if (GetWorld()->GetTimeSeconds() < 20.0)
+	// Les touches affichées sont celles choisies dans les réglages.
+	const UDRSave* Progress = Mode ? Mode->GetProgress() : nullptr;
+	if (Progress && GetWorld()->GetTimeSeconds() < 20.0)
 	{
-		DrawLabel(TEXT("ZQSD bouger   Maj courir   Espace sauter   Clic gauche tirer   Clic droit viser   R recharger   & / \u00E9 ou molette : arme   \u00C9chap ou P pause"),
+		auto Key = [Progress](const TCHAR* Id) { return Progress->KeyName(Id); };
+		DrawLabel(FString::Printf(TEXT("%s bouger   %s courir   %s sauter   %s tirer   %s viser   %s recharger   %s / %s ou molette : arme   \u00C9chap ou %s pause"),
+			*Progress->MoveKeysName(), *Key(TEXT("courir")), *Key(TEXT("sauter")), *Key(TEXT("tirer")), *Key(TEXT("viser")), *Key(TEXT("recharger")),
+			*Key(TEXT("pistolet")), *Key(TEXT("fusil")), *Key(TEXT("pause"))),
 			FLinearColor(1.0f, 1.0f, 1.0f, 0.8f), Canvas->ClipX * 0.5f, Canvas->ClipY - 70.0f * Scale, 0.75f, 0.5f);
-		DrawLabel(TEXT("E construire / am\u00E9liorer (maintenir : r\u00E9parer)   C ou molette : choisir la tour   X allumer / \u00E9teindre   F marquer   Entr\u00E9e lancer la vague"),
+		DrawLabel(FString::Printf(TEXT("%s construire / am\u00E9liorer (maintenir : r\u00E9parer)   %s ou molette : choisir la tour   %s allumer / \u00E9teindre   %s marquer   %s lancer la vague"),
+			*Key(TEXT("interagir")), *Key(TEXT("tour")), *Key(TEXT("allumer")), *Key(TEXT("marquer")), *Key(TEXT("vague"))),
 			FLinearColor(1.0f, 1.0f, 1.0f, 0.65f), Canvas->ClipX * 0.5f, Canvas->ClipY - 46.0f * Scale, 0.65f, 0.5f);
 	}
 }
@@ -575,7 +598,8 @@ void ADRHUD::DrawEnd()
 	{
 		Mode->OpenMainMenu();
 	}
-	const TCHAR* Next = bNext ? TEXT("[Entr\u00E9e]  niveau suivant") : TEXT("[Entr\u00E9e]  recommencer");
+	const FString SkipKey = DRHUDStyle::KeyOf(Mode, TEXT("vague"));
+	const FString Next = bNext ? FString::Printf(TEXT("[%s]  niveau suivant"), *SkipKey) : FString::Printf(TEXT("[%s]  recommencer"), *SkipKey);
 	DrawLabel(Next, FLinearColor(1.0f, 1.0f, 1.0f, 0.55f), CenterX, Top + Height - 45.0f * Scale, 0.55f, 0.5f);
 }
 
@@ -847,6 +871,11 @@ void ADRHUD::DrawMainMenu(ADRGameMode* Mode)
 		DrawLevels(Mode);
 		return;
 	}
+	if (bSettingsOpen)
+	{
+		DrawSettings(Mode);
+		return;
+	}
 	const UDRSave* Progress = Mode->GetProgress();
 	const float CenterX = Canvas->ClipX * 0.5f;
 	float Y = Canvas->ClipY * 0.5f - 290.0f * Scale;
@@ -862,6 +891,11 @@ void ADRHUD::DrawMainMenu(ADRGameMode* Mode)
 		bLevelsPage = true;
 	}
 	Y += 68.0f * Scale;
+	if (Button(TEXT("R\u00C9GLAGES"), Left, Y, Width, 50.0f * Scale, 0.8f))
+	{
+		bSettingsOpen = true;
+	}
+	Y += 62.0f * Scale;
 	if (Button(TEXT("QUITTER"), Left, Y, Width, 50.0f * Scale, 0.8f))
 	{
 		Mode->QuitGame();
@@ -872,8 +906,8 @@ void ADRHUD::DrawMainMenu(ADRGameMode* Mode)
 		: FString(TEXT("Pas encore de record : \u00E0 toi de jouer."));
 	DrawLabel(Record, DRHUDStyle::Accent, CenterX, Y, 0.6f, 0.5f);
 	Y += 32.0f * Scale;
-	DrawLabel(FString::Printf(TEXT("Niveaux d\u00E9bloqu\u00E9s : %d / %d   \u00B7   [Entr\u00E9e] jouer le niveau %s"),
-		(Progress ? Progress->UnlockedLevel : 0) + 1, Mode->GetLevelCount(), *Mode->GetLevelShort()),
+	DrawLabel(FString::Printf(TEXT("Niveaux d\u00E9bloqu\u00E9s : %d / %d   \u00B7   [%s] jouer le niveau %s"),
+		(Progress ? Progress->UnlockedLevel : 0) + 1, Mode->GetLevelCount(), *DRHUDStyle::KeyOf(Mode, TEXT("vague")), *Mode->GetLevelShort()),
 		FLinearColor(0.85f, 0.85f, 0.85f), CenterX, Y, 0.55f, 0.5f);
 	DrawLabel(TEXT("Portage Unreal Engine 5 en cours  \u00B7  clavier AZERTY"), FLinearColor(1.0f, 1.0f, 1.0f, 0.4f), 16.0f * Scale, Canvas->ClipY - 34.0f * Scale, 0.45f);
 }
@@ -938,8 +972,13 @@ void ADRHUD::DrawPause(ADRGameMode* Mode)
 {
 	// Pause (Godot : pause_menu.gd) : la partie est figée.
 	DrawRect(FLinearColor(0.0f, 0.0f, 0.0f, 0.55f), 0.0f, 0.0f, Canvas->ClipX, Canvas->ClipY);
+	if (bSettingsOpen)
+	{
+		DrawSettings(Mode);
+		return;
+	}
 	const float Width = 460.0f * Scale;
-	const float Height = 470.0f * Scale;
+	const float Height = 532.0f * Scale;
 	const float Left = (Canvas->ClipX - Width) * 0.5f;
 	const float Top = (Canvas->ClipY - Height) * 0.5f;
 	const float CenterX = Canvas->ClipX * 0.5f;
@@ -953,6 +992,11 @@ void ADRHUD::DrawPause(ADRGameMode* Mode)
 	if (Button(TEXT("REPRENDRE"), ButtonLeft, Y, ButtonWidth, ButtonHeight, 0.8f, true, true))
 	{
 		Mode->TogglePause();
+	}
+	Y += ButtonHeight + 12.0f * Scale;
+	if (Button(TEXT("R\u00C9GLAGES"), ButtonLeft, Y, ButtonWidth, ButtonHeight, 0.7f))
+	{
+		bSettingsOpen = true;
 	}
 	Y += ButtonHeight + 12.0f * Scale;
 	if (Button(TEXT("RECOMMENCER LE NIVEAU"), ButtonLeft, Y, ButtonWidth, ButtonHeight, 0.7f))
@@ -969,5 +1013,197 @@ void ADRHUD::DrawPause(ADRGameMode* Mode)
 	{
 		Mode->QuitGame();
 	}
-	DrawLabel(TEXT("\u00C9chap ou P : reprendre"), FLinearColor(1.0f, 1.0f, 1.0f, 0.5f), CenterX, Top + Height - 40.0f * Scale, 0.5f, 0.5f);
+	DrawLabel(FString::Printf(TEXT("\u00C9chap ou %s : reprendre"), *DRHUDStyle::KeyOf(Mode, TEXT("pause"))), FLinearColor(1.0f, 1.0f, 1.0f, 0.5f), CenterX, Top + Height - 40.0f * Scale, 0.5f, 0.5f);
+}
+
+bool ADRHUD::Back()
+{
+	// Une touche qu'on vient de donner à une action peut la déclencher juste après : on l'ignore.
+	const UWorld* World = GetWorld();
+	if (World && World->GetRealTimeSeconds() - RebindTime < 0.4)
+	{
+		return bSettingsOpen;
+	}
+	if (!WaitingKey.IsNone())
+	{
+		WaitingKey = NAME_None;
+		return true;
+	}
+	if (bSettingsOpen)
+	{
+		bSettingsOpen = false;
+		return true;
+	}
+	if (bLevelsPage)
+	{
+		bLevelsPage = false;
+		return true;
+	}
+	return false;
+}
+
+void ADRHUD::PollRebind(ADRGameMode* Mode)
+{
+	APlayerController* PlayerController = GetOwningPlayerController();
+	UDRSave* Progress = Mode->GetProgress();
+	if (WaitingKey.IsNone() || !PlayerController || !Progress)
+	{
+		return;
+	}
+	TArray<FKey> AllKeys;
+	EKeys::GetAllKeys(AllKeys);
+	for (const FKey& Pressed : AllKeys)
+	{
+		// Ni la molette (arme ou tour), ni Échap (annuler), ni les axes, la manette ou l'écran tactile.
+		if (!Pressed.IsValid() || Pressed.IsAxis1D() || Pressed.IsAxis2D() || Pressed.IsAxis3D() || Pressed.IsGamepadKey() || Pressed.IsTouch()
+			|| Pressed == EKeys::AnyKey || Pressed == EKeys::Escape || Pressed == EKeys::MouseScrollUp || Pressed == EKeys::MouseScrollDown)
+		{
+			continue;
+		}
+		if (PlayerController->WasInputKeyJustPressed(Pressed))
+		{
+			Progress->SetKey(WaitingKey, Pressed);
+			Progress->Write();
+			WaitingKey = NAME_None;
+			RebindTime = GetWorld()->GetRealTimeSeconds();
+			bClick = false; // ce clic était la nouvelle touche, pas un clic sur un bouton
+			if (ADRCharacter* Shooter = Cast<ADRCharacter>(GetOwningPawn()))
+			{
+				Shooter->ApplyBindings();
+			}
+			return;
+		}
+	}
+}
+
+void ADRHUD::DrawSettings(ADRGameMode* Mode)
+{
+	// Réglages (Godot : settings_panel.gd). Tout est sauvegardé tout de suite.
+	UDRSave* Progress = Mode->GetProgress();
+	if (!Progress)
+	{
+		bSettingsOpen = false;
+		return;
+	}
+	PollRebind(Mode); // avant les boutons : un clic peut être la nouvelle touche
+	ADRCharacter* Shooter = Cast<ADRCharacter>(GetOwningPawn());
+	const TArray<FDRBinding>& Bindings = UDRSave::Bindable();
+	const int32 KeyRows = (Bindings.Num() + 1) / 2;
+	const float Width = 880.0f * Scale;
+	const float Pad = 24.0f * Scale;
+	const float RowHeight = 38.0f * Scale;
+	const float RowGap = 8.0f * Scale;
+	const float KeyHeight = 32.0f * Scale;
+	const float KeyGap = 6.0f * Scale;
+	const float Height = Pad * 2.0f + 52.0f * Scale + 5.0f * (RowHeight + RowGap) + 44.0f * Scale + KeyRows * (KeyHeight + KeyGap) + 40.0f * Scale + 42.0f * Scale;
+	const float Left = (Canvas->ClipX - Width) * 0.5f;
+	const float Top = FMath::Max(10.0f * Scale, (Canvas->ClipY - Height) * 0.5f);
+	DrawRect(DRHUDStyle::Panel, Left, Top, Width, Height);
+	float Y = Top + Pad;
+	DrawLabel(TEXT("R\u00C9GLAGES"), DRHUDStyle::Accent, Left + Pad, Y, 1.1f);
+	Y += 52.0f * Scale;
+
+	// Un réglage chiffré : - valeur + (mêmes bornes que les curseurs de Godot).
+	bool bChanged = false;
+	const float ControlLeft = Left + 420.0f * Scale;
+	const float ControlWidth = Left + Width - Pad - ControlLeft;
+	const float SmallWidth = 48.0f * Scale;
+	const float StepperWidth = SmallWidth * 2.0f + 140.0f * Scale;
+	auto Stepper = [&](const TCHAR* Caption, const FString& Shown, float& Setting, float Step, float Low, float High)
+	{
+		DrawLabel(Caption, FLinearColor::White, Left + Pad, Y + 8.0f * Scale, 0.6f);
+		if (Button(TEXT("-"), ControlLeft, Y, SmallWidth, RowHeight, 0.8f, Setting > Low + 0.001f))
+		{
+			Setting = FMath::Clamp(FMath::GridSnap(Setting - Step, Step), Low, High);
+			bChanged = true;
+		}
+		DrawLabel(Shown, DRHUDStyle::Accent, ControlLeft + StepperWidth * 0.5f, Y + 8.0f * Scale, 0.6f, 0.5f);
+		if (Button(TEXT("+"), ControlLeft + StepperWidth - SmallWidth, Y, SmallWidth, RowHeight, 0.8f, Setting < High - 0.001f))
+		{
+			Setting = FMath::Clamp(FMath::GridSnap(Setting + Step, Step), Low, High);
+			bChanged = true;
+		}
+		Y += RowHeight + RowGap;
+	};
+	Stepper(TEXT("Sensibilit\u00E9 de la souris"), FString::Printf(TEXT("%.2f x"), Progress->Sensitivity), Progress->Sensitivity, 0.1f, 0.2f, 3.0f);
+	Stepper(TEXT("Volume"), FString::Printf(TEXT("%d %%"), FMath::RoundToInt(Progress->Volume * 100.0f)), Progress->Volume, 0.05f, 0.0f, 1.0f);
+	Stepper(TEXT("Champ de vision"), FString::Printf(TEXT("%d\u00B0"), FMath::RoundToInt(Progress->Fov)), Progress->Fov, 2.0f, 60.0f, 100.0f);
+
+	DrawLabel(TEXT("Inverser l'axe vertical"), FLinearColor::White, Left + Pad, Y + 8.0f * Scale, 0.6f);
+	if (Button(Progress->bInvertY ? TEXT("OUI") : TEXT("NON"), ControlLeft, Y, StepperWidth, RowHeight, 0.6f, true, Progress->bInvertY))
+	{
+		Progress->bInvertY = !Progress->bInvertY;
+		bChanged = true;
+	}
+	Y += RowHeight + RowGap;
+
+	// Qualité d'Unreal (gardée par Unreal dans GameUserSettings.ini). Basse et moyenne coupent Lumen.
+	DrawLabel(TEXT("Qualit\u00E9 graphique"), FLinearColor::White, Left + Pad, Y + 8.0f * Scale, 0.6f);
+	if (UGameUserSettings* UserSettings = GEngine ? GEngine->GetGameUserSettings() : nullptr)
+	{
+		const TCHAR* const QualityNames[] = { TEXT("BASSE"), TEXT("MOYENNE"), TEXT("HAUTE"), TEXT("\u00C9PIQUE") };
+		const int32 Current = UserSettings->GetOverallScalabilityLevel();
+		const float QualityGap = 8.0f * Scale;
+		const float QualityWidth = (ControlWidth - 3.0f * QualityGap) / 4.0f;
+		for (int32 Choice = 0; Choice < 4; ++Choice)
+		{
+			if (Button(QualityNames[Choice], ControlLeft + Choice * (QualityWidth + QualityGap), Y, QualityWidth, RowHeight, 0.5f, true, Choice == Current))
+			{
+				UserSettings->SetOverallScalabilityLevel(Choice);
+				UserSettings->ApplyNonResolutionSettings();
+				UserSettings->SaveSettings();
+			}
+		}
+	}
+	Y += RowHeight + RowGap;
+
+	// Touches : deux colonnes, comme le tableau de Godot.
+	Y += 6.0f * Scale;
+	DrawLabel(TEXT("TOUCHES  (clique sur une touche puis appuie sur la nouvelle)"), DRHUDStyle::Accent, Left + Pad, Y, 0.6f);
+	Y += 38.0f * Scale;
+	const float ColumnGap = 28.0f * Scale;
+	const float ColumnWidth = (Width - 2.0f * Pad - ColumnGap) * 0.5f;
+	const float KeyWidth = 150.0f * Scale;
+	for (int32 Index = 0; Index < Bindings.Num(); ++Index)
+	{
+		const FDRBinding& Entry = Bindings[Index];
+		const float ColumnLeft = Left + Pad + (Index / KeyRows) * (ColumnWidth + ColumnGap);
+		const float RowY = Y + (Index % KeyRows) * (KeyHeight + KeyGap);
+		const bool bWaiting = WaitingKey == Entry.Id;
+		DrawLabel(Entry.Label, FLinearColor(0.85f, 0.85f, 0.85f), ColumnLeft, RowY + 7.0f * Scale, 0.5f);
+		if (Button(bWaiting ? FString(TEXT("...")) : Progress->KeyName(Entry.Id), ColumnLeft + ColumnWidth - KeyWidth, RowY, KeyWidth, KeyHeight, 0.5f, true, bWaiting))
+		{
+			WaitingKey = Entry.Id;
+		}
+	}
+	Y += KeyRows * (KeyHeight + KeyGap) + 6.0f * Scale;
+	DrawLabel(WaitingKey.IsNone()
+		? TEXT("Si la touche est d\u00E9j\u00E0 prise, les deux actions \u00E9changent leurs touches. La molette change toujours d'arme ou de tour.")
+		: TEXT("Appuie sur une touche ou un bouton de souris (\u00C9chap pour annuler)."), FLinearColor(0.65f, 0.65f, 0.65f), Left + Pad, Y, 0.45f);
+	Y += 34.0f * Scale;
+
+	if (Button(TEXT("TOUCHES PAR D\u00C9FAUT"), Left + Pad, Y, 260.0f * Scale, 42.0f * Scale, 0.55f))
+	{
+		Progress->ResetKeys();
+		Progress->Write();
+		WaitingKey = NAME_None;
+		if (Shooter)
+		{
+			Shooter->ApplyBindings();
+		}
+	}
+	if (Button(TEXT("RETOUR"), Left + Width - Pad - 170.0f * Scale, Y, 170.0f * Scale, 42.0f * Scale, 0.6f, true, true))
+	{
+		bSettingsOpen = false;
+		WaitingKey = NAME_None;
+	}
+	if (bChanged)
+	{
+		Progress->Write();
+		DRLook::SetMasterVolume(Progress->Volume);
+		if (Shooter)
+		{
+			Shooter->ApplySettings();
+		}
+	}
 }

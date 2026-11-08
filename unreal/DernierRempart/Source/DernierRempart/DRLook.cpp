@@ -123,9 +123,19 @@ TMap<FString, UAnimSequence*> DRLook::Animations(const FString& Model)
 	return Result;
 }
 
+namespace DRLookAudio
+{
+	float Master = 0.8f;
+}
+
 float DRLook::Volume(float Decibels)
 {
-	return FMath::Pow(10.0f, Decibels / 20.0f);
+	return FMath::Pow(10.0f, Decibels / 20.0f) * DRLookAudio::Master;
+}
+
+void DRLook::SetMasterVolume(float Linear)
+{
+	DRLookAudio::Master = FMath::Clamp(Linear, 0.0f, 1.0f);
 }
 
 void DRLook::PlayAt(const UObject* WorldContext, const FString& Name, const FVector& Location, float Decibels, float PitchJitter, float MaxDistance)

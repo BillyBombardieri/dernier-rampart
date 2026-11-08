@@ -17,7 +17,7 @@ Chaque séance ajoute une étape. Unreal ne peut pas tourner sur le serveur de C
 | 7 | Tours, énergie, marquage, combos, réparation des barrières et du Cœur | à tester (8 nov.) |
 | 8 | Talents des zombies spéciaux : crachat du Cracheur, cri du Hurleur, terrier du Fouisseur | à tester (8 nov.) |
 | 9 | Menu principal, choix du niveau, pause, sauvegarde de la progression | à tester (8 nov.) |
-| 10 | Réglages (souris, son, qualité) et touches modifiables | à faire |
+| 10 | Réglages (souris, son, champ de vision, qualité) et touches modifiables | à tester (8 nov.) |
 | ensuite | Autres chapitres, gadgets, établi, implants, améliorations, sauvegarde, tutoriel, sons, export Windows | à faire |
 
 ## 1. Ce qu'il faut sur le PC
@@ -155,7 +155,16 @@ Ils arrivent à partir de la vague 3 : **Entrée** lance chaque vague sans atten
 5. La progression et le record sont sauvegardés sur ton PC (dossier `Saved/SaveGames` du projet) : ferme Unreal, rouvre-le, ils doivent être encore là. Pour repartir de zéro, supprime le fichier `Progression.sav`.
 6. Les chapitres 2 à 6 utilisent leur propre carte, mais une partie de leur décor (cuves, conteneurs, ruines...) n'est pas encore portée : ils peuvent paraître vides.
 
-## 15. Si ça ne marche pas
+## 15. Tester l'étape 10 : réglages et touches
+
+1. Dans le menu principal ou la pause, le nouveau bouton **RÉGLAGES** ouvre une page avec, en haut, **−** et **+** pour la sensibilité de la souris, le volume et le champ de vision, puis « Inverser l'axe vertical » (OUI / NON) et la qualité graphique (BASSE, MOYENNE, HAUTE, ÉPIQUE).
+2. La sensibilité **1,00 x** correspond à la souris que tu avais validée (déjà baissée de 10 %). Change-la, reprends la partie : la vue doit tourner plus ou moins vite. Pareil pour le volume, le champ de vision et l'axe inversé.
+3. La qualité graphique change tout de suite. En BASSE et MOYENNE, Unreal coupe Lumen (l'éclairage réaliste) : c'est plus rapide mais plus sombre et moins beau. Dans l'éditeur, ce choix s'applique aussi à la fenêtre d'Unreal.
+4. En dessous, les **touches** : clique sur une touche (elle affiche « ... »), puis appuie sur la nouvelle touche ou un bouton de souris. Si elle était déjà prise, les deux actions échangent leurs touches. Échap annule l'attente (dans l'éditeur, Échap arrête la partie : clique plutôt sur une autre touche). **TOUCHES PAR DÉFAUT** remet l'AZERTY d'origine.
+5. Les textes d'aide du jeu (rappel des touches, « E construire », « [Entrée] lancer la vague »...) affichent tes nouvelles touches. Échap reste toujours la pause et la molette change toujours d'arme ou de tour.
+6. Ferme Unreal et rouvre-le : les réglages et les touches doivent être restés (même fichier `Progression.sav`).
+
+## 16. Si ça ne marche pas
 
 - **« DernierRempart could not be compiled. Try rebuilding from source manually. »** :
   1. Clic droit sur **DernierRempart.uproject** (sous Windows 11 : « Afficher d'autres options »), puis **Generate Visual Studio project files**.

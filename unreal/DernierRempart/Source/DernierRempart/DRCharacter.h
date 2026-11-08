@@ -5,6 +5,7 @@
 #include "DRCharacter.generated.h"
 
 class ADRBarrier;
+class ADRHUD;
 class ADRSocket;
 class ADRTower;
 class UCameraComponent;
@@ -47,6 +48,7 @@ struct FDRWeapon
  * 100 PV : à terre, on revient au Cœur après quelques secondes pendant que les tours défendent.
  * Touches par défaut en AZERTY : ZQSD, Espace, Maj, clic gauche, clic droit, R, & et é (ou molette), E construire, améliorer ou réparer, C choisir la tour, X allumer ou
  * éteindre une tour, F marquer un zombie, Entrée pour lancer la vague, Échap ou P pour la pause.
+ * Toutes ces touches (sauf Échap et la molette) se changent dans les réglages.
  */
 UCLASS()
 class DERNIERREMPART_API ADRCharacter : public ACharacter
@@ -61,6 +63,11 @@ public:
 
 	/** Santé au maximum (quand une vague est repoussée). */
 	void HealFull();
+
+	/** Touches choisies dans les réglages (sauvegarde), appliquées tout de suite. */
+	void ApplyBindings();
+	/** Sensibilité, champ de vision, axe vertical inversé et volume choisis dans les réglages. */
+	void ApplySettings();
 
 	// Pour l'interface et les zombies.
 	bool IsAlive() const { return bAlive; }
@@ -129,6 +136,10 @@ private:
 	void JumpPressed();
 	/** Menu principal ou pause : ni regard ni déplacement. */
 	bool IsMenuOpen() const;
+	/** L'interface (menus et réglages). */
+	ADRHUD* GetScreen() const;
+	/** Nom de la touche choisie pour une action, pour les textes d'aide. */
+	FString KeyName(const TCHAR* Id) const;
 	/** Vivant et partie pas finie : on peut bouger, tirer, recharger. */
 	bool CanAct() const;
 
@@ -211,6 +222,10 @@ private:
 	/** Multiplicateur de sensibilité de la souris (1 = comme le réglage par défaut de Godot). */
 	UPROPERTY(EditAnywhere, Category = "Joueur")
 	float Sensitivity = 1.0f;
+
+	/** Champ de vision sans viser (réglage, 78° par défaut) et axe vertical inversé. */
+	float BaseFov = 78.0f;
+	bool bInvertY = false;
 
 	// Santé (Godot : 100 PV ; retour au Cœur après 5 s, 3 s de plus à chaque nouvelle chute).
 	float MaxHp = 100.0f;

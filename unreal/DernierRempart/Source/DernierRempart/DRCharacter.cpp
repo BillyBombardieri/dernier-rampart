@@ -7,7 +7,9 @@
 #include "DRChapter.h"
 #include "DRData.h"
 #include "DRGameMode.h"
+#include "DRHUD.h"
 #include "DRLook.h"
+#include "DRSave.h"
 #include "DRStructures.h"
 #include "DRTower.h"
 #include "DRZombie.h"
@@ -138,6 +140,39 @@ void ADRCharacter::BeginPlay()
 	SelectWeapon(0);
 	SwitchAnim = 0.0f;
 	GunBasePosition = DRPlayer::HipPosition;
+	ApplySettings();
+}
+
+void ADRCharacter::ApplySettings()
+{
+	const UWorld* World = GetWorld();
+	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+	if (const UDRSave* Progress = Mode ? Mode->GetProgress() : nullptr)
+	{
+		// Mêmes bornes que les curseurs de settings_panel.gd.
+		Sensitivity = FMath::Clamp(Progress->Sensitivity, 0.2f, 3.0f);
+		BaseFov = FMath::Clamp(Progress->Fov, 60.0f, 100.0f);
+		bInvertY = Progress->bInvertY;
+		DRLook::SetMasterVolume(Progress->Volume);
+	}
+	if (!bAlive)
+	{
+		Camera->SetFieldOfView(BaseFov);
+	}
+}
+
+FString ADRCharacter::KeyName(const TCHAR* Id) const
+{
+	const UWorld* World = GetWorld();
+	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+	const UDRSave* Progress = Mode ? Mode->GetProgress() : nullptr;
+	return Progress ? Progress->KeyName(Id) : UDRSave::KeyLabel(UDRSave::DefaultKey(Id));
+}
+
+ADRHUD* ADRCharacter::GetScreen() const
+{
+	const APlayerController* PlayerController = Cast<APlayerController>(GetController());
+	return PlayerController ? Cast<ADRHUD>(PlayerController->GetHUD()) : nullptr;
 }
 
 void ADRCharacter::SetSpeed(float Speed)
@@ -570,7 +605,7 @@ void ADRCharacter::AnimateView(float DeltaSeconds)
 	Shake = DRPlayer::MoveToward(Shake, 0.0f, Dt * 2.5f);
 	SwitchAnim = DRPlayer::MoveToward(SwitchAnim, 0.0f, Dt);
 	AimBlend = DRPlayer::MoveToward(AimBlend, bAiming ? 1.0f : 0.0f, Dt * 7.0f);
-	Camera->SetFieldOfView(FMath::Lerp(DRPlayer::Fov, DRPlayer::AimFov, AimBlend) + FovPunch);
+	Camera->SetFieldOfView(FMath::Lerp(BaseFov, DRPlayer::AimFov, AimBlend) + FovPunch);
 
 	// Balancement de la tête et bruits de pas : un pas par demi-oscillation, cadence réaliste.
 	const float Speed = GetVelocity().Size2D() / 100.0f;
@@ -666,9 +701,9 @@ void ADRCharacter::UpdateInteraction(float DeltaSeconds)
 		{
 			const FString Upgrade = Tower->GetLevel() >= Tower->GetMaxLevel()
 				? FString(TEXT("niveau max"))
-				: FString::Printf(TEXT("E am\u00E9liorer (%d)"), Tower->GetUpgradeCost());
-			Hint = FString::Printf(TEXT("%s niv.%d   %s   X %s   (\u00E9nergie %d)"), *Tower->GetDisplayName(), Tower->GetLevel(), *Upgrade,
-				Tower->IsPowered() ? TEXT("\u00E9teindre") : TEXT("allumer"), Tower->GetEnergyCost());
+				: FString::Printf(TEXT("%s am\u00E9liorer (%d)"), *KeyName(TEXT("interagir")), Tower->GetUpgradeCost());
+			Hint = FString::Printf(TEXT("%s niv.%d   %s   %s %s   (\u00E9nergie %d)"), *Tower->GetDisplayName(), Tower->GetLevel(), *Upgrade,
+				*KeyName(TEXT("allumer")), Tower->IsPowered() ? TEXT("\u00E9teindre") : TEXT("allumer"), Tower->GetEnergyCost());
 		}
 		else if (Mode->GetBuildOrder().Num() > 0)
 		{
@@ -679,8 +714,8 @@ void ADRCharacter::UpdateInteraction(float DeltaSeconds)
 			{
 				Stats->TryGetStringField(TEXT("name"), Name);
 			}
-			Hint = FString::Printf(TEXT("E construire : %s (%d ferraille, %d \u00E9nergie)\nMolette ou C : choisir une autre tour"), *Name,
-				(int32)DRData::Number(Stats, TEXT("cost"), 0.0), (int32)DRData::Number(Stats, TEXT("energy"), 0.0));
+			Hint = FString::Printf(TEXT("%s construire : %s (%d ferraille, %d \u00E9nergie)\nMolette ou %s : choisir une autre tour"), *KeyName(TEXT("interagir")), *Name,
+				(int32)DRData::Number(Stats, TEXT("cost"), 0.0), (int32)DRData::Number(Stats, TEXT("energy"), 0.0), *KeyName(TEXT("tour")));
 		}
 		return;
 	}
@@ -742,7 +777,7 @@ void ADRCharacter::UpdateInteraction(float DeltaSeconds)
 		// Une barrière détruite se relève dès qu'elle a retrouvé assez de PV.
 		const bool bRebuilding = Barrier && !Barrier->IsAlive();
 		const float Goal = bRebuilding ? Barrier->GetRebuildHp() : MaxHpValue;
-		Hint = FString::Printf(TEXT("[Maintenir E] %s : %s   %d / %d PV\n1 ferraille pour %d PV"),
+		Hint = FString::Printf(TEXT("[Maintenir %s] %s : %s   %d / %d PV\n1 ferraille pour %d PV"), *KeyName(TEXT("interagir")),
 			bRebuilding ? TEXT("relever") : TEXT("r\u00E9parer"), *Name, FMath::FloorToInt(StructureHp), FMath::RoundToInt(Goal), FMath::RoundToInt(RepairCost));
 		if (bInteractHeld)
 		{
@@ -897,6 +932,14 @@ bool ADRCharacter::IsMenuOpen() const
 
 void ADRCharacter::PausePressed()
 {
+	// Échap revient d'abord en arrière dans les menus (attente d'une touche, réglages, choix du niveau).
+	if (ADRHUD* Screen = GetScreen())
+	{
+		if (Screen->Back())
+		{
+			return;
+		}
+	}
 	if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
 	{
 		Mode->TogglePause();
@@ -913,6 +956,12 @@ void ADRCharacter::JumpPressed()
 
 void ADRCharacter::SkipPressed()
 {
+	// Dans les réglages, Entrée peut être la nouvelle touche d'une action : elle ne lance rien.
+	const ADRHUD* Screen = GetScreen();
+	if (Screen && Screen->IsInSettings())
+	{
+		return;
+	}
 	if (ADRGameMode* Mode = GetWorld()->GetAuthGameMode<ADRGameMode>())
 	{
 		Mode->SkipPhase();
@@ -947,7 +996,7 @@ void ADRCharacter::Die()
 	GetCharacterMovement()->DisableMovement();
 	GetCapsuleComponent()->SetCollisionResponseToChannel(ECC_PhysicsBody, ECR_Ignore);
 	Camera->ClearAdditiveOffset();
-	Camera->SetFieldOfView(DRPlayer::Fov);
+	Camera->SetFieldOfView(BaseFov);
 }
 
 void ADRCharacter::Respawn()
@@ -988,7 +1037,7 @@ void ADRCharacter::Landed(const FHitResult& Hit)
 
 void ADRCharacter::CreateInput()
 {
-	if (Mapping)
+	if (MoveAction)
 	{
 		return;
 	}
@@ -1015,58 +1064,85 @@ void ADRCharacter::CreateInput()
 	PowerAction = NewAction(TEXT("AllumerTour"), EInputActionValueType::Boolean);
 	MarkAction = NewAction(TEXT("Marquer"), EInputActionValueType::Boolean);
 	PauseAction = NewAction(TEXT("Pause"), EInputActionValueType::Boolean);
-	PauseAction->bTriggerWhenPaused = true; // pour reprendre la partie
+	PauseAction->bTriggerWhenPaused = true; // pour reprendre la partie et revenir en arrière dans les réglages
+}
 
-	Mapping = NewObject<UInputMappingContext>(this, TEXT("CommandesJoueur"));
-	// ZQSD en AZERTY. L'action donne (droite, avant) : Z et S passent sur l'axe avant, S et Q sont inversés.
-	auto MapMove = [this](const FKey& Key, bool bForwardAxis, bool bNegative)
+void ADRCharacter::ApplyBindings()
+{
+	CreateInput();
+	const UWorld* World = GetWorld();
+	const ADRGameMode* Mode = World ? World->GetAuthGameMode<ADRGameMode>() : nullptr;
+	const UDRSave* Progress = Mode ? Mode->GetProgress() : nullptr;
+	auto KeyOf = [Progress](const TCHAR* Id)
 	{
-		FEnhancedActionKeyMapping& KeyMapping = Mapping->MapKey(MoveAction, Key);
+		return Progress ? Progress->GetKey(Id) : UDRSave::DefaultKey(Id);
+	};
+
+	// Un nouveau jeu de touches à chaque changement (Godot : Settings.apply_bindings).
+	Mapping = NewObject<UInputMappingContext>(this);
+	TSet<FKey> Taken;
+	auto Bind = [this, &Taken, &KeyOf](UInputAction* Action, const TCHAR* Id)
+	{
+		const FKey Key = KeyOf(Id);
+		Taken.Add(Key);
+		return &Mapping->MapKey(Action, Key);
+	};
+	// ZQSD en AZERTY par défaut. L'action donne (droite, avant) : avancer et reculer passent sur
+	// l'axe avant, reculer et gauche sont inversés.
+	auto BindMove = [this, &Bind](const TCHAR* Id, bool bForwardAxis, bool bNegative)
+	{
+		FEnhancedActionKeyMapping* KeyMapping = Bind(MoveAction, Id);
 		if (bForwardAxis)
 		{
 			UInputModifierSwizzleAxis* Swizzle = NewObject<UInputModifierSwizzleAxis>(Mapping);
 			Swizzle->Order = EInputAxisSwizzle::YXZ;
-			KeyMapping.Modifiers.Add(Swizzle);
+			KeyMapping->Modifiers.Add(Swizzle);
 		}
 		if (bNegative)
 		{
-			KeyMapping.Modifiers.Add(NewObject<UInputModifierNegate>(Mapping));
+			KeyMapping->Modifiers.Add(NewObject<UInputModifierNegate>(Mapping));
 		}
 	};
-	MapMove(EKeys::Z, true, false);
-	MapMove(EKeys::S, true, true);
-	MapMove(EKeys::Q, false, true);
-	MapMove(EKeys::D, false, false);
+	BindMove(TEXT("avancer"), true, false);
+	BindMove(TEXT("reculer"), true, true);
+	BindMove(TEXT("gauche"), false, true);
+	BindMove(TEXT("droite"), false, false);
+	Bind(JumpAction, TEXT("sauter"));
+	Bind(SprintAction, TEXT("courir"));
+	Bind(FireAction, TEXT("tirer"));
+	Bind(AimAction, TEXT("viser"));
+	Bind(ReloadAction, TEXT("recharger"));
+	Bind(Weapon1Action, TEXT("pistolet"));
+	Bind(Weapon2Action, TEXT("fusil"));
+	// E construire, améliorer, réparer (maintenu) ; C choisir la tour ; X allumer ou éteindre ; F marquer.
+	Bind(InteractAction, TEXT("interagir"));
+	Bind(CycleAction, TEXT("tour"));
+	Bind(PowerAction, TEXT("allumer"));
+	Bind(MarkAction, TEXT("marquer"));
+	// Entrée : lancer la vague sans attendre, passer la récolte, recommencer en fin de partie.
+	Bind(SkipAction, TEXT("vague"));
+	// Pause : P (modifiable) et Échap (fixe ; dans l'éditeur, Échap arrête la partie).
+	Bind(PauseAction, TEXT("pause"));
+
+	// Touches fixes : la souris pour regarder, la molette pour l'arme ou la tour, Échap.
 	Mapping->MapKey(LookAction, EKeys::Mouse2D);
-	Mapping->MapKey(JumpAction, EKeys::SpaceBar);
-	Mapping->MapKey(SprintAction, EKeys::LeftShift);
-	Mapping->MapKey(SprintAction, EKeys::RightShift);
-	Mapping->MapKey(FireAction, EKeys::LeftMouseButton);
-	Mapping->MapKey(AimAction, EKeys::RightMouseButton);
-	Mapping->MapKey(ReloadAction, EKeys::R);
-	// En AZERTY, la touche « 1 » donne « & » et la touche « 2 » donne « é » : on accepte les deux.
-	Mapping->MapKey(Weapon1Action, EKeys::Ampersand);
-	Mapping->MapKey(Weapon1Action, EKeys::One);
-	Mapping->MapKey(Weapon2Action, EKeys::E_AccentAigu);
-	Mapping->MapKey(Weapon2Action, EKeys::Two);
 	Mapping->MapKey(PreviousWeaponAction, EKeys::MouseScrollUp);
 	Mapping->MapKey(NextWeaponAction, EKeys::MouseScrollDown);
-	// E construire, améliorer, réparer (maintenu) ; C choisir la tour ; X allumer ou éteindre ; F marquer.
-	Mapping->MapKey(InteractAction, EKeys::E);
-	Mapping->MapKey(CycleAction, EKeys::C);
-	Mapping->MapKey(PowerAction, EKeys::X);
-	Mapping->MapKey(MarkAction, EKeys::F);
-	// Pause : Échap (dans l'éditeur, Échap arrête la partie, d'où P aussi).
 	Mapping->MapKey(PauseAction, EKeys::Escape);
-	Mapping->MapKey(PauseAction, EKeys::P);
-	// Entrée : lancer la vague sans attendre, passer la récolte, recommencer en fin de partie.
-	Mapping->MapKey(SkipAction, EKeys::Enter);
-}
-
-void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
-{
-	Super::SetupPlayerInputComponent(PlayerInputComponent);
-	CreateInput();
+	// Touches de secours (Godot : Settings.EXTRA), seulement si aucune action ne les a prises :
+	// « 1 » et « 2 » d'un clavier QWERTY, le pavé numérique, Maj droite pour courir.
+	auto Extra = [this, &Taken](UInputAction* Action, const FKey& Key)
+	{
+		if (!Taken.Contains(Key))
+		{
+			Mapping->MapKey(Action, Key);
+		}
+	};
+	Extra(Weapon1Action, EKeys::One);
+	Extra(Weapon1Action, EKeys::NumPadOne);
+	Extra(Weapon2Action, EKeys::Two);
+	Extra(Weapon2Action, EKeys::NumPadTwo);
+	Extra(SprintAction, EKeys::RightShift);
 
 	if (APlayerController* PlayerController = Cast<APlayerController>(GetController()))
 	{
@@ -1076,6 +1152,12 @@ void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputCompone
 			Subsystem->AddMappingContext(Mapping, 0);
 		}
 	}
+}
+
+void ADRCharacter::SetupPlayerInputComponent(UInputComponent* PlayerInputComponent)
+{
+	Super::SetupPlayerInputComponent(PlayerInputComponent);
+	ApplyBindings();
 
 	UEnhancedInputComponent* EnhancedInput = Cast<UEnhancedInputComponent>(PlayerInputComponent);
 	if (!EnhancedInput)
@@ -1126,7 +1208,11 @@ void ADRCharacter::Look(const FInputActionValue& Value)
 	{
 		return;
 	}
-	const FVector2D Delta = Value.Get<FVector2D>() * (DRPlayer::DegreesPerMouseUnit * Sensitivity * (bAiming ? 0.6f : 1.0f));
+	FVector2D Delta = Value.Get<FVector2D>() * (DRPlayer::DegreesPerMouseUnit * Sensitivity * (bAiming ? 0.6f : 1.0f));
+	if (bInvertY)
+	{
+		Delta.Y = -Delta.Y;
+	}
 	FRotator Rotation = Controller->GetControlRotation();
 	Rotation.Yaw += Delta.X;
 	// Tirer la souris vers le bas compense d'abord le recul, puis bouge la visée.
