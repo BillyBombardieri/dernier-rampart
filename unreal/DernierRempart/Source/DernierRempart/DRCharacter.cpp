@@ -344,20 +344,20 @@ void ADRCharacter::BuildWeaponModel(int32 Index, const FString& Model)
 	// Le canon pointe vers l'avant de Godot (-Z), qu'Unreal range sur un autre axe à l'import :
 	// le côté le plus long depuis l'origine du modèle est celui du canon, on le tourne vers l'avant.
 	FBox Bounds(ForceInit);
-	for (UStaticMesh* Mesh : Meshes)
+	for (UStaticMesh* Piece : Meshes)
 	{
-		Bounds += Mesh->GetBoundingBox();
+		Bounds += Piece->GetBoundingBox();
 	}
 	const FVector Size = Bounds.GetSize();
 	FVector Barrel = Size.X >= Size.Y
 		? FVector(-Bounds.Min.X > Bounds.Max.X ? -1.0 : 1.0, 0.0, 0.0)
 		: FVector(0.0, -Bounds.Min.Y > Bounds.Max.Y ? -1.0 : 1.0, 0.0);
 	const FRotator Turn(0.0, -FMath::RadiansToDegrees(FMath::Atan2(Barrel.Y, Barrel.X)), 0.0);
-	for (UStaticMesh* Mesh : Meshes)
+	for (UStaticMesh* Piece : Meshes)
 	{
 		UStaticMeshComponent* Part = NewObject<UStaticMeshComponent>(this);
 		Part->SetupAttachment(Holder);
-		Part->SetStaticMesh(Mesh);
+		Part->SetStaticMesh(Piece);
 		Part->SetRelativeRotation(Turn);
 		Part->SetCollisionEnabled(ECollisionEnabled::NoCollision);
 		Part->SetCastShadow(false);
