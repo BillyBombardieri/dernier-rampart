@@ -15,6 +15,7 @@
 #include "DRParticles.h"
 #include "DRStructures.h"
 #include "Engine/DamageEvents.h"
+#include "Engine/Engine.h"
 #include "Engine/SkeletalMesh.h"
 #include "Engine/StaticMesh.h"
 #include "Engine/World.h"
@@ -160,6 +161,22 @@ void ADRZombie::Setup(const FString& InType, float HpScale, float SpeedScale, fl
 		for (const TPair<FString, UAnimSequence*>& Entry : DRLook::Animations(TEXT("zombie_") + ModelName))
 		{
 			Animations.Add(Entry.Key, Entry.Value);
+		}
+		// Diagnostic (une fois par modèle) : les animations trouvées et la taille du modèle importé.
+		static TSet<FString> Reported;
+		if (!Reported.Contains(ModelName))
+		{
+			Reported.Add(ModelName);
+			TArray<FString> Found;
+			Animations.GetKeys(Found);
+			const FBoxSphereBounds Box = SkinnedModel->GetImportedBounds();
+			const FString Report = FString::Printf(TEXT("DernierRempart : zombie_%s : animations [%s], bas du mod\u00E8le %.0f cm, hauteur %.0f cm"),
+				*ModelName, *FString::Join(Found, TEXT(", ")), Box.Origin.Z - Box.BoxExtent.Z, 2.0 * Box.BoxExtent.Z);
+			UE_LOG(LogTemp, Warning, TEXT("%s"), *Report);
+			if (GEngine)
+			{
+				GEngine->AddOnScreenDebugMessage(-1, 60.0f, FColor::Yellow, Report);
+			}
 		}
 		// Le modèle regarde vers l'avant de Godot, qu'Unreal range sur un autre axe à l'import :
 		// le corps dépasse un peu plus devant (bras, visage) que derrière, on le tourne vers +X.
